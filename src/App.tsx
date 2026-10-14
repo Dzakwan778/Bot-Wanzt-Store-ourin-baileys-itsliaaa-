@@ -42,7 +42,12 @@ import {
   BadgeCheck,
   Package,
   Search,
-  Filter
+  Filter,
+  Share2,
+  ChevronLeft,
+  TrendingUp,
+  Gamepad2,
+  Zap,
 } from 'lucide-react';
 
 interface LogEntry {
@@ -60,7 +65,7 @@ interface BotStatusResponse {
   user: { id?: string; name?: string } | null;
   logs: LogEntry[];
   hasSession: boolean;
-  isRegistered: boolean;
+  isRegistered?: boolean;
 }
 
 export type WhatsAppButtonType =
@@ -91,6 +96,42 @@ export interface PremiumProduct {
   status?: 'available' | 'empty' | 'preorder';
 }
 
+export interface SmmService {
+  service: number | string;
+  name: string;
+  category: string;
+  rate: number;
+  min: number;
+  max: number;
+  refill?: boolean | string;
+  platformCategory: string;
+}
+
+export interface TopUpItem {
+  id: string | number;
+  game: string;
+  item: string;
+  category: string;
+  originalPrice: number;
+  stock: number | string;
+  server: string;
+  badge?: string;
+  status?: 'available' | 'empty';
+}
+
+export const detectSmmPlatform = (categoryName: string = '', serviceName: string = ''): string => {
+  const combined = `${categoryName} ${serviceName}`.toLowerCase();
+  if (combined.includes('tiktok')) return 'Layanan TikTok';
+  if (combined.includes('youtube') || combined.includes('yt ')) return 'Layanan YouTube';
+  if (combined.includes('instagram') || combined.includes('ig ')) return 'Layanan Instagram';
+  if (combined.includes('facebook') || combined.includes('fb ')) return 'Layanan Facebook';
+  if (combined.includes('telegram') || combined.includes('tg ')) return 'Layanan Telegram';
+  if (combined.includes('twitter') || combined.includes(' x ') || combined.includes('tweet')) return 'Layanan Twitter / X';
+  if (combined.includes('shopee') || combined.includes('tokopedia') || combined.includes('lazada')) return 'Layanan Shopee';
+  if (combined.includes('spotify') || combined.includes('soundcloud') || combined.includes('apple music')) return 'Layanan Musik';
+  return 'Layanan Lainnya';
+};
+
 export default function App() {
   const [phone, setPhone] = useState('87783369472');
   const [customCode, setCustomCode] = useState('WANZTSTR');
@@ -102,13 +143,13 @@ export default function App() {
   // Command State
   const [selectedCommand, setSelectedCommand] = useState<'Menu' | 'List'>('Menu');
   const [menuOutputText, setMenuOutputText] = useState<string>(
-    'Halo kak! Selamat datang di wanztstore.web.id 🛒\n\nSilakan pilih layanan yang ingin Anda pesan melalui tombol interaktif di bawah ini:'
+    'Halo kak! Selamat datang di wanztstore.web.id ✨\n\nSilakan pilih layanan yang ingin Anda pesan melalui tombol interaktif di bawah ini:'
   );
   const [menuButtons, setMenuButtons] = useState<WhatsAppButton[]>([
     {
       id: 'btn-1',
       type: 'quick_reply',
-      name: '📦 Katalog Produk',
+      name: '🛍️ Katalog Produk',
       output: '.katalog',
     },
     {
@@ -126,7 +167,6 @@ export default function App() {
       callPhoneNumber: '6285712439395',
     },
   ]);
-
   const [listOutputText, setListOutputText] = useState<string>(
     'Silakan pilih kategori produk dari daftar list di bawah ini untuk melihat detail produk:'
   );
@@ -155,7 +195,7 @@ export default function App() {
   const [editingButtonId, setEditingButtonId] = useState<string | null>(null);
   const [modalBtnType, setModalBtnType] = useState<WhatsAppButtonType>('quick_reply');
   const [modalBtnName, setModalBtnName] = useState('');
-  
+
   // Dedicated inputs per type (Bebas dari kontaminasi https://)
   const [quickReplyOutput, setQuickReplyOutput] = useState('');
   const [quickReplyAction, setQuickReplyAction] = useState<'list' | 'unknown'>('unknown');
@@ -296,8 +336,8 @@ export default function App() {
     // Canva
     { id: 'cv-1', name: 'Canva', variant: 'Canva Pro 1 Bulan', stock: 10, price: 4000, category: 'Design', status: 'available' },
     { id: 'cv-2', name: 'Canva', variant: 'Canva Pro 3 Bulan', stock: 7, price: 10000, category: 'Design', status: 'available' },
-    { id: 'cv-3', name: 'Canva', variant: 'Canva Pro 6 Bulan', stock: 5, price: 18000, category: 'Design', status: 'available' },
-    { id: 'cv-4', name: 'Canva', variant: 'Canva Pro 12 Bulan', stock: 3, price: 30000, category: 'Design', status: 'available' },
+    { id: 'cv-3', name: 'Canva Pro', variant: 'Canva Pro 6 Bulan', stock: 5, price: 18000, category: 'Design', status: 'available' },
+    { id: 'cv-4', name: 'Canva Pro', variant: 'Canva Pro 12 Bulan', stock: 3, price: 30000, category: 'Design', status: 'available' },
     { id: 'cv-5', name: 'Canva', variant: 'Canva Teams 1 Bulan', stock: 8, price: 6000, category: 'Design', status: 'available' },
     { id: 'cv-6', name: 'Canva', variant: 'Canva Teams 3 Bulan', stock: 4, price: 15000, category: 'Design', status: 'available' },
     // CapCut
@@ -311,6 +351,62 @@ export default function App() {
   const [productSearch, setProductSearch] = useState('');
   const [selectedProductCategory, setSelectedProductCategory] = useState<string>('Semua');
 
+  // SMM / SSM Services State
+  const SAMPLE_SMM_SERVICES: SmmService[] = [
+    // TikTok
+    { service: 1021, name: 'TikTok Followers Indonesia Real Aktif [Max 50K] [Instant Start]', category: 'TikTok Followers Indonesia', rate: 28000, min: 50, max: 50000, refill: true, platformCategory: 'Layanan TikTok' },
+    { service: 1022, name: 'TikTok Likes Instant High Quality [Fast Server] [Refill 30D]', category: 'TikTok Likes', rate: 6500, min: 100, max: 100000, refill: true, platformCategory: 'Layanan TikTok' },
+    { service: 1023, name: 'TikTok Video Views Ultra Fast [Day 10M] [Non-Drop]', category: 'TikTok Views', rate: 500, min: 500, max: 1000000, refill: false, platformCategory: 'Layanan TikTok' },
+    { service: 1024, name: 'TikTok Saves & Shares Organik [Meningkatkan FYP]', category: 'TikTok Saves & Shares', rate: 2000, min: 100, max: 50000, refill: false, platformCategory: 'Layanan TikTok' },
+    { service: 1025, name: 'TikTok Live Streaming Views [30 Menit - Instant Start]', category: 'TikTok Live', rate: 18000, min: 100, max: 5000, refill: false, platformCategory: 'Layanan TikTok' },
+
+    // YouTube
+    { service: 2011, name: 'YouTube Subscribers Non-Drop Garansi 30 Hari [Real Human]', category: 'YouTube Subscribers', rate: 85000, min: 50, max: 10000, refill: true, platformCategory: 'Layanan YouTube' },
+    { service: 2012, name: 'YouTube Video Views Real High Retention [Rekomendasi Algoritma]', category: 'YouTube Views', rate: 16000, min: 500, max: 500000, refill: true, platformCategory: 'Layanan YouTube' },
+    { service: 2013, name: 'YouTube Likes Instant Speed [No Drop] [Refill Lifetime]', category: 'YouTube Likes', rate: 9500, min: 100, max: 50000, refill: true, platformCategory: 'Layanan YouTube' },
+    { service: 2014, name: 'YouTube Watch Time 4000 Jam Syarat Monetisasi [Full Garansi]', category: 'YouTube Watchtime', rate: 195000, min: 500, max: 4000, refill: true, platformCategory: 'Layanan YouTube' },
+    { service: 2015, name: 'YouTube Shorts Views Ultra Fast [Meningkatkan Jangkauan]', category: 'YouTube Shorts', rate: 4500, min: 500, max: 1000000, refill: false, platformCategory: 'Layanan YouTube' },
+
+    // Instagram
+    { service: 3011, name: 'Instagram Followers Indonesia Real Human [Aktif Berkualitas]', category: 'Instagram Followers Indonesia', rate: 35000, min: 100, max: 20000, refill: true, platformCategory: 'Layanan Instagram' },
+    { service: 3012, name: 'Instagram Likes Super Instant [Auto Refill 30 Hari]', category: 'Instagram Likes', rate: 4500, min: 50, max: 100000, refill: true, platformCategory: 'Layanan Instagram' },
+    { service: 3013, name: 'Instagram Reels Views [Max Unlimited] [Instant Start Day 1M]', category: 'Instagram Views', rate: 800, min: 100, max: 2000000, refill: false, platformCategory: 'Layanan Instagram' },
+    { service: 3014, name: 'Instagram Story Views + Profile Visits & Impressions', category: 'Instagram Story', rate: 3000, min: 100, max: 50000, refill: false, platformCategory: 'Layanan Instagram' },
+    { service: 3015, name: 'Instagram Comments Custom Positif Indonesia [Real User]', category: 'Instagram Comments', rate: 45000, min: 10, max: 5000, refill: true, platformCategory: 'Layanan Instagram' },
+
+    // Facebook
+    { service: 4011, name: 'Facebook Page Likes & Followers Indonesia [Real Accounts]', category: 'Facebook Fanspage', rate: 42000, min: 100, max: 50000, refill: true, platformCategory: 'Layanan Facebook' },
+    { service: 4012, name: 'Facebook Post Likes / Reaction Mix [Like, Love, Wow]', category: 'Facebook Reactions', rate: 7500, min: 50, max: 25000, refill: true, platformCategory: 'Layanan Facebook' },
+    { service: 4013, name: 'Facebook Video Views Monetisasi [High Retention]', category: 'Facebook Views', rate: 8000, min: 500, max: 500000, refill: false, platformCategory: 'Layanan Facebook' },
+    { service: 4014, name: 'Facebook Group Members Non-Drop [Permanent]', category: 'Facebook Group', rate: 26000, min: 100, max: 20000, refill: true, platformCategory: 'Layanan Facebook' },
+
+    // Telegram
+    { service: 5011, name: 'Telegram Channel / Group Members Non-Drop [Garansi 30 Hari]', category: 'Telegram Members', rate: 22000, min: 50, max: 50000, refill: true, platformCategory: 'Layanan Telegram' },
+    { service: 5012, name: 'Telegram Post Views 1 Post / Multi Post [Instant]', category: 'Telegram Views', rate: 600, min: 100, max: 1000000, refill: false, platformCategory: 'Layanan Telegram' },
+    { service: 5013, name: 'Telegram Reactions Emoji Positif [Mix / Single Reaction]', category: 'Telegram Reactions', rate: 3500, min: 100, max: 100000, refill: false, platformCategory: 'Layanan Telegram' },
+
+    // Twitter / X
+    { service: 6011, name: 'Twitter / X Followers Global High Quality [Non-Drop Safe]', category: 'Twitter Followers', rate: 48000, min: 100, max: 30000, refill: true, platformCategory: 'Layanan Twitter / X' },
+    { service: 6012, name: 'Twitter / X Retweet & Likes Combo [Organik Engagement]', category: 'Twitter Engagement', rate: 12000, min: 50, max: 15000, refill: true, platformCategory: 'Layanan Twitter / X' },
+    { service: 6013, name: 'Twitter / X Impressions & Video Views [Trending Booster]', category: 'Twitter Views', rate: 1500, min: 500, max: 1000000, refill: false, platformCategory: 'Layanan Twitter / X' },
+
+    // Shopee
+    { service: 7011, name: 'Shopee Followers Toko Indonesia [Real Aktif Meningkatkan Trust]', category: 'Shopee Followers Indonesia', rate: 55000, min: 50, max: 10000, refill: true, platformCategory: 'Layanan Shopee' },
+    { service: 7012, name: 'Shopee Video Views & Likes Indonesia [FYP Booster]', category: 'Shopee Video', rate: 8500, min: 100, max: 20000, refill: false, platformCategory: 'Layanan Shopee' },
+    { service: 7013, name: 'Shopee Live Streaming Views & Like [Meningkatkan Penjualan]', category: 'Shopee Live', rate: 25000, min: 100, max: 5000, refill: false, platformCategory: 'Layanan Shopee' },
+
+    // Musik
+    { service: 8011, name: 'Spotify Track Plays / Streams Indonesia Royalty Eligible', category: 'Spotify Streams', rate: 15000, min: 500, max: 500000, refill: true, platformCategory: 'Layanan Musik' },
+    { service: 8012, name: 'SoundCloud Plays & Reposts Global Fast', category: 'SoundCloud Plays', rate: 6000, min: 200, max: 200000, refill: false, platformCategory: 'Layanan Musik' },
+  ];
+
+  const [smmList, setSmmList] = useState<SmmService[]>(SAMPLE_SMM_SERVICES);
+  const [loadingSmm, setLoadingSmm] = useState<boolean>(false);
+  const [smmSearch, setSmmSearch] = useState<string>('');
+  const [selectedSmmCategory, setSelectedSmmCategory] = useState<string>('Semua');
+  const [smmPage, setSmmPage] = useState<number>(1);
+  const [smmItemsPerPage, setSmmItemsPerPage] = useState<number>(25);
+
   const fetchXavieraProducts = async () => {
     try {
       setLoadingProducts(true);
@@ -321,19 +417,18 @@ export default function App() {
           const rawItems = Array.isArray(json.data)
             ? json.data
             : json.data.products || json.data.items || json.data.data || [];
+
           if (Array.isArray(rawItems) && rawItems.length > 0) {
             const mapped: PremiumProduct[] = [];
-
             for (const item of rawItems) {
               const productName = item.name || item.title || item.product_name || 'Produk';
               const productCategory = item.category || item.kategori || 'Premium';
-
+              
               // Jika produk memiliki daftar sub-varian di item.variants
               if (Array.isArray(item.variants) && item.variants.length > 0) {
                 for (const variant of item.variants) {
                   const stockNum = variant.stock !== undefined ? variant.stock : variant.stok !== undefined ? variant.stok : 0;
                   const priceNum = Number(variant.price || variant.harga || 0);
-
                   mapped.push({
                     id: variant.id || `${item.id}-${variant.name}`,
                     name: productName,
@@ -348,7 +443,6 @@ export default function App() {
                 // Jika produk tunggal tanpa sub-varian
                 const stockNum = item.stock !== undefined ? item.stock : item.stok !== undefined ? item.stok : 0;
                 const priceNum = Number(item.price || item.harga || 0);
-
                 mapped.push({
                   id: item.id || `prod-${mapped.length}`,
                   name: productName,
@@ -360,7 +454,6 @@ export default function App() {
                 });
               }
             }
-
             if (mapped.length > 0) {
               setProductsList(mapped);
               return;
@@ -375,16 +468,135 @@ export default function App() {
     }
   };
 
+  const fetchXavieraSmm = async () => {
+    try {
+      setLoadingSmm(true);
+      const res = await fetch('/api/xaviera/smm');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          const rawServices = Array.isArray(json.data)
+            ? json.data
+            : json.data.services || json.data.items || json.data.data || [];
+
+          if (Array.isArray(rawServices) && rawServices.length > 0) {
+            const mapped: SmmService[] = rawServices.map((item: any, idx: number) => {
+              const cat = item.category || item.kategori || 'Layanan SMM';
+              const name = item.name || item.service_name || 'Layanan SMM';
+              return {
+                service: item.service || item.id || idx + 1,
+                name: name,
+                category: cat,
+                rate: Number(item.rate || item.price || item.harga || 0),
+                min: Number(item.min || 1),
+                max: Number(item.max || 1000000),
+                refill: item.refill === true || item.refill === 1 || String(item.refill).toLowerCase() === 'true',
+                platformCategory: detectSmmPlatform(cat, name),
+              };
+            });
+            setSmmList(mapped);
+            setSmmPage(1);
+            return;
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Gagal fetch SMM services:', err);
+    } finally {
+      setLoadingSmm(false);
+    }
+  };
+
+  // Top Up Games & Digital Services State
+  const SAMPLE_TOPUP_ITEMS: TopUpItem[] = [
+    // Mobile Legends
+    { id: 'ml-1', game: 'Mobile Legends', item: '86 Diamonds (78 + 8 Bonus)', category: 'Mobile Legends', originalPrice: 19000, stock: '999+', server: 'ID & Zone ID', badge: '⚡ Instan 1-3 Detik' },
+    { id: 'ml-2', game: 'Mobile Legends', item: '172 Diamonds (156 + 16 Bonus)', category: 'Mobile Legends', originalPrice: 38000, stock: '999+', server: 'ID & Zone ID', badge: '⚡ Instan' },
+    { id: 'ml-3', game: 'Mobile Legends', item: '257 Diamonds (234 + 23 Bonus)', category: 'Mobile Legends', originalPrice: 57000, stock: '999+', server: 'ID & Zone ID', badge: '🔥 Terlaris' },
+    { id: 'ml-4', game: 'Mobile Legends', item: 'Weekly Diamond Pass (WDP)', category: 'Mobile Legends', originalPrice: 27500, stock: '999+', server: 'ID & Zone ID', badge: '⭐ Best Value' },
+    { id: 'ml-5', game: 'Mobile Legends', item: '344 Diamonds (312 + 32 Bonus)', category: 'Mobile Legends', originalPrice: 76000, stock: '999+', server: 'ID & Zone ID' },
+    { id: 'ml-6', game: 'Mobile Legends', item: '706 Diamonds (636 + 70 Bonus)', category: 'Mobile Legends', originalPrice: 152000, stock: '999+', server: 'ID & Zone ID' },
+    { id: 'ml-7', game: 'Mobile Legends', item: 'Twilight Pass', category: 'Mobile Legends', originalPrice: 135000, stock: '500+', server: 'ID & Zone ID' },
+
+    // Free Fire
+    { id: 'ff-1', game: 'Free Fire', item: '70 Diamonds', category: 'Free Fire', originalPrice: 9000, stock: '999+', server: 'User ID', badge: '⚡ Instan' },
+    { id: 'ff-2', game: 'Free Fire', item: '140 Diamonds', category: 'Free Fire', originalPrice: 18000, stock: '999+', server: 'User ID' },
+    { id: 'ff-3', game: 'Free Fire', item: '355 Diamonds', category: 'Free Fire', originalPrice: 45000, stock: '999+', server: 'User ID', badge: '🔥 Terlaris' },
+    { id: 'ff-4', game: 'Free Fire', item: 'Membership Mingguan FF', category: 'Free Fire', originalPrice: 28000, stock: '999+', server: 'User ID', badge: '⭐ Best Value' },
+    { id: 'ff-5', game: 'Free Fire', item: '720 Diamonds', category: 'Free Fire', originalPrice: 90000, stock: '999+', server: 'User ID' },
+    { id: 'ff-6', game: 'Free Fire', item: 'Membership Bulanan FF', category: 'Free Fire', originalPrice: 85000, stock: '999+', server: 'User ID' },
+
+    // PUBG Mobile
+    { id: 'pubg-1', game: 'PUBG Mobile', item: '60 UC (Unknown Cash)', category: 'PUBG Mobile', originalPrice: 14500, stock: '999+', server: 'Player ID', badge: '⚡ Instan' },
+    { id: 'pubg-2', game: 'PUBG Mobile', item: '300 + 25 UC', category: 'PUBG Mobile', originalPrice: 72000, stock: '999+', server: 'Player ID', badge: '🔥 Populer' },
+    { id: 'pubg-3', game: 'PUBG Mobile', item: '600 + 60 UC', category: 'PUBG Mobile', originalPrice: 142000, stock: '999+', server: 'Player ID' },
+    { id: 'pubg-4', game: 'PUBG Mobile', item: 'Royale Pass Upgrade', category: 'PUBG Mobile', originalPrice: 150000, stock: '500+', server: 'Player ID', badge: '⭐ Best Value' },
+
+    // Valorant
+    { id: 'val-1', game: 'Valorant', item: '475 VP (Valorant Points)', category: 'Valorant', originalPrice: 52000, stock: '999+', server: 'Riot ID & Tagline', badge: '⚡ Instan' },
+    { id: 'val-2', game: 'Valorant', item: '1000 VP', category: 'Valorant', originalPrice: 108000, stock: '999+', server: 'Riot ID & Tagline', badge: '🔥 Terlaris' },
+    { id: 'val-3', game: 'Valorant', item: '2050 VP', category: 'Valorant', originalPrice: 215000, stock: '999+', server: 'Riot ID & Tagline' },
+    { id: 'val-4', game: 'Valorant', item: 'Battlepass Act Premium', category: 'Valorant', originalPrice: 110000, stock: '500+', server: 'Riot ID & Tagline' },
+
+    // Genshin Impact
+    { id: 'gi-1', game: 'Genshin Impact', item: 'Blessing of the Welkin Moon', category: 'Genshin Impact', originalPrice: 68000, stock: '999+', server: 'UID & Server', badge: '⭐ Best Value' },
+    { id: 'gi-2', game: 'Genshin Impact', item: '60 Genesis Crystals', category: 'Genshin Impact', originalPrice: 15000, stock: '999+', server: 'UID & Server' },
+    { id: 'gi-3', game: 'Genshin Impact', item: '300 + 30 Genesis Crystals', category: 'Genshin Impact', originalPrice: 72000, stock: '999+', server: 'UID & Server', badge: '🔥 Populer' },
+    { id: 'gi-4', game: 'Genshin Impact', item: '980 + 110 Genesis Crystals', category: 'Genshin Impact', originalPrice: 225000, stock: '999+', server: 'UID & Server' },
+
+    // Honor of Kings
+    { id: 'hok-1', game: 'Honor of Kings', item: '80 + 8 Tokens', category: 'Honor of Kings', originalPrice: 14500, stock: '999+', server: 'Player ID', badge: '⚡ Instan' },
+    { id: 'hok-2', game: 'Honor of Kings', item: '240 + 24 Tokens', category: 'Honor of Kings', originalPrice: 43500, stock: '999+', server: 'Player ID', badge: '🔥 Populer' },
+    { id: 'hok-3', game: 'Honor of Kings', item: 'Weekly Card HOK', category: 'Honor of Kings', originalPrice: 22000, stock: '999+', server: 'Player ID', badge: '⭐ Best Value' },
+
+    // Roblox
+    { id: 'rbx-1', game: 'Roblox', item: '80 Robux Fast Delivery', category: 'Roblox', originalPrice: 14000, stock: '999+', server: 'Username Roblox', badge: '⚡ Instan' },
+    { id: 'rbx-2', game: 'Roblox', item: '400 Robux', category: 'Roblox', originalPrice: 68000, stock: '999+', server: 'Username Roblox', badge: '🔥 Terlaris' },
+    { id: 'rbx-3', game: 'Roblox', item: '800 Robux', category: 'Roblox', originalPrice: 135000, stock: '999+', server: 'Username Roblox' },
+
+    // E-Wallet & Pulsa
+    { id: 'ew-1', game: 'DANA', item: 'Saldo DANA Rp20.000', category: 'E-Wallet & Pulsa', originalPrice: 20600, stock: '999+', server: 'Nomor HP DANA', badge: '⚡ Otomatis' },
+    { id: 'ew-2', game: 'DANA', item: 'Saldo DANA Rp50.000', category: 'E-Wallet & Pulsa', originalPrice: 50600, stock: '999+', server: 'Nomor HP DANA', badge: '🔥 Terlaris' },
+    { id: 'ew-3', game: 'GoPay', item: 'Saldo GoPay Rp50.000', category: 'E-Wallet & Pulsa', originalPrice: 50700, stock: '999+', server: 'Nomor HP GoPay' },
+    { id: 'pls-1', game: 'Telkomsel', item: 'Pulsa Telkomsel Rp25.000', category: 'E-Wallet & Pulsa', originalPrice: 25400, stock: '999+', server: 'Nomor Telkomsel', badge: '⚡ 24 Jam' },
+    { id: 'pls-2', game: 'Indosat', item: 'Pulsa Indosat Rp50.000', category: 'E-Wallet & Pulsa', originalPrice: 49900, stock: '999+', server: 'Nomor Indosat', badge: '⚡ Promo' },
+  ];
+
+  const [topUpList, setTopUpList] = useState<TopUpItem[]>(SAMPLE_TOPUP_ITEMS);
+  const [loadingTopUp, setLoadingTopUp] = useState<boolean>(false);
+  const [topUpSearch, setTopUpSearch] = useState<string>('');
+  const [selectedTopUpCategory, setSelectedTopUpCategory] = useState<string>('Semua');
+  const [topUpPage, setTopUpPage] = useState<number>(1);
+  const [topUpItemsPerPage, setTopUpItemsPerPage] = useState<number>(25);
+
+  const fetchXavieraGames = async () => {
+    try {
+      setLoadingTopUp(true);
+      const res = await fetch('/api/xaviera/games');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data && Array.isArray(json.data.games)) {
+          showToast(`Berhasil menyinkronkan ${json.data.games.length} brand game dari Xaviera Store!`);
+        }
+      }
+    } catch (err) {
+      console.error('Gagal fetch games:', err);
+    } finally {
+      setLoadingTopUp(false);
+    }
+  };
+
   useEffect(() => {
     if (xavieraApiKey) {
       fetchXavieraProducts();
+      fetchXavieraSmm();
+      fetchXavieraGames();
     }
   }, [xavieraApiKey, xavieraBaseUrl]);
 
   // Polling status secara real-time
   useEffect(() => {
     let hasLoadedInitialConfig = false;
-
     const fetchStatus = async () => {
       try {
         const res = await fetch('/api/bot/status');
@@ -394,7 +606,6 @@ export default function App() {
           if (data.customCode && customCode === 'WANZTSTR') {
             setCustomCode(data.customCode);
           }
-
           // Inisialisasi teks command, tombol, & gambar dari server jika pertama kali load
           if (!hasLoadedInitialConfig && data.config) {
             hasLoadedInitialConfig = true;
@@ -417,7 +628,6 @@ export default function App() {
 
   // Simpan otomatis perubahan Menu/List/Gambar/API ke server backend bot
   const [isSavingConfig, setIsSavingConfig] = useState(false);
-
   const syncConfigToServer = async (
     newMenuText: string = menuOutputText,
     newButtons: WhatsAppButton[] = menuButtons,
@@ -536,7 +746,6 @@ export default function App() {
     setEditingButtonId(btn.id);
     setModalBtnType(btn.type);
     setModalBtnName(btn.name);
-
     // Reset default values
     setQuickReplyOutput('');
     setQuickReplyAction(btn.triggerAction || 'unknown');
@@ -571,7 +780,6 @@ export default function App() {
     } else if (btn.type === 'cta_cancel_reminder') {
       setCancelReminderOutput(btn.output);
     }
-
     setIsAddButtonModalOpen(true);
   };
 
@@ -583,7 +791,6 @@ export default function App() {
     }
 
     let finalOutput = '';
-
     if (modalBtnType === 'quick_reply') {
       if (!quickReplyOutput.trim()) {
         showToast('Output respon balasan wajib diisi.');
@@ -643,7 +850,6 @@ export default function App() {
         }
         return btn;
       });
-
       setMenuButtons(updatedButtons);
       syncConfigToServer(menuOutputText, updatedButtons, listOutputText);
       setIsAddButtonModalOpen(false);
@@ -659,7 +865,6 @@ export default function App() {
         callTargetName: modalBtnType === 'cta_call' ? callTarget.trim() : undefined,
         callPhoneNumber: modalBtnType === 'cta_call' ? callPhone.trim() : undefined,
       };
-
       const updatedButtons = [...menuButtons, newBtn];
       setMenuButtons(updatedButtons);
       syncConfigToServer(menuOutputText, updatedButtons, listOutputText);
@@ -735,7 +940,6 @@ export default function App() {
               <p className="text-xs text-slate-500">WhatsApp Bot Management System</p>
             </div>
           </div>
-
           <div className="flex items-center gap-3">
             {getStatusBadge()}
           </div>
@@ -753,7 +957,6 @@ export default function App() {
               <div className="w-12 h-12 rounded-lg bg-slate-50 border border-slate-200 text-sky-600 flex items-center justify-center shrink-0 shadow-2xs">
                 <Store className="w-6 h-6" />
               </div>
-
               <div className="space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[11px] font-semibold uppercase tracking-wider text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
@@ -765,14 +968,12 @@ export default function App() {
                     </span>
                   )}
                 </div>
-
                 <div className="flex items-center gap-2">
                   <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
                     {xavieraProfile.data?.storeName || (xavieraProfile.configured ? 'Wanzt Store' : 'Wanzt Store Official')}
                   </h1>
                   <BadgeCheck className="w-4 h-4 text-sky-600 shrink-0" />
                 </div>
-
                 <p className="text-xs text-slate-500">
                   {xavieraProfile.configured
                     ? 'Terhubung dengan endpoint katalog, SMM, dan transaksi bot otomatis.'
@@ -803,7 +1004,6 @@ export default function App() {
                     <RefreshCw className={`w-3.5 h-3.5 ${xavieraProfile.loading ? 'animate-spin text-sky-600' : ''}`} />
                   </button>
                 </div>
-
                 <div className="font-mono font-bold text-xl sm:text-2xl text-slate-900 tracking-tight">
                   {xavieraProfile.loading ? (
                     <span className="text-xs text-slate-400 font-normal">Memuat saldo...</span>
@@ -847,7 +1047,6 @@ export default function App() {
                       Belum Diisi
                     </span>
                   )}
-
                   <span className="text-[10px] font-mono text-slate-500 uppercase bg-white px-2 py-0.5 rounded border border-slate-200">
                     {xavieraProfile.data?.role || 'Developer'}
                   </span>
@@ -1053,7 +1252,6 @@ export default function App() {
                     <Terminal className="w-3.5 h-3.5 text-sky-400" /> Live Socket Stream
                   </span>
                 </div>
-
                 <div className="text-[11px] font-mono text-slate-400">
                   Port: 3000 • WebSocket Active
                 </div>
@@ -1109,8 +1307,11 @@ export default function App() {
             <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
               {/* Tab Navigation Bar */}
               <div className="border-b border-slate-200 bg-slate-50/70 px-2 sm:px-4 flex items-center gap-1 overflow-x-auto scrollbar-none">
-                {['Command', 'Produk', 'tab02', 'tab03', 'tab04', 'tab05', 'Connection'].map((tabName) => {
-                  const isActive = selectedTab === tabName;
+                {['Command', 'Produk', 'SSM', 'Top Up', 'tab04', 'tab05', 'Connection'].map((tabName) => {
+                  const isActive =
+                    selectedTab === tabName ||
+                    (tabName === 'SSM' && selectedTab === 'tab02') ||
+                    (tabName === 'Top Up' && selectedTab === 'tab03');
                   return (
                     <button
                       key={tabName}
@@ -1150,7 +1351,6 @@ export default function App() {
                           <ChevronDown className="w-4 h-4 text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                         </div>
                       </div>
-
                       <div className="text-right">
                         <span className="text-xs font-mono font-medium text-sky-700 bg-sky-50 px-2.5 py-1 rounded border border-sky-200">
                           Command Aktif: {selectedCommand}
@@ -1279,7 +1479,6 @@ export default function App() {
                               <Layers className="w-3.5 h-3.5 text-sky-600" />
                               Tombol Interaktif WhatsApp ({menuButtons.length})
                             </label>
-
                             <button
                               type="button"
                               onClick={handleOpenAddButtonModal}
@@ -1352,7 +1551,6 @@ export default function App() {
                                         </div>
                                       </div>
                                     </div>
-
                                     <div className="flex items-center gap-1 shrink-0">
                                       <button
                                         type="button"
@@ -1468,11 +1666,10 @@ export default function App() {
                           <div className="max-w-md mx-auto bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
                             <div className="bg-slate-900 text-white p-3 flex items-center justify-between text-xs">
                               <span className="font-semibold flex items-center gap-1.5 text-sky-400">
-                                🗂️ Carousel Card • Varian 1
+                                🎠 Carousel Card • Varian 1
                               </span>
                               <span className="text-[10px] text-slate-400 font-mono">1/6 Kartu</span>
                             </div>
-
                             {/* Card Media Header */}
                             <div className="h-32 bg-gradient-to-br from-slate-800 to-slate-900 relative flex items-center justify-center p-3 text-center border-b border-slate-200">
                               <div className="space-y-1">
@@ -1483,39 +1680,33 @@ export default function App() {
                                 <div className="text-[10px] text-slate-300">Garansi Penuh • Proses Instan</div>
                               </div>
                             </div>
-
                             {/* Card Body */}
                             <div className="p-4 space-y-3 text-xs text-slate-800 leading-relaxed font-sans bg-emerald-50/20">
                               <div className="font-bold text-slate-900 text-sm">*YouTube | Streaming*</div>
                               <p className="text-slate-600">
                                 Nikmati hiburan favoritmu dengan pilihan paket YouTube yang tersedia di Wanzt Store.
                               </p>
-
                               <div className="space-y-1 bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs font-mono text-[11px]">
-                                <div className="font-bold text-slate-900">📦 *Detail Produk*</div>
-                                <div className="text-slate-700">▪️ Varian: <span className="font-bold text-slate-900">YouTube Famplan 1 Bulan</span></div>
-                                <div className="text-slate-700">💰 Harga: <span className="font-bold text-emerald-700">Rp3.500</span></div>
-                                <div className="text-slate-700">📊 Stok: <span className="font-bold text-sky-700">14 tersedia</span></div>
+                                <div className="font-bold text-slate-900">📌 *Detail Produk*</div>
+                                <div className="text-slate-700">• Varian: <span className="font-bold text-slate-900">YouTube Famplan 1 Bulan</span></div>
+                                <div className="text-slate-700">• Harga: <span className="font-bold text-emerald-700">Rp3.500</span></div>
+                                <div className="text-slate-700">• Stok: <span className="font-bold text-sky-700">14 tersedia</span></div>
                               </div>
-
                               <p className="text-slate-500 text-[11px]">
                                 Paket tersedia selama stok masih ada. Pastikan kamu memilih varian yang sesuai sebelum melanjutkan pesanan.
                               </p>
-
                               <div className="text-[11px] font-medium text-slate-700">
                                 Silakan pilih tindakan di bawah ini untuk melanjutkan.
                               </div>
-
                               {/* Action Buttons */}
                               <div className="space-y-1.5 pt-1">
                                 <div className="w-full py-2 px-3 rounded-lg bg-sky-600 text-white font-semibold text-center text-xs flex items-center justify-center gap-1.5 shadow-2xs">
-                                  <span>📋</span> Order
+                                  <span>🛒</span> Order
                                 </div>
                                 <div className="w-full py-2 px-3 rounded-lg bg-white border border-slate-300 text-slate-700 font-medium text-center text-xs flex items-center justify-center gap-1.5 hover:bg-slate-50">
                                   <span>📞</span> Contact Admin (083861276608)
                                 </div>
                               </div>
-
                               <div className="text-[10px] text-slate-400 text-center font-mono pt-1 border-t border-slate-100">
                                 Mengetuk "Contact Admin" otomatis mengirim kontak vCard resmi Admin Wanzt Store
                               </div>
@@ -1540,7 +1731,6 @@ export default function App() {
                           Daftar akun premium aktif, varian paket, ketersediaan stok, dan tarif harga Xaviera Store.
                         </p>
                       </div>
-
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
@@ -1575,7 +1765,7 @@ export default function App() {
                             onClick={() => setProductSearch('')}
                             className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
                           >
-                            ×
+                            ✕
                           </button>
                         )}
                       </div>
@@ -1745,11 +1935,694 @@ export default function App() {
                           </strong>{' '}
                           varian dari <span className="font-mono font-semibold text-slate-700">{productsList.length}</span> total item
                         </span>
-
                         <span className="text-slate-400 font-mono">
                           Format harga: IDR • Data langsung dari Xaviera Store
                         </span>
                       </div>
+                    </div>
+                  </div>
+                ) : selectedTab === 'SSM' || selectedTab === 'tab02' ? (
+                  <div className="space-y-5">
+                    {/* Header Tab SSM (Social Media Marketing) */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Share2 className="w-4 h-4 text-sky-600" />
+                          <h3 className="text-sm font-bold text-slate-900 tracking-tight">
+                            Katalog Layanan SSM (Social Media Marketing)
+                          </h3>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Daftar seluruh layanan followers, likes, views, subscriber, dan interaksi media sosial Xaviera Store.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            fetchXavieraSmm();
+                            showToast('Menyinkronkan data katalog layanan SSM...');
+                          }}
+                          disabled={loadingSmm}
+                          className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${loadingSmm ? 'animate-spin text-sky-600' : 'text-slate-500'}`} />
+                          <span>Sinkronkan SSM</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Filter Kategori Platform SSM & Search Bar */}
+                    <div className="flex flex-col gap-3">
+                      {/* Search Bar Input */}
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                        <div className="relative flex-1 max-w-md">
+                          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <input
+                            type="text"
+                            value={smmSearch}
+                            onChange={(e) => {
+                              setSmmSearch(e.target.value);
+                              setSmmPage(1);
+                            }}
+                            placeholder="Cari layanan SSM atau ID (contoh: TikTok Followers, YouTube, 9640)..."
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-8 py-2 text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 transition shadow-2xs"
+                          />
+                          {smmSearch && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSmmSearch('');
+                                setSmmPage(1);
+                              }}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Dropdown Jumlah Data Per Halaman */}
+                        <div className="flex items-center gap-2 text-xs text-slate-500">
+                          <span>Tampilkan:</span>
+                          <select
+                            value={smmItemsPerPage}
+                            onChange={(e) => {
+                              setSmmItemsPerPage(Number(e.target.value));
+                              setSmmPage(1);
+                            }}
+                            className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-700 focus:outline-none focus:bg-white focus:border-sky-600 cursor-pointer shadow-2xs"
+                          >
+                            <option value={25}>25 / hal</option>
+                            <option value={50}>50 / hal</option>
+                            <option value={100}>100 / hal</option>
+                            <option value={200}>200 / hal</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Filter Kategori SSM (Platform: TikTok, YouTube, Instagram, dll.) */}
+                      <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-1">
+                        {[
+                          'Semua',
+                          'Layanan TikTok',
+                          'Layanan YouTube',
+                          'Layanan Instagram',
+                          'Layanan Facebook',
+                          'Layanan Telegram',
+                          'Layanan Twitter / X',
+                          'Layanan Shopee',
+                          'Layanan Musik',
+                          'Layanan Lainnya',
+                        ].map((cat) => {
+                          const isActive = selectedSmmCategory === cat;
+                          return (
+                            <button
+                              key={cat}
+                              type="button"
+                              onClick={() => {
+                                setSelectedSmmCategory(cat);
+                                setSmmPage(1);
+                              }}
+                              className={`px-3 py-1.5 text-xs rounded-md transition cursor-pointer whitespace-nowrap font-medium flex items-center gap-1.5 ${
+                                isActive
+                                  ? 'bg-sky-600 text-white shadow-2xs'
+                                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70'
+                              }`}
+                            >
+                              <span>{cat}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Tabel Layanan SSM Sesuai Desain APK Premium (Clean Slate Border, Monospace Values, High Contrast) */}
+                    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                              <th className="py-3 px-5 w-44">ID & Platform</th>
+                              <th className="py-3 px-4">Nama Layanan</th>
+                              <th className="py-3 px-4 text-center w-36">Min / Max Order</th>
+                              <th className="py-3 px-4 text-right w-36">Harga Asli (1k)</th>
+                              <th className="py-3 px-5 text-right w-44">Harga Jual (+10%)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="text-xs">
+                            {(() => {
+                              const filtered = smmList.filter((item) => {
+                                const matchesSearch =
+                                  item.name.toLowerCase().includes(smmSearch.toLowerCase()) ||
+                                  item.category.toLowerCase().includes(smmSearch.toLowerCase()) ||
+                                  String(item.service).includes(smmSearch);
+                                const matchesCategory =
+                                  selectedSmmCategory === 'Semua' || item.platformCategory === selectedSmmCategory;
+                                return matchesSearch && matchesCategory;
+                              });
+
+                              if (filtered.length === 0) {
+                                return (
+                                  <tr>
+                                    <td colSpan={5} className="py-12 text-center text-slate-500 space-y-1">
+                                      <Share2 className="w-8 h-8 mx-auto text-slate-400" />
+                                      <div className="font-medium text-slate-700">Tidak ada layanan SSM ditemukan</div>
+                                      <div className="text-[11px] text-slate-400">
+                                        Coba ubah kata kunci pencarian atau ganti filter kategori SSM.
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              }
+
+                              const totalPages = Math.max(1, Math.ceil(filtered.length / smmItemsPerPage));
+                              const currentPage = Math.min(smmPage, totalPages);
+                              const startIndex = (currentPage - 1) * smmItemsPerPage;
+                              const paginated = filtered.slice(startIndex, startIndex + smmItemsPerPage);
+
+                              return paginated.map((item, index) => {
+                                const originalPrice = Number(item.rate) || 0;
+                                const margin = Math.round(originalPrice * 0.1);
+                                const sellingPrice = originalPrice + margin;
+
+                                const getPlatformBadgeStyle = (platform: string) => {
+                                  switch (platform) {
+                                    case 'Layanan TikTok':
+                                      return 'bg-slate-900 text-white border-slate-800';
+                                    case 'Layanan YouTube':
+                                      return 'bg-rose-50 text-rose-700 border-rose-200';
+                                    case 'Layanan Instagram':
+                                      return 'bg-pink-50 text-pink-700 border-pink-200';
+                                    case 'Layanan Facebook':
+                                      return 'bg-blue-50 text-blue-700 border-blue-200';
+                                    case 'Layanan Telegram':
+                                      return 'bg-sky-50 text-sky-700 border-sky-200';
+                                    case 'Layanan Twitter / X':
+                                      return 'bg-slate-100 text-slate-800 border-slate-300';
+                                    case 'Layanan Shopee':
+                                      return 'bg-orange-50 text-orange-700 border-orange-200';
+                                    case 'Layanan Musik':
+                                      return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                                    default:
+                                      return 'bg-slate-100 text-slate-600 border-slate-200';
+                                  }
+                                };
+
+                                return (
+                                  <tr
+                                    key={item.service + '-' + index}
+                                    className="border-t border-slate-100 bg-white hover:bg-sky-50/30 transition-colors"
+                                  >
+                                    {/* 1. Kolom ID & Platform */}
+                                    <td className="py-3 px-5 align-middle whitespace-nowrap">
+                                      <div className="space-y-1">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="font-mono text-xs font-semibold text-slate-700">
+                                            #{item.service}
+                                          </span>
+                                          <span
+                                            className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${getPlatformBadgeStyle(
+                                              item.platformCategory
+                                            )}`}
+                                          >
+                                            {item.platformCategory.replace('Layanan ', '')}
+                                          </span>
+                                        </div>
+                                        <div className="text-[10px] text-slate-400 truncate max-w-[180px]" title={item.category}>
+                                          {item.category}
+                                        </div>
+                                      </div>
+                                    </td>
+
+                                    {/* 2. Kolom Nama Layanan */}
+                                    <td className="py-3 px-4 align-middle">
+                                      <div className="space-y-1">
+                                        <div className="font-semibold text-slate-900 text-xs leading-snug">
+                                          {item.name}
+                                        </div>
+                                        <div>
+                                          {item.refill ? (
+                                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                              🛡️ Refill Aktif
+                                            </span>
+                                          ) : (
+                                            <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                              ⚪ Non-Refill
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </td>
+
+                                    {/* 3. Kolom Min / Max Order */}
+                                    <td className="py-3 px-4 text-center align-middle whitespace-nowrap font-mono">
+                                      <div className="text-xs font-semibold text-slate-700">
+                                        Min: {item.min.toLocaleString('id-ID')}
+                                      </div>
+                                      <div className="text-[10px] text-slate-400">
+                                        Max: {item.max.toLocaleString('id-ID')}
+                                      </div>
+                                    </td>
+
+                                    {/* 4. Kolom Harga Asli (per 1k) */}
+                                    <td className="py-3 px-4 text-right align-middle whitespace-nowrap">
+                                      <div className="font-mono text-xs text-slate-600">
+                                        Rp{originalPrice.toLocaleString('id-ID')}
+                                      </div>
+                                      <div className="text-[10px] text-slate-400 font-mono">/ 1.000</div>
+                                    </td>
+
+                                    {/* 5. Kolom Harga Jual (+10%) & Margin */}
+                                    <td className="py-3 px-5 text-right align-middle whitespace-nowrap">
+                                      <div className="inline-flex items-baseline gap-1.5 font-mono">
+                                        <span className="font-bold text-sm text-slate-900 tracking-tight">
+                                          Rp{sellingPrice.toLocaleString('id-ID')}
+                                        </span>
+                                        <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/60">
+                                          (+{margin.toLocaleString('id-ID')})
+                                        </span>
+                                      </div>
+                                      <div className="text-[10px] text-slate-400 font-mono">/ 1.000</div>
+                                    </td>
+                                  </tr>
+                                );
+                              });
+                            })()}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Footer Tabel: Pagination & Info Sinkronisasi */}
+                      {(() => {
+                        const filtered = smmList.filter((item) => {
+                          const matchesSearch =
+                            item.name.toLowerCase().includes(smmSearch.toLowerCase()) ||
+                            item.category.toLowerCase().includes(smmSearch.toLowerCase()) ||
+                            String(item.service).includes(smmSearch);
+                          const matchesCategory =
+                            selectedSmmCategory === 'Semua' || item.platformCategory === selectedSmmCategory;
+                          return matchesSearch && matchesCategory;
+                        });
+
+                        const totalPages = Math.max(1, Math.ceil(filtered.length / smmItemsPerPage));
+                        const currentPage = Math.min(smmPage, totalPages);
+                        const startIndex = (currentPage - 1) * smmItemsPerPage;
+
+                        return (
+                          <div className="bg-slate-50 px-5 py-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-500">
+                            <div>
+                              Menampilkan{' '}
+                              <strong className="text-slate-800 font-mono">
+                                {filtered.length === 0 ? 0 : startIndex + 1} - {Math.min(startIndex + smmItemsPerPage, filtered.length)}
+                              </strong>{' '}
+                              dari <strong className="text-slate-800 font-mono">{filtered.length}</strong> layanan terfilter{' '}
+                              <span className="text-slate-400 font-mono">(Total: {smmList.length} layanan SSM)</span>
+                            </div>
+
+                            {/* Pagination Buttons */}
+                            {totalPages > 1 && (
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setSmmPage((p) => Math.max(1, p - 1))}
+                                  disabled={currentPage <= 1}
+                                  className="px-2.5 py-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed font-medium text-xs flex items-center gap-1 cursor-pointer transition shadow-2xs"
+                                >
+                                  <ChevronLeft className="w-3.5 h-3.5" />
+                                  <span>Sebelumnya</span>
+                                </button>
+
+                                <span className="px-2 font-mono text-xs font-semibold text-slate-700">
+                                  {currentPage} / {totalPages}
+                                </span>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setSmmPage((p) => Math.min(totalPages, p + 1))}
+                                  disabled={currentPage >= totalPages}
+                                  className="px-2.5 py-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed font-medium text-xs flex items-center gap-1 cursor-pointer transition shadow-2xs"
+                                >
+                                  <span>Berikutnya</span>
+                                  <ChevronRight className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                ) : selectedTab === 'Top Up' || selectedTab === 'tab03' ? (
+                  <div className="space-y-5">
+                    {/* Header Tab Top Up (Games & Digital Services) */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Gamepad2 className="w-4 h-4 text-sky-600" />
+                          <h3 className="text-sm font-bold text-slate-900 tracking-tight">
+                            Katalog Layanan Top Up Game & Digital
+                          </h3>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Daftar seluruh paket voucher, diamond game, saldo e-wallet, pulsa, dan transaksi instan 24 jam nonstop.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            fetchXavieraGames();
+                            showToast('Menyinkronkan data katalog Top Up Game...');
+                          }}
+                          disabled={loadingTopUp}
+                          className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${loadingTopUp ? 'animate-spin text-sky-600' : 'text-slate-500'}`} />
+                          <span>Sinkronkan Top Up</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Filter Kategori Game / Top Up & Search Bar */}
+                    <div className="flex flex-col gap-3">
+                      {/* Search Bar Input */}
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                        <div className="relative flex-1 max-w-md">
+                          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <input
+                            type="text"
+                            value={topUpSearch}
+                            onChange={(e) => {
+                              setTopUpSearch(e.target.value);
+                              setTopUpPage(1);
+                            }}
+                            placeholder="Cari game, diamond, atau denominasi (contoh: Mobile Legends, Free Fire, Valorant, DANA)..."
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-8 py-2 text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 transition shadow-2xs"
+                          />
+                          {topUpSearch && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTopUpSearch('');
+                                setTopUpPage(1);
+                              }}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Dropdown Jumlah Data Per Halaman */}
+                        <div className="flex items-center gap-2 text-xs text-slate-500">
+                          <span>Tampilkan:</span>
+                          <select
+                            value={topUpItemsPerPage}
+                            onChange={(e) => {
+                              setTopUpItemsPerPage(Number(e.target.value));
+                              setTopUpPage(1);
+                            }}
+                            className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-700 focus:outline-none focus:bg-white focus:border-sky-600 cursor-pointer shadow-2xs"
+                          >
+                            <option value={25}>25 / hal</option>
+                            <option value={50}>50 / hal</option>
+                            <option value={100}>100 / hal</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Filter Kategori Top Up (Mobile Legends, Free Fire, Valorant, dll.) */}
+                      <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-1">
+                        {[
+                          'Semua',
+                          'Mobile Legends',
+                          'Free Fire',
+                          'PUBG Mobile',
+                          'Valorant',
+                          'Genshin Impact',
+                          'Honor of Kings',
+                          'Roblox',
+                          'E-Wallet & Pulsa',
+                        ].map((cat) => {
+                          const isActive = selectedTopUpCategory === cat;
+                          return (
+                            <button
+                              key={cat}
+                              type="button"
+                              onClick={() => {
+                                setSelectedTopUpCategory(cat);
+                                setTopUpPage(1);
+                              }}
+                              className={`px-3 py-1.5 text-xs rounded-md transition cursor-pointer whitespace-nowrap font-medium flex items-center gap-1.5 ${
+                                isActive
+                                  ? 'bg-sky-600 text-white shadow-2xs'
+                                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70'
+                              }`}
+                            >
+                              <span>{cat}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Tabel Layanan Top Up Berbentuk Sama dengan SSM dan APK Premium */}
+                    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                              <th className="py-3 px-5 w-48">Game & Server</th>
+                              <th className="py-3 px-4">Denominasi / Paket Item</th>
+                              <th className="py-3 px-4 text-center w-36">Status / Stok</th>
+                              <th className="py-3 px-4 text-right w-36">Harga Asli</th>
+                              <th className="py-3 px-5 text-right w-44">Harga Jual (+10%)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="text-xs">
+                            {(() => {
+                              const filtered = topUpList.filter((item) => {
+                                const matchesSearch =
+                                  item.game.toLowerCase().includes(topUpSearch.toLowerCase()) ||
+                                  item.item.toLowerCase().includes(topUpSearch.toLowerCase()) ||
+                                  item.category.toLowerCase().includes(topUpSearch.toLowerCase()) ||
+                                  item.server.toLowerCase().includes(topUpSearch.toLowerCase());
+                                const matchesCategory =
+                                  selectedTopUpCategory === 'Semua' || item.category === selectedTopUpCategory;
+                                return matchesSearch && matchesCategory;
+                              });
+
+                              if (filtered.length === 0) {
+                                return (
+                                  <tr>
+                                    <td colSpan={5} className="py-12 text-center text-slate-500 space-y-1">
+                                      <Gamepad2 className="w-8 h-8 mx-auto text-slate-400" />
+                                      <div className="font-medium text-slate-700">Tidak ada paket Top Up ditemukan</div>
+                                      <div className="text-[11px] text-slate-400">
+                                        Coba ubah kata kunci pencarian atau ganti filter kategori game.
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              }
+
+                              const totalPages = Math.max(1, Math.ceil(filtered.length / topUpItemsPerPage));
+                              const currentPage = Math.min(topUpPage, totalPages);
+                              const startIndex = (currentPage - 1) * topUpItemsPerPage;
+                              const paginated = filtered.slice(startIndex, startIndex + topUpItemsPerPage);
+
+                              return paginated.map((item, index) => {
+                                const prevItem = index > 0 ? paginated[index - 1] : null;
+                                const isNewGroup = !prevItem || prevItem.game !== item.game;
+
+                                const originalPrice = Number(item.originalPrice) || 0;
+                                const margin = Math.round(originalPrice * 0.1);
+                                const sellingPrice = originalPrice + margin;
+
+                                const getGameBadgeStyle = (game: string) => {
+                                  switch (game) {
+                                    case 'Mobile Legends':
+                                      return 'bg-blue-50 text-blue-700 border-blue-200';
+                                    case 'Free Fire':
+                                      return 'bg-amber-50 text-amber-700 border-amber-200';
+                                    case 'PUBG Mobile':
+                                      return 'bg-orange-50 text-orange-700 border-orange-200';
+                                    case 'Valorant':
+                                      return 'bg-rose-50 text-rose-700 border-rose-200';
+                                    case 'Genshin Impact':
+                                      return 'bg-purple-50 text-purple-700 border-purple-200';
+                                    case 'Honor of Kings':
+                                      return 'bg-red-50 text-red-700 border-red-200';
+                                    case 'Roblox':
+                                      return 'bg-slate-900 text-white border-slate-800';
+                                    default:
+                                      return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                                  }
+                                };
+
+                                return (
+                                  <tr
+                                    key={item.id}
+                                    className={`transition-colors hover:bg-sky-50/30 ${
+                                      isNewGroup
+                                        ? index === 0
+                                          ? 'bg-slate-50/50'
+                                          : 'border-t-2 border-slate-200 bg-slate-50/50'
+                                        : 'border-t border-slate-100 bg-white'
+                                    }`}
+                                  >
+                                    {/* 1. Kolom Game & Server */}
+                                    <td className="py-3 px-5 align-middle whitespace-nowrap">
+                                      {isNewGroup ? (
+                                        <div className="space-y-1">
+                                          <div className="flex items-center gap-2">
+                                            <div className="w-6 h-6 rounded-md bg-white border border-slate-200 text-sky-600 flex items-center justify-center shrink-0 shadow-2xs font-bold text-[11px]">
+                                              <Gamepad2 className="w-3.5 h-3.5" />
+                                            </div>
+                                            <span className="font-bold text-slate-900 text-sm tracking-tight">
+                                              {item.game}
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-1.5 pl-8">
+                                            <span
+                                              className={`text-[10px] font-semibold px-1.5 py-0.2 rounded border ${getGameBadgeStyle(
+                                                item.game
+                                              )}`}
+                                            >
+                                              {item.server}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center pl-8 text-slate-400 select-none">
+                                          <span className="inline-block w-4 h-px bg-slate-300 mr-2"></span>
+                                          <span className="font-mono text-slate-400 text-xs">-</span>
+                                        </div>
+                                      )}
+                                    </td>
+
+                                    {/* 2. Kolom Denominasi / Paket Item */}
+                                    <td className="py-3 px-4 align-middle">
+                                      <div className="space-y-1">
+                                        <div className="font-semibold text-slate-900 text-xs">
+                                          {item.item}
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                          {item.badge ? (
+                                            <span
+                                              className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
+                                                item.badge.includes('Terlaris')
+                                                  ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                                  : item.badge.includes('Best Value')
+                                                  ? 'bg-sky-50 text-sky-700 border-sky-200'
+                                                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                              }`}
+                                            >
+                                              {item.badge}
+                                            </span>
+                                          ) : (
+                                            <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                              ⚡ Instant Top-Up
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </td>
+
+                                    {/* 3. Kolom Status / Stok */}
+                                    <td className="py-3 px-4 text-center align-middle whitespace-nowrap">
+                                      <span className="inline-flex items-center justify-center gap-1 font-mono font-semibold text-slate-700 bg-slate-100 px-2.5 py-0.5 rounded text-xs border border-slate-200/60">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                        <span>Ready {item.stock}</span>
+                                      </span>
+                                    </td>
+
+                                    {/* 4. Kolom Harga Asli */}
+                                    <td className="py-3 px-4 text-right align-middle whitespace-nowrap">
+                                      <span className="font-mono text-xs text-slate-600">
+                                        Rp{originalPrice.toLocaleString('id-ID')}
+                                      </span>
+                                    </td>
+
+                                    {/* 5. Kolom Harga Jual (+10%) & Margin */}
+                                    <td className="py-3 px-5 text-right align-middle whitespace-nowrap">
+                                      <div className="inline-flex items-baseline gap-1.5 font-mono">
+                                        <span className="font-bold text-sm text-slate-900 tracking-tight">
+                                          Rp{sellingPrice.toLocaleString('id-ID')}
+                                        </span>
+                                        <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/60">
+                                          (+{margin.toLocaleString('id-ID')})
+                                        </span>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              });
+                            })()}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Footer Tabel: Pagination & Info Sinkronisasi */}
+                      {(() => {
+                        const filtered = topUpList.filter((item) => {
+                          const matchesSearch =
+                            item.game.toLowerCase().includes(topUpSearch.toLowerCase()) ||
+                            item.item.toLowerCase().includes(topUpSearch.toLowerCase()) ||
+                            item.category.toLowerCase().includes(topUpSearch.toLowerCase()) ||
+                            item.server.toLowerCase().includes(topUpSearch.toLowerCase());
+                          const matchesCategory =
+                            selectedTopUpCategory === 'Semua' || item.category === selectedTopUpCategory;
+                          return matchesSearch && matchesCategory;
+                        });
+
+                        const totalPages = Math.max(1, Math.ceil(filtered.length / topUpItemsPerPage));
+                        const currentPage = Math.min(topUpPage, totalPages);
+                        const startIndex = (currentPage - 1) * topUpItemsPerPage;
+
+                        return (
+                          <div className="bg-slate-50 px-5 py-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-500">
+                            <div>
+                              Menampilkan{' '}
+                              <strong className="text-slate-800 font-mono">
+                                {filtered.length === 0 ? 0 : startIndex + 1} - {Math.min(startIndex + topUpItemsPerPage, filtered.length)}
+                              </strong>{' '}
+                              dari <strong className="text-slate-800 font-mono">{filtered.length}</strong> paket Top Up{' '}
+                              <span className="text-slate-400 font-mono">(Total: {topUpList.length} item Top Up)</span>
+                            </div>
+
+                            {/* Pagination Buttons */}
+                            {totalPages > 1 && (
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setTopUpPage((p) => Math.max(1, p - 1))}
+                                  disabled={currentPage <= 1}
+                                  className="px-2.5 py-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed font-medium text-xs flex items-center gap-1 cursor-pointer transition shadow-2xs"
+                                >
+                                  <ChevronLeft className="w-3.5 h-3.5" />
+                                  <span>Sebelumnya</span>
+                                </button>
+
+                                <span className="px-2 font-mono text-xs font-semibold text-slate-700">
+                                  {currentPage} / {totalPages}
+                                </span>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setTopUpPage((p) => Math.min(totalPages, p + 1))}
+                                  disabled={currentPage >= totalPages}
+                                  className="px-2.5 py-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed font-medium text-xs flex items-center gap-1 cursor-pointer transition shadow-2xs"
+                                >
+                                  <span>Berikutnya</span>
+                                  <ChevronRight className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 ) : selectedTab === 'Connection' || selectedTab === 'tab06' ? (
@@ -1767,7 +2640,6 @@ export default function App() {
                           Atur integrasi Developer API Xaviera untuk katalog produk, SMM, dan transaksi bot otomatis.
                         </p>
                       </div>
-
                       <div className="flex items-center gap-2">
                         {isSavingConfig ? (
                           <span className="text-[11px] font-mono text-sky-600 bg-sky-50 px-2.5 py-1 rounded border border-sky-200 flex items-center gap-1.5">
@@ -1903,13 +2775,13 @@ export default function App() {
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
                         <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-1">
-                          <span className="font-semibold text-slate-800 block">👑 Premium Account</span>
+                          <span className="font-semibold text-slate-800 block">💎 Premium Account</span>
                           <p className="text-[11px] text-slate-500 leading-relaxed">
                             Akses daftar katalog produk premium, pemesanan instan, serta pengecekan status pesanan.
                           </p>
                         </div>
                         <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-1">
-                          <span className="font-semibold text-slate-800 block">🚀 Layanan SMM</span>
+                          <span className="font-semibold text-slate-800 block">📱 Layanan SMM</span>
                           <p className="text-[11px] text-slate-500 leading-relaxed">
                             Layanan followers, like, view, dan interaksi medsos otomatis dengan status pesanan real-time.
                           </p>
@@ -1921,7 +2793,6 @@ export default function App() {
                           </p>
                         </div>
                       </div>
-
                       <div className="pt-1 flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-200/80">
                         <span>Format Autentikasi: <code className="font-mono text-slate-700">Authorization: Bearer [API_KEY]</code></span>
                         <span className="text-sky-600 font-medium">Data format: JSON RESTful</span>
@@ -2124,7 +2995,6 @@ export default function App() {
                         className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 transition shadow-2xs"
                       />
                     </div>
-
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                         2. Nomor Telepon Tujuan

@@ -155,6 +155,102 @@ export default defineConfig(() => {
               return;
             }
 
+            if (req.url?.startsWith('/api/xaviera/smm')) {
+              res.setHeader('Content-Type', 'application/json');
+              const apiKey = botManager.config.xavieraApiKey?.trim();
+              const baseUrl = (botManager.config.xavieraBaseUrl?.trim() || 'https://xavierastore.com/api/v1').replace(/\/+$/, '');
+
+              if (!apiKey) {
+                res.end(JSON.stringify({
+                  configured: false,
+                  message: 'API Key belum diisi di tab Connection'
+                }));
+                return;
+              }
+
+              try {
+                const response = await fetch(`${baseUrl}/smm/services`, {
+                  method: 'GET',
+                  headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Accept': 'application/json'
+                  }
+                });
+
+                const data = await response.json();
+                if (!response.ok) {
+                  res.end(JSON.stringify({
+                    configured: true,
+                    success: false,
+                    status: response.status,
+                    error: data.error || 'Gagal memuat layanan SMM dari Xaviera API'
+                  }));
+                  return;
+                }
+
+                res.end(JSON.stringify({
+                  configured: true,
+                  success: true,
+                  data: data
+                }));
+              } catch (err: any) {
+                res.end(JSON.stringify({
+                  configured: true,
+                  success: false,
+                  error: err?.message || 'Gagal terhubung ke server Xaviera'
+                }));
+              }
+              return;
+            }
+
+            if (req.url?.startsWith('/api/xaviera/games')) {
+              res.setHeader('Content-Type', 'application/json');
+              const apiKey = botManager.config.xavieraApiKey?.trim();
+              const baseUrl = (botManager.config.xavieraBaseUrl?.trim() || 'https://xavierastore.com/api/v1').replace(/\/+$/, '');
+
+              if (!apiKey) {
+                res.end(JSON.stringify({
+                  configured: false,
+                  message: 'API Key belum diisi di tab Connection'
+                }));
+                return;
+              }
+
+              try {
+                const response = await fetch(`${baseUrl}/games`, {
+                  method: 'GET',
+                  headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Accept': 'application/json'
+                  }
+                });
+
+                const data = await response.json();
+                if (!response.ok) {
+                  res.end(JSON.stringify({
+                    configured: true,
+                    success: false,
+                    status: response.status,
+                    error: data.error || 'Gagal memuat game dari Xaviera API'
+                  }));
+                  return;
+                }
+
+                res.end(JSON.stringify({
+                  configured: true,
+                  success: true,
+                  data: data
+                }));
+              } catch (err: any) {
+                res.end(JSON.stringify({
+                  configured: true,
+                  success: false,
+                  error: err?.message || 'Gagal terhubung ke server Xaviera'
+                }));
+              }
+              return;
+            }
+
             if (!req.url?.startsWith('/api/bot')) {
               return next();
             }

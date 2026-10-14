@@ -1,10 +1,10 @@
 {
-  "menuOutputText": "Halo kak! Selamat datang di wanztstore.web.id 🛒\n\nSilakan pilih layanan yang ingin Anda pesan melalui tombol interaktif di bawah ini:",
+  "menuOutputText": "Halo kak! Selamat datang di wanztstore.web.id ✨\n\nSilakan pilih layanan yang ingin Anda pesan melalui tombol interaktif di bawah ini:",
   "menuButtons": [
     {
       "id": "btn-1",
       "type": "quick_reply",
-      "name": "📦 Katalog Produk",
+      "name": "🛍️ Katalog Produk",
       "output": ".katalog"
     },
     {
@@ -24,8 +24,8 @@
     {
       "id": "btn-1791764084648",
       "type": "quick_reply",
-      "name": "📋 List Produk",
-      "output": "📋 List Produk",
+      "name": "📑 List Produk",
+      "output": "📑 List Produk",
       "triggerAction": "list"
     }
   ],

@@ -64,12 +64,12 @@ export interface CommandsConfig {
 
 const DEFAULT_CONFIG: CommandsConfig = {
   menuOutputText:
-    'Halo kak! Selamat datang di wanztstore.web.id 🛒\n\nSilakan pilih layanan yang ingin Anda pesan melalui tombol interaktif di bawah ini:',
+    'Halo kak! Selamat datang di wanztstore.web.id ✨\n\nSilakan pilih layanan yang ingin Anda pesan melalui tombol interaktif di bawah ini:',
   menuButtons: [
     {
       id: 'btn-1',
       type: 'quick_reply',
-      name: '📦 Katalog Produk',
+      name: '🛍️ Katalog Produk',
       output: '.katalog',
     },
     {
@@ -142,6 +142,21 @@ class BotManager {
     if (this.logs.length > 80) this.logs.shift();
   }
 
+  resolveTargetJid(remoteJid: string): string {
+    if (!remoteJid) return remoteJid;
+    if (remoteJid.endsWith('@lid')) {
+      const cleanLid = remoteJid.replace('@lid', '');
+      const reversePath = path.join(SESSION_DIR, `lid-mapping-${cleanLid}_reverse.json`);
+      if (fs.existsSync(reversePath)) {
+        try {
+          const pn = JSON.parse(fs.readFileSync(reversePath, 'utf-8')).trim();
+          if (pn) return `${pn}@s.whatsapp.net`;
+        } catch {}
+      }
+    }
+    return remoteJid;
+  }
+
   getStatus() {
     const credsPath = path.join(SESSION_DIR, 'creds.json');
     const hasSession = fs.existsSync(credsPath);
@@ -152,7 +167,6 @@ class BotManager {
         isRegistered = Boolean(creds.registered);
       } catch {}
     }
-
     return {
       status: this.status,
       phoneNumber: this.phoneNumber,
@@ -169,7 +183,7 @@ class BotManager {
   async generateDaftarProdukText(): Promise<string> {
     const apiKey = this.config.xavieraApiKey?.trim();
     const baseUrl = (this.config.xavieraBaseUrl?.trim() || 'https://xavierastore.com/api/v1').replace(/\/+$/, '');
-
+    
     // Default fallback list jika API offline atau belum disetting
     const defaultCatalog = [
       {
@@ -190,7 +204,7 @@ class BotManager {
       let counter = 1;
       return defaultCatalog
         .map((group) => {
-          const list = group.items.map((item) => `• ${counter++}. ${item}`).join('\n');
+          const list = group.items.map((item) => `  ${counter++}. ${item}`).join('\n');
           return `*${group.kategori}:*\n${list}`;
         })
         .join('\n\n');
@@ -221,18 +235,15 @@ class BotManager {
       for (const prod of rawProducts) {
         let name = (prod.name || '').trim();
         if (!name || name.toLowerCase().startsWith('bot ') || name.toLowerCase().includes('voucher')) continue;
-
         // Bersihkan nama jika ada varian/penanda lain
-        if (name.includes('—')) name = name.split('—')[0].trim();
+        if (name.includes(' ')) name = name.split(' ')[0].trim();
         name = name.replace(/\s+/g, ' ').trim();
 
         const cat = (prod.category || prod.kategori || 'Lainnya').trim();
         const categoryName = cat.charAt(0).toUpperCase() + cat.slice(1);
-
         if (!groups[categoryName]) {
           groups[categoryName] = [];
         }
-
         if (!groups[categoryName].includes(name)) {
           groups[categoryName].push(name);
         }
@@ -240,10 +251,9 @@ class BotManager {
 
       let counter = 1;
       const sections: string[] = [];
-
       for (const [kategori, items] of Object.entries(groups)) {
         if (items.length === 0) continue;
-        const listText = items.map((item) => `• ${counter++}. ${item}`).join('\n');
+        const listText = items.map((item) => `  ${counter++}. ${item}`).join('\n');
         sections.push(`*${kategori}:*\n${listText}`);
       }
 
@@ -251,7 +261,7 @@ class BotManager {
         ? sections.join('\n\n')
         : defaultCatalog
             .map((g) => {
-              const list = g.items.map((i) => `• ${counter++}. ${i}`).join('\n');
+              const list = g.items.map((i) => `  ${counter++}. ${i}`).join('\n');
               return `*${g.kategori}:*\n${list}`;
             })
             .join('\n\n');
@@ -259,14 +269,14 @@ class BotManager {
       let counter = 1;
       return defaultCatalog
         .map((group) => {
-          const list = group.items.map((item) => `• ${counter++}. ${item}`).join('\n');
+          const list = group.items.map((item) => `  ${counter++}. ${item}`).join('\n');
           return `*${group.kategori}:*\n${list}`;
         })
         .join('\n\n');
     }
   }
 
-  async sendMenuInteractiveMessage(remoteJid: string) {
+  async sendMenuInteractiveMessage(remoteJid: string, quotedMsg?: any) {
     if (!this.sock) return;
 
     const nativeButtons: any[] = (this.config.menuButtons || []).map((btn) => {
@@ -279,7 +289,6 @@ class BotManager {
               id: btn.output || btn.name || 'menu_item',
             }),
           };
-
         case 'cta_url':
           return {
             name: 'cta_url',
@@ -289,7 +298,6 @@ class BotManager {
               merchant_url: btn.output.startsWith('http') ? btn.output : `https://${btn.output}`,
             }),
           };
-
         case 'cta_copy':
           return {
             name: 'cta_copy',
@@ -298,7 +306,6 @@ class BotManager {
               copy_code: btn.output,
             }),
           };
-
         case 'cta_call':
           return {
             name: 'cta_call',
@@ -307,7 +314,6 @@ class BotManager {
               phone_number: btn.callPhoneNumber || btn.output.replace(/[^0-9+]/g, ''),
             }),
           };
-
         case 'cta_reminder':
         case 'cta_cancel_reminder':
           return {
@@ -317,7 +323,6 @@ class BotManager {
               id: btn.output || 'reminder',
             }),
           };
-
         default:
           return {
             name: 'quick_reply',
@@ -330,7 +335,6 @@ class BotManager {
     });
 
     let imageInput: Buffer | undefined = undefined;
-
     if (this.config.includeMedia && this.config.selectedPicture) {
       try {
         const safeName = path.basename(this.config.selectedPicture);
@@ -354,63 +358,47 @@ class BotManager {
     const footerText = 'wanztstore.web.id • Otomatis';
 
     try {
-      let mediaHeader: any = {};
-      if (imageInput) {
-        try {
-          const uploaded = await prepareWAMessageMedia(
-            { image: imageInput },
-            { upload: this.sock.waUploadToServer }
-          );
-          mediaHeader = {
-            hasMediaAttachment: true,
-            ...uploaded,
-          };
-        } catch (mediaErr: any) {
-          this.addLog('warning', `Upload media menu gagal: ${mediaErr?.message || mediaErr}. Mengirim tombol tanpa gambar...`);
-        }
-      }
-
-      const interactiveMessagePayload = {
-        viewOnceMessage: {
-          message: {
-            messageContextInfo: {
-              deviceListMetadata: {},
-              deviceListMetadataVersion: 2,
-            },
-            interactiveMessage: {
-              body: { text: titleText },
-              footer: { text: footerText },
-              header: {
-                title: '',
-                hasMediaAttachment: Boolean(mediaHeader.imageMessage),
-                ...mediaHeader,
-              },
-              nativeFlowMessage: {
-                buttons: nativeButtons,
-              },
-            },
-          },
+      const payload: any = {
+        interactiveMessage: {
+          title: titleText,
+          footer: footerText,
+          buttons: nativeButtons,
         },
       };
 
-      const userJid = this.sock.user?.id || this.sock.authState?.creds?.me?.id || '';
-      const fullMsg = generateWAMessageFromContent(remoteJid, interactiveMessagePayload, { userJid });
+      if (imageInput) {
+        payload.interactiveMessage.image = imageInput;
+      }
 
-      await this.sock.relayMessage(remoteJid, fullMsg.message, { messageId: fullMsg.key.id });
+      if (quotedMsg) {
+        const userJid = this.sock.user?.id || this.sock.authState?.creds?.me?.id || '';
+        const participant = quotedMsg.key?.fromMe
+          ? userJid
+          : quotedMsg.participant || quotedMsg.key?.participant || quotedMsg.key?.remoteJid;
+        const participantNormalized = participant ? participant.replace(/:\d+/, '') : '';
+        payload.interactiveMessage.contextInfo = {
+          stanzaId: quotedMsg.key?.id,
+          participant: participantNormalized,
+          quotedMessage: quotedMsg.message,
+          ...(quotedMsg.key?.remoteJid !== remoteJid ? { remoteJid: quotedMsg.key?.remoteJid } : {}),
+          mentionedJid: participantNormalized && participantNormalized.includes('@s.whatsapp.net') ? [participantNormalized] : [],
+        };
+      }
 
-      this.addLog('success', `📤 Berhasil membalas command MENU dengan tombol interaktif ourin-baileys ke ${remoteJid}${mediaHeader.imageMessage ? ' (dengan gambar)' : ''}`);
+      await this.sock.sendMessage(remoteJid, payload, quotedMsg ? { quoted: quotedMsg } : undefined);
+      this.addLog('success', `✅ Berhasil mengirim command MENU dengan tombol interaktif ourin-baileys ke ${remoteJid}${imageInput ? ' (dengan gambar)' : ''}`);
     } catch (err: any) {
       this.addLog('warning', `Pengiriman menu interaktif nativeFlow gagal: ${err?.message || err}. Mencoba fallback teks...`);
       try {
-        await this.sock.sendMessage(remoteJid, { text: titleText });
-        this.addLog('success', `📤 Berhasil membalas command MENU (fallback text) ke ${remoteJid}`);
+        await this.sock.sendMessage(remoteJid, { text: titleText }, quotedMsg ? { quoted: quotedMsg } : undefined);
+        this.addLog('success', `✅ Berhasil membalas command MENU (fallback text) ke ${remoteJid}`);
       } catch (fallbackErr: any) {
         this.addLog('error', `Gagal mengirim menu interaktif: ${fallbackErr?.message || fallbackErr}`);
       }
     }
   }
 
-  async sendListInteractiveMessage(remoteJid: string) {
+  async sendListInteractiveMessage(remoteJid: string, quotedMsg?: any) {
     if (!this.sock) return;
 
     const apiKey = this.config.xavieraApiKey?.trim();
@@ -472,12 +460,11 @@ class BotManager {
             for (const prod of rawProducts) {
               let name = (prod.name || '').trim();
               if (!name || name.toLowerCase().startsWith('bot ') || name.toLowerCase().includes('voucher')) continue;
-              if (name.includes('—')) name = name.split('—')[0].trim();
+              if (name.includes(' ')) name = name.split(' ')[0].trim();
               name = name.replace(/\s+/g, ' ').trim();
 
               const cat = (prod.category || prod.kategori || 'Lainnya').trim();
               const categoryName = cat.charAt(0).toUpperCase() + cat.slice(1);
-
               if (!groups[categoryName]) groups[categoryName] = [];
               if (!groups[categoryName].includes(name)) groups[categoryName].push(name);
             }
@@ -519,38 +506,41 @@ class BotManager {
         }),
       };
 
-      const interactiveListPayload = {
-        viewOnceMessage: {
-          message: {
-            messageContextInfo: {
-              deviceListMetadata: {},
-              deviceListMetadataVersion: 2,
-            },
-            interactiveMessage: {
-              body: { text: responseText },
-              footer: { text: 'wanztstore.web.id • Pilih Produk' },
-              header: {
-                title: '',
-                hasMediaAttachment: false,
-              },
-              nativeFlowMessage: {
-                buttons: [singleSelectButton],
-              },
-            },
-          },
+      const interactiveListPayload: any = {
+        interactiveMessage: {
+          title: responseText,
+          footer: 'wanztstore.web.id • Pilih Produk',
+          buttons: [singleSelectButton],
         },
       };
 
-      const userJid = this.sock.user?.id || this.sock.authState?.creds?.me?.id || '';
-      const fullMsg = generateWAMessageFromContent(remoteJid, interactiveListPayload, { userJid });
-      await this.sock.relayMessage(remoteJid, fullMsg.message, { messageId: fullMsg.key.id });
+      if (quotedMsg) {
+        const userJid = this.sock.user?.id || this.sock.authState?.creds?.me?.id || '';
+        const participant = quotedMsg.key?.fromMe
+          ? userJid
+          : quotedMsg.participant || quotedMsg.key?.participant || quotedMsg.key?.remoteJid;
+        const participantNormalized = participant ? participant.replace(/:\d+/, '') : '';
+        interactiveListPayload.interactiveMessage.contextInfo = {
+          stanzaId: quotedMsg.key?.id,
+          participant: participantNormalized,
+          quotedMessage: quotedMsg.message,
+          ...(quotedMsg.key?.remoteJid !== remoteJid ? { remoteJid: quotedMsg.key?.remoteJid } : {}),
+          mentionedJid: participantNormalized && participantNormalized.includes('@s.whatsapp.net') ? [participantNormalized] : [],
+        };
+      }
 
-      this.addLog('success', `📤 Berhasil mengirim pesan LIST dengan tombol dropdown produk ke ${remoteJid}`);
+      await this.sock.sendMessage(
+        remoteJid,
+        interactiveListPayload,
+        quotedMsg ? { quoted: quotedMsg } : undefined
+      );
+
+      this.addLog('success', `✅ Berhasil mengirim pesan LIST dengan tombol dropdown produk ke ${remoteJid}`);
     } catch (err: any) {
       this.addLog('warning', `Pengiriman dropdown LIST nativeFlow gagal (${err?.message || err}). Mengirim fallback text...`);
       try {
-        await this.sock.sendMessage(remoteJid, { text: responseText });
-        this.addLog('success', `📤 Berhasil membalas command LIST (fallback text) ke ${remoteJid}`);
+        await this.sock.sendMessage(remoteJid, { text: responseText }, quotedMsg ? { quoted: quotedMsg } : undefined);
+        this.addLog('success', `✅ Berhasil membalas command LIST (fallback text) ke ${remoteJid}`);
       } catch (fallbackErr: any) {
         this.addLog('error', `Gagal mengirim respon LIST: ${fallbackErr?.message || fallbackErr}`);
       }
@@ -720,23 +710,26 @@ class BotManager {
     ];
   }
 
-  async sendProductVariantsCarousel(remoteJid: string, productName: string) {
+  async sendProductVariantsCarousel(remoteJid: string, productName: string, quotedMsg?: any) {
     if (!this.sock) return;
 
     this.addLog('info', `Menyiapkan kartu carousel varian produk "${productName}" untuk ${remoteJid}...`);
-
     const variants = await this.getProductVariants(productName);
+
     if (!variants || variants.length === 0) {
-      await this.sock.sendMessage(remoteJid, {
-        text: `Maaf kak, varian untuk produk *${productName}* sedang tidak tersedia saat ini.`,
-      });
+      await this.sock.sendMessage(
+        remoteJid,
+        {
+          text: `Maaf kak, varian untuk produk *${productName}* sedang tidak tersedia saat ini.`,
+        },
+        quotedMsg ? { quoted: quotedMsg } : undefined
+      );
       return;
     }
 
     // Siapkan gambar untuk header card carousel
     let cardImage: Buffer | undefined = undefined;
     const pictureDir = path.join(process.cwd(), 'src', 'media', 'picture');
-
     if (this.config.selectedPicture) {
       const p = path.join(pictureDir, path.basename(this.config.selectedPicture));
       if (fs.existsSync(p)) {
@@ -787,20 +780,7 @@ class BotManager {
         intro = `Tingkatkan produktivitas dan kreativitasmu dengan pilihan paket ${pName} yang tersedia di Wanzt Store.`;
       }
 
-      const captionText = 
-`*${pName} | ${cat}*
-
-${intro}
-
-📦 *Detail Produk*
-
-▪️ Varian: ${v.variant}
-💰 Harga: Rp${formattedPrice}
-📊 Stok: ${v.stock} tersedia
-
-Paket tersedia selama stok masih ada. Pastikan kamu memilih varian yang sesuai sebelum melanjutkan pesanan.
-
-Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
+      const captionText = `*${pName} | ${cat}*\n${intro}\n\n*Detail Produk*\n• Varian: ${v.variant}\n• Harga: Rp${formattedPrice}\n• Stok: ${v.stock} tersedia\n\nPaket tersedia selama stok masih ada. Pastikan kamu memilih varian yang sesuai sebelum melanjutkan pesanan.\n\nSilakan pilih tindakan di bawah ini untuk melanjutkan.`;
 
       return {
         image: cardImage,
@@ -808,7 +788,7 @@ Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
         footer: 'Wanzt Store Official',
         nativeFlow: [
           {
-            text: '📋 Order',
+            text: '🛒 Order',
             id: `order_${v.variant}`,
           },
           {
@@ -820,10 +800,13 @@ Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
     });
 
     try {
-      // 1. Manfaatkan library @itsliaaa/baileys KHUSUS untuk membangun konten Carousel Message:
+      // 1. Resolve remoteJid jika berupa LID agar terkirim ke WhatsApp pengguna asli
+      const targetJid = this.resolveTargetJid(remoteJid);
+
+      // 2. Bangun konten Carousel Message dengan @itsliaaa/baileys:
       const carouselMessageContent = await generateItsliaaaWAMessageContent(
         {
-          text: `Katalog Varian Produk *${productName}* • Wanzt Store 🛒`,
+          text: `Katalog Varian Produk *${productName}* • Wanzt Store`,
           footer: 'Wanzt Store • Silakan geser kartu varian di bawah ini',
           cards: cardsPayload,
         },
@@ -832,31 +815,88 @@ Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
         }
       );
 
-      // 2. Bungkus ke dalam viewOnceMessage dan kirim via ourin-baileys (generateWAMessageFromContent & relayMessage):
+      // Pastikan carouselCardType terisi 1 (HSCROLL_CARDS) sesuai spesifikasi protobuf WhatsApp
+      if (carouselMessageContent?.interactiveMessage?.carouselMessage) {
+        carouselMessageContent.interactiveMessage.carouselMessage.carouselCardType = 1;
+        carouselMessageContent.interactiveMessage.carouselMessage.messageVersion = 1;
+      }
+
+      // 3. Bangun payload WAMessage resmi dengan messageSecret 32 bytes
       const userJid = this.sock.user?.id || this.sock.authState?.creds?.me?.id || '';
+
+      // Tambahkan contextInfo ke interactiveMessage agar mereply si pemicu (termasuk di dalam grup)
+      if (quotedMsg && carouselMessageContent?.interactiveMessage) {
+        const participant = quotedMsg.key?.fromMe
+          ? userJid
+          : quotedMsg.participant || quotedMsg.key?.participant || quotedMsg.key?.remoteJid;
+        const participantNormalized = participant ? participant.replace(/:\d+/, '') : '';
+        carouselMessageContent.interactiveMessage.contextInfo = {
+          stanzaId: quotedMsg.key?.id,
+          participant: participantNormalized,
+          quotedMessage: quotedMsg.message,
+          ...(quotedMsg.key?.remoteJid !== targetJid ? { remoteJid: quotedMsg.key?.remoteJid } : {}),
+          mentionedJid: participantNormalized && participantNormalized.includes('@s.whatsapp.net') ? [participantNormalized] : [],
+        };
+      }
+
       const fullCarouselMsg = generateWAMessageFromContent(
-        remoteJid,
+        targetJid,
         {
           viewOnceMessage: {
             message: {
               messageContextInfo: {
                 deviceListMetadata: {},
                 deviceListMetadataVersion: 2,
+                messageSecret: crypto.randomBytes(32),
               },
               ...carouselMessageContent,
             },
           },
         },
-        { userJid }
+        { userJid, quoted: quotedMsg }
       );
 
-      await this.sock.relayMessage(remoteJid, fullCarouselMsg.message, {
+      // 4. Sertakan stanza node <biz> (type native_flow v=9) agar pesan Carousel diizinkan dan dirender oleh WhatsApp
+      const ts = Math.floor(Date.now() / 1000) - 77980457;
+      const bizNodes = [
+        {
+          tag: 'biz',
+          attrs: {
+            actual_actors: '2',
+            host_storage: '2',
+            privacy_mode_ts: `${ts}`,
+          },
+          content: [
+            {
+              tag: 'engagement',
+              attrs: {
+                customer_service_state: 'open',
+                conversation_state: 'open',
+              },
+            },
+            {
+              tag: 'interactive',
+              attrs: { type: 'native_flow', v: '1' },
+              content: [
+                {
+                  tag: 'native_flow',
+                  attrs: { v: '9', name: 'mixed' },
+                  content: [],
+                },
+              ],
+            },
+          ],
+        },
+      ];
+
+      await this.sock.relayMessage(targetJid, fullCarouselMsg.message, {
         messageId: fullCarouselMsg.key.id,
+        additionalNodes: bizNodes,
       });
 
       this.addLog(
         'success',
-        `🎠 Berhasil mengirim pesan CAROUSEL (@itsliaaa/baileys) berisi ${cardsPayload.length} kartu varian untuk "${productName}" ke ${remoteJid}`
+        `✅ Berhasil mengirim pesan CAROUSEL (@itsliaaa/baileys) berisi ${cardsPayload.length} kartu varian untuk "${productName}" ke ${targetJid}`
       );
     } catch (err: any) {
       this.addLog(
@@ -864,8 +904,13 @@ Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
         `Gagal mengirim carousel varian (${err?.message || err}). Mengirim fallback teks varian...`
       );
       try {
+        const targetJid = this.resolveTargetJid(remoteJid);
         for (const card of cardsPayload.slice(0, 3)) {
-          await this.sock.sendMessage(remoteJid, { text: card.caption });
+          await this.sock.sendMessage(
+            targetJid,
+            { text: card.caption },
+            quotedMsg ? { quoted: quotedMsg } : undefined
+          );
         }
       } catch (fallbackErr: any) {
         this.addLog('error', `Fallback pesan varian gagal: ${fallbackErr?.message || fallbackErr}`);
@@ -873,7 +918,7 @@ Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
     }
   }
 
-  async sendAdminContact(remoteJid: string) {
+  async sendAdminContact(remoteJid: string, quotedMsg?: any) {
     if (!this.sock) return;
 
     const vcard =
@@ -885,13 +930,17 @@ Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
       'END:VCARD';
 
     try {
-      await this.sock.sendMessage(remoteJid, {
-        contacts: {
-          displayName: 'Admin Wanzt Store',
-          contacts: [{ vcard }],
+      await this.sock.sendMessage(
+        remoteJid,
+        {
+          contacts: {
+            displayName: 'Admin Wanzt Store',
+            contacts: [{ vcard }],
+          },
         },
-      });
-      this.addLog('success', `👤 Berhasil mengirimkan kontak tunggal Admin Wanzt Store (083861276608) ke ${remoteJid}`);
+        quotedMsg ? { quoted: quotedMsg } : undefined
+      );
+      this.addLog('success', `✅ Berhasil mengirimkan kontak tunggal Admin Wanzt Store (083861276608) ke ${remoteJid}`);
     } catch (err: any) {
       this.addLog('error', `Gagal mengirim kontak admin: ${err?.message || err}`);
     }
@@ -901,7 +950,6 @@ Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
     if (!rawPhoneNumber) {
       throw new Error('Nomor WhatsApp target wajib diisi');
     }
-
     const cleanPhone = rawPhoneNumber.replace(/[^0-9]/g, '');
     if (cleanPhone.length < 9) {
       throw new Error('Nomor telepon tidak valid (minimal 9 digit)');
@@ -977,8 +1025,8 @@ Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
         if (connection === 'open') {
           this.status = 'connected';
           this.user = this.sock.user;
-          this.addLog('success', `✅ WhatsApp Bot BERHASIL TERHUBUNG! (ID: ${this.sock.user?.id || cleanPhone})`);
-          this.addLog('info', '⚡ Command /menu aktif dengan prefix [/, ., !, ?, #, $, %, &] dan tombol interaktif.');
+          this.addLog('success', `🎉 WhatsApp Bot BERHASIL TERHUBUNG! (ID: ${this.sock.user?.id || cleanPhone})`);
+          this.addLog('info', '✨ Command /menu aktif dengan prefix [/, ., !, ?, #, $, %, &] dan tombol interaktif.');
         }
 
         if (connection === 'close') {
@@ -988,7 +1036,7 @@ Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
           // Status code 515 (restartRequired) muncul saat kode pairing berhasil diverifikasi di HP!
           if (statusCode === 515 || statusCode === DisconnectReason.restartRequired) {
             this.status = 'connecting';
-            this.addLog('success', '🎉 Verifikasi pairing sukses di HP! WhatsApp meminta restart koneksi (Kode 515).');
+            this.addLog('success', '🔄 Verifikasi pairing sukses di HP! WhatsApp meminta restart koneksi (Kode 515).');
             this.addLog('info', 'Menghubungkan ulang sesi resmi sekarang...');
             setTimeout(() => {
               this.start(this.phoneNumber, this.customCode, true).catch((err: any) => {
@@ -1019,8 +1067,9 @@ Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
           if (!m.message) continue;
           if (m.key.fromMe) continue; // Jangan balas pesan dari bot sendiri
 
-          const remoteJid = m.key.remoteJid;
+          let remoteJid = m.key.remoteJid;
           if (!remoteJid || remoteJid === 'status@broadcast') continue;
+          remoteJid = this.resolveTargetJid(remoteJid);
 
           // Deteksi apakah pesan berasal dari klik tombol interaktif (Quick Reply / Native Flow / Template / List)
           let isInteractiveButtonResponse = false;
@@ -1075,9 +1124,8 @@ Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
             m.message?.imageMessage?.caption ||
             m.message?.videoMessage?.caption ||
             '';
-
           const trimmedText = rawText.trim();
-          const senderName = m.pushName || remoteJid.split('@')[0];
+          const senderName = m.pushName || (m.key?.participant || remoteJid).split('@')[0];
 
           // 1. TANGANI INTERAKSI TOMBOL KHUSUS CAROUSEL & KONTAK ADMIN
           const cleanBtn = (buttonIdOrText || '').trim();
@@ -1087,8 +1135,8 @@ Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
             cleanBtn === 'contact_admin' ||
             (isInteractiveButtonResponse && cleanBtn.toLowerCase().includes('contact_admin'))
           ) {
-            this.addLog('info', `📞 Tombol "📞 Contact Admin" ditekan oleh ${senderName}`);
-            await this.sendAdminContact(remoteJid);
+            this.addLog('info', `📞 Tombol "Contact Admin" ditekan oleh ${senderName}`);
+            await this.sendAdminContact(remoteJid, m);
             continue;
           }
 
@@ -1096,11 +1144,14 @@ Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
           if (cleanBtn.startsWith('order_')) {
             const variantChoice = cleanBtn.replace(/^order_/, '').trim() || 'Produk Pilihan';
             this.addLog('info', `🛒 Pelanggan ${senderName} menekan tombol ORDER untuk varian: "${variantChoice}"`);
-
-            await this.sock.sendMessage(remoteJid, {
-              text: `Halo kak *${senderName}*! 🛒\n\nPilihan pesanan kamu untuk *${variantChoice}* telah kami terima.\n\nSilakan konfirmasi ke Admin Wanzt Store melalui kontak resmi berikut untuk pembayaran dan pengiriman akun:`,
-            });
-            await this.sendAdminContact(remoteJid);
+            await this.sock.sendMessage(
+              remoteJid,
+              {
+                text: `Halo kak *${senderName}*! 👋\n\nPilihan pesanan kamu untuk *${variantChoice}* telah kami terima.\n\nSilakan konfirmasi ke Admin Wanzt Store melalui kontak resmi berikut untuk pembayaran dan pengiriman akun:`,
+              },
+              { quoted: m }
+            );
+            await this.sendAdminContact(remoteJid, m);
             continue;
           }
 
@@ -1115,7 +1166,6 @@ Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
 
           if (isInteractiveButtonResponse && cleanBtn) {
             triggerSource = 'quick_reply';
-
             // Cek apakah tombol cocok dengan konfigurasi menuButtons
             const cleanLower = cleanBtn.toLowerCase();
             const matchedButton = (this.config.menuButtons || []).find((b) => {
@@ -1135,10 +1185,10 @@ Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
             if (matchedButton) {
               if (matchedButton.triggerAction === 'list') {
                 commandToTrigger = 'list';
-                this.addLog('info', `⚡ Tombol Quick Reply "${matchedButton.name}" (Action: List) ditekan oleh ${senderName}. Memicu Command List!`);
+                this.addLog('info', `🔘 Tombol Quick Reply "${matchedButton.name}" (Action: List) ditekan oleh ${senderName}. Memicu Command List!`);
               } else if (matchedButton.triggerAction === 'unknown') {
                 // Konfigurasi unknown: Tidak memicu command apapun
-                this.addLog('info', `ℹ️ Tombol Quick Reply "${matchedButton.name}" (Action: Unknown) ditekan oleh ${senderName}. Tidak memicu command.`);
+                this.addLog('info', `🔘 Tombol Quick Reply "${matchedButton.name}" (Action: Unknown) ditekan oleh ${senderName}. Tidak memicu command.`);
                 commandToTrigger = null;
               } else {
                 // Fallback normal jika triggerAction belum diset atau custom
@@ -1175,8 +1225,8 @@ Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
 
           // Cek apakah perintah manual adalah contact / admin
           if (commandToTrigger && ['contact', 'admin', 'kontak', 'owner'].includes(commandToTrigger.toLowerCase())) {
-            this.addLog('info', `📞 Menerima command ${usedPrefix}${commandToTrigger} dari ${senderName}`);
-            await this.sendAdminContact(remoteJid);
+            this.addLog('info', `📩 Menerima command ${usedPrefix}${commandToTrigger} dari ${senderName}`);
+            await this.sendAdminContact(remoteJid, m);
             continue;
           }
 
@@ -1184,32 +1234,32 @@ Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
           if (commandToTrigger && commandToTrigger.toLowerCase().startsWith('order')) {
             const variantChoice = trimmedText.replace(/^[/.!?#$%&]order\s*/i, '').trim() || 'Produk Pilihan';
             this.addLog('info', `🛒 Pelanggan ${senderName} mengetik command ORDER: "${variantChoice}"`);
-            await this.sock.sendMessage(remoteJid, {
-              text: `Halo kak *${senderName}*! 🛒\n\nPilihan pesanan kamu untuk *${variantChoice}* telah kami terima.\n\nSilakan konfirmasi ke Admin Wanzt Store melalui kontak di bawah ini:`,
-            });
-            await this.sendAdminContact(remoteJid);
+            await this.sock.sendMessage(
+              remoteJid,
+              {
+                text: `Halo kak *${senderName}*! 👋\n\nPilihan pesanan kamu untuk *${variantChoice}* telah kami terima.\n\nSilakan konfirmasi ke Admin Wanzt Store melalui kontak di bawah ini:`,
+              },
+              { quoted: m }
+            );
+            await this.sendAdminContact(remoteJid, m);
             continue;
           }
 
           // DETEKSI PEMILIHAN PRODUK (Dari dropdown Single-Select list atau command nama produk)
           const potentialProductName = isInteractiveButtonResponse ? cleanBtn : (usedPrefix ? commandToTrigger : null);
-
           if (potentialProductName) {
             const cleanCand = potentialProductName.trim().toLowerCase();
             const reserved = ['menu', 'list', 'help', 'info', 'ping', 'start', 'stop', 'reset', 'admin', 'contact', 'owner'];
-
             if (!reserved.includes(cleanCand)) {
               const knownProducts = [
                 'YouTube', 'Netflix', 'Spotify', 'Disney+ Hotstar', 'Viu', 'WeTV', 'Vidio',
                 'ChatGPT', 'Gemini', 'Claude', 'Perplexity AI',
                 'Canva Pro', 'Canva', 'Microsoft 365', 'CapCut Pro', 'CapCut', 'Alight Motion', 'Adobe Lightroom'
               ];
-
               let matchedProduct: string | null = null;
               const found = knownProducts.find(
                 (p) => p.toLowerCase() === cleanCand || cleanCand.includes(p.toLowerCase()) || p.toLowerCase().includes(cleanCand)
               );
-
               if (found) {
                 matchedProduct = found;
               } else if (isInteractiveButtonResponse && potentialProductName.length >= 2) {
@@ -1221,11 +1271,9 @@ Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
                 const triggerInfo = isInteractiveButtonResponse
                   ? `[Pilihan Dropdown List: "${cleanBtn}"]`
                   : `[Prefix: "${usedPrefix}${commandToTrigger}"]`;
-
                 this.addLog('info', `📦 Memproses varian produk "${matchedProduct}" dari ${senderName} ${triggerInfo}`);
-
                 try {
-                  await this.sendProductVariantsCarousel(remoteJid, matchedProduct);
+                  await this.sendProductVariantsCarousel(remoteJid, matchedProduct, m);
                 } catch (err: any) {
                   this.addLog('error', `Gagal memproses carousel varian: ${err?.message || err}`);
                 }
@@ -1244,11 +1292,9 @@ Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
               triggerSource === 'quick_reply'
                 ? `[Tombol Quick Reply: "${buttonIdOrText}"]`
                 : `[Prefix: "${usedPrefix}menu"]`;
-
             this.addLog('info', `📩 Menerima command MENU dari ${senderName} ${triggerInfo}`);
-
             try {
-              await this.sendMenuInteractiveMessage(remoteJid);
+              await this.sendMenuInteractiveMessage(remoteJid, m);
             } catch (sendErr: any) {
               this.addLog('error', `Gagal mengirim respon MENU: ${sendErr?.message || sendErr}`);
             }
@@ -1257,11 +1303,9 @@ Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
               triggerSource === 'quick_reply'
                 ? `[Tombol Quick Reply: "${buttonIdOrText}"]`
                 : `[Prefix: "${usedPrefix}list"]`;
-
-            this.addLog('info', `📩 Menerima command LIST dari ${senderName} ${triggerInfo}`);
-
+            this.addLog('info', `📋 Menerima command LIST dari ${senderName} ${triggerInfo}`);
             try {
-              await this.sendListInteractiveMessage(remoteJid);
+              await this.sendListInteractiveMessage(remoteJid, m);
             } catch (sendErr: any) {
               this.addLog('error', `Gagal mengirim respon LIST: ${sendErr?.message || sendErr}`);
             }
@@ -1273,7 +1317,6 @@ Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
       if (!this.sock.authState.creds.registered) {
         this.status = 'waiting_code';
         this.addLog('info', 'Menunggu soket siap mengirim permintaan pairing code...');
-
         setTimeout(async () => {
           try {
             this.addLog('info', `Mengirim requestPairingCode("${cleanPhone}", "${codeToUse}")...`);
@@ -1325,4 +1368,3 @@ Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
 }
 
 export const botManager = new BotManager();
-
