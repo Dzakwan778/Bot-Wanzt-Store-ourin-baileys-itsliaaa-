@@ -72,6 +72,7 @@ export type WhatsAppButtonType =
   | 'quick_reply'
   | 'cta_url'
   | 'cta_copy'
+  | 'vcard'
   | 'cta_call'
   | 'cta_reminder'
   | 'cta_cancel_reminder';
@@ -762,7 +763,7 @@ export default function App() {
       setUrlOutput(btn.output.startsWith('https://') ? btn.output : `https://${btn.output}`);
     } else if (btn.type === 'cta_copy') {
       setCopyOutput(btn.output);
-    } else if (btn.type === 'cta_call') {
+    } else if (btn.type === 'vcard' || btn.type === 'cta_call') {
       if (btn.callTargetName) setCallTarget(btn.callTargetName);
       if (btn.callPhoneNumber) setCallPhone(btn.callPhoneNumber);
       if (!btn.callTargetName && !btn.callPhoneNumber && btn.output.includes('(')) {
@@ -771,7 +772,7 @@ export default function App() {
           setCallTarget(match[1].trim());
           setCallPhone(match[2].trim());
         } else {
-          setCallTarget('Admin');
+          setCallTarget('Admin Store');
           setCallPhone(btn.output.replace(/[^0-9+]/g, ''));
         }
       }
@@ -810,14 +811,14 @@ export default function App() {
         return;
       }
       finalOutput = copyOutput.trim();
-    } else if (modalBtnType === 'cta_call') {
+    } else if (modalBtnType === 'vcard' || modalBtnType === 'cta_call') {
       if (!callTarget.trim()) {
-        showToast('Nama target panggilan wajib diisi (misal: Owner atau Admin).');
+        showToast('Nama kontak vCard wajib diisi (misal: Admin Store atau Owner).');
         return;
       }
       const cleanPhone = callPhone.replace(/[^0-9+]/g, '');
       if (!cleanPhone || cleanPhone.length < 8) {
-        showToast('Nomor telepon tujuan tidak valid.');
+        showToast('Nomor WhatsApp kontak vCard tidak valid.');
         return;
       }
       finalOutput = `${callTarget.trim()} (${cleanPhone})`;
@@ -835,6 +836,8 @@ export default function App() {
       finalOutput = cancelReminderOutput.trim();
     }
 
+    const isContactBtn = modalBtnType === 'vcard' || modalBtnType === 'cta_call';
+
     if (editingButtonId) {
       const updatedButtons = menuButtons.map((btn) => {
         if (btn.id === editingButtonId) {
@@ -844,8 +847,8 @@ export default function App() {
             name: modalBtnName.trim(),
             output: finalOutput,
             triggerAction: modalBtnType === 'quick_reply' ? quickReplyAction : undefined,
-            callTargetName: modalBtnType === 'cta_call' ? callTarget.trim() : undefined,
-            callPhoneNumber: modalBtnType === 'cta_call' ? callPhone.trim() : undefined,
+            callTargetName: isContactBtn ? callTarget.trim() : undefined,
+            callPhoneNumber: isContactBtn ? callPhone.trim() : undefined,
           };
         }
         return btn;
@@ -862,8 +865,8 @@ export default function App() {
         name: modalBtnName.trim(),
         output: finalOutput,
         triggerAction: modalBtnType === 'quick_reply' ? quickReplyAction : undefined,
-        callTargetName: modalBtnType === 'cta_call' ? callTarget.trim() : undefined,
-        callPhoneNumber: modalBtnType === 'cta_call' ? callPhone.trim() : undefined,
+        callTargetName: isContactBtn ? callTarget.trim() : undefined,
+        callPhoneNumber: isContactBtn ? callPhone.trim() : undefined,
       };
       const updatedButtons = [...menuButtons, newBtn];
       setMenuButtons(updatedButtons);
@@ -1506,9 +1509,9 @@ export default function App() {
                                 } else if (btn.type === 'cta_copy') {
                                   badgeColor = 'bg-purple-50 text-purple-700 border-purple-200';
                                   badgeLabel = 'CTA Copy';
-                                } else if (btn.type === 'cta_call') {
+                                } else if (btn.type === 'vcard' || btn.type === 'cta_call') {
                                   badgeColor = 'bg-amber-50 text-amber-700 border-amber-200';
-                                  badgeLabel = 'CTA Call';
+                                  badgeLabel = 'vCard Kontak';
                                 } else if (btn.type === 'cta_reminder') {
                                   badgeColor = 'bg-indigo-50 text-indigo-700 border-indigo-200';
                                   badgeLabel = 'CTA Reminder';
@@ -2867,7 +2870,7 @@ export default function App() {
                     <option value="quick_reply">quick_reply (Balas Cepat / Pilihan)</option>
                     <option value="cta_url">cta_url (Buka Tautan Website)</option>
                     <option value="cta_copy">cta_copy (Salin Teks / Rekening)</option>
-                    <option value="cta_call">cta_call (Panggil Nomor Telepon)</option>
+                    <option value="vcard">vcard (Kirim Kontak vCard Nomor)</option>
                     <option value="cta_reminder">cta_reminder (Buat Pengingat WA)</option>
                     <option value="cta_cancel_reminder">cta_cancel_reminder (Batalkan Pengingat WA)</option>
                   </select>
@@ -2981,11 +2984,11 @@ export default function App() {
                   </div>
                 )}
 
-                {modalBtnType === 'cta_call' && (
+                {(modalBtnType === 'vcard' || modalBtnType === 'cta_call') && (
                   <div className="space-y-3">
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                        1. Nama Target (Misal: Owner atau Admin)
+                        1. Nama Kontak (Misal: Admin Store atau Owner)
                       </label>
                       <input
                         type="text"
@@ -2997,7 +3000,7 @@ export default function App() {
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                        2. Nomor Telepon Tujuan
+                        2. Nomor WhatsApp Kontak
                       </label>
                       <input
                         type="tel"
@@ -3007,7 +3010,7 @@ export default function App() {
                         className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 transition shadow-2xs"
                       />
                       <p className="text-[11px] text-slate-500 mt-1">
-                        Nomor tujuan panggilan suara (sertakan kode negara, contoh: 628...).
+                        Saat tombol ini ditekan di WhatsApp, bot akan otomatis mengirimkan kartu kontak (vCard) nomor ini ke chat.
                       </p>
                     </div>
                   </div>

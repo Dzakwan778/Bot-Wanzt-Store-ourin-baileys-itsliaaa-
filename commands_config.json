@@ -15,7 +15,7 @@
     },
     {
       "id": "btn-3",
-      "type": "cta_call",
+      "type": "vcard",
       "name": "📞 Hubungi Admin",
       "output": "Admin Store (6285712439395)",
       "callTargetName": "Admin Store",
@@ -31,7 +31,7 @@
   ],
   "includeMedia": true,
   "selectedPicture": "snaptik-app-7690985506468908308-slide-2.jpg",
-  "listOutputText": "Halo kak! Berikut daftar produk aplikasi yang tersedia di wanztstore.web.id:\n\n{daftarProduk}\n\nKetik nama produk yang ingin Anda pesan.",
+  "listOutputText": "Halo kak! Berikut daftar produk aplikasi yang tersedia di wanztstore.web.id:\n\n{daftarProduk}\n\nKetik nama produk yang ingin Anda pesan.\nwanztstore.web.id • Pilih Produk",
   "xavieraApiKey": "xvs_0726effe853aadea27bd6608ef98468cc3121b82e036e5f7",
   "xavieraBaseUrl": "https://xavierastore.com/api/v1"
 }

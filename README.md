@@ -94,25 +94,87 @@ Wanzt Store menyediakan sistem klaim otomatis untuk refund maupun klaim garansi 
 - **Horizontal Carousel Cards**: Menampilkan kartu varian produk interaktif lengkap dengan media thumbnail, rincian paket, harga, stok, tombol order instan, dan kartu kontak admin vCard.
 - **LID Auto-Resolving**: Otomatis mendeteksi dan mengonversi identitas pengguna WhatsApp berbasis `@lid` ke format nomor telepon resmi `@s.whatsapp.net` agar seluruh pesan interaktif dan carousel selalu terkirim dan dirender sempurna.
 - **Prefix Multi-Symbol & Smart Exception**: Mendukung awalan perintah fleksibel (`/`, `.`, `!`, `?`, `#`, `$`, `%`, `&`), dengan pengecualian otomatis untuk respon tombol klik pengguna.
+- **Reply / Quoting Otomatis**: Setiap respon bot (Menu, List dropdown, Carousel kartu, Kontak Admin, Order) otomatis mengutip (*quote reply*) pesan pemicu sehingga saat digunakan di grup WhatsApp, seluruh anggota grup langsung mengetahui kepada siapa bot merespon.
+- **Arsitektur Modular Terpisah**: Kode backend tidak lagi menumpuk dalam 1 file raksasa, melainkan dipecah ke dalam modul-modul independen (types, config, services, messages, handlers, controller) agar proses maintenance dan penambahan fitur mudah dan cepat.
 - **Minimalist Control Dashboard**: Panel admin berbasis web berkecepatan tinggi dengan metrik status live, log socket stream, manajemen tombol dinamis, dan katalog produk.
 
 ---
 
-## 📁 Struktur Direktori
+## 📁 Struktur Direktori & Arsitektur Modular
+
+Untuk mempermudah pemeliharaan (*maintenance*) dan mencegah penumpukan ribuan baris kode, seluruh komponen backend dipecah menjadi modul-modul terpisah dengan tanggung jawab tunggal (*Single Responsibility Principle*):
 
 ```text
 ├── server/
-│   └── botManager.ts         # Inti logika soket, session auth, & responder bot
+│   ├── types/
+│   │   └── bot.types.ts           # Definisi tipe TypeScript, interface data, konstanta prefix & status
+│   ├── config/
+│   │   └── configManager.ts       # Logika pembacaan & penyimpanan berkas konfigurasi commands_config.json
+│   ├── services/
+│   │   ├── quoteHelper.ts         # Pembangun contextInfo untuk reply / quote pesan pemicu di grup & private
+│   │   └── xavieraService.ts      # Integrasi API Xaviera Store, katalog produk, dan mapper varian
+│   ├── messages/
+│   │   ├── menuMessage.ts         # Builder pesan Menu interaktif (tombol quick_reply, URL, Call, Copy, Media)
+│   │   ├── listMessage.ts         # Builder pesan List interaktif (single-select dropdown kategori)
+│   │   ├── carouselMessage.ts     # Builder pesan Carousel kartu horizontal varian (@itsliaaa/baileys + ourin)
+│   │   └── adminContactMessage.ts # Builder pesan kontak tunggal vCard Admin Wanzt Store
+│   ├── handlers/
+│   │   └── messageDispatcher.ts   # Pengurai pesan masuk (messages.upsert), tombol, prefix, dan routing perintah
+│   └── botManager.ts              # Core controller / fasad soket (koneksi, auth, auto-reconnect, log)
 ├── src/
-│   ├── App.tsx               # Dashboard antarmuka web admin
-│   ├── main.tsx              # Entry point aplikasi frontend
+│   ├── App.tsx                    # Dashboard antarmuka web admin (React + Tailwind CSS)
+│   ├── main.tsx                   # Entry point aplikasi frontend
 │   └── media/
-│       └── picture/          # Direktori asset gambar thumbnail & menu
-├── commands_config.json      # Konfigurasi pesan, tombol, dan asset media
-├── vite.config.ts            # Konfigurasi bundler & middleware API server internal
-├── package.json              # Dependensi runtime dan library engine
-└── tsconfig.json             # Konfigurasi TypeScript engine
+│       └── picture/               # Direktori asset gambar thumbnail & menu
+├── commands_config.json           # Konfigurasi pesan, tombol, dan asset media
+├── vite.config.ts                 # Konfigurasi bundler Vite & API middleware server
+├── package.json                   # Dependensi runtime & library engine
+└── tsconfig.json                  # Konfigurasi TypeScript
 ```
+
+### 🧩 Penjelasan Setiap Modul di `server/`:
+
+1. **`server/types/bot.types.ts`**
+   - Berisi semua deklarasi `interface` (`CommandsConfig`, `WhatsAppButton`, `ProductVariantItem`, `LogEntry`) dan `type` (`BotStatus`, `WhatsAppButtonType`).
+   - Menyimpan konstanta global seperti `ALLOWED_PREFIXES` (`/`, `.`, `!`, `?`, `#`, `$`, `%`, `&`), `DEFAULT_CUSTOM_CODE` (`WANZTSTR`), dan nama direktori sesi.
+
+2. **`server/config/configManager.ts`**
+   - Menangani pembacaan dan penulisan konfigurasi bot ke `commands_config.json`.
+   - Menggabungkan konfigurasi default (`DEFAULT_CONFIG`) jika berkas konfigurasi belum ada atau rusak.
+
+3. **`server/services/quoteHelper.ts`**
+   - Menyusun objek `contextInfo` resmi WhatsApp untuk *quoted message / reply*.
+   - Mengambil identitas pemicu dari `m.key.participant` (pada grup) atau `m.key.remoteJid` (pada chat pribadi) serta menambahkan `mentionedJid` agar pengguna pemicu di dalam grup mendapatkan notifikasi langsung.
+
+4. **`server/services/xavieraService.ts`**
+   - Mengelola pengambilan data produk dan varian dari API Xaviera Store.
+   - Menyediakan katalog cadangan (*fallback catalog*) jika API sedang offline.
+   - Mengonversi teks `{daftarProduk}` menjadi daftar kategori berpenomoran rapi.
+
+5. **`server/messages/menuMessage.ts`**
+   - Khusus memproses dan mengirimkan pesan `.menu` interaktif.
+   - Memetakan berbagai tipe tombol (`quick_reply`, `cta_url`, `cta_call`, `cta_copy`).
+   - Melampirkan media gambar header jika fitur media diaktifkan.
+
+6. **`server/messages/listMessage.ts`**
+   - Khusus menangani pengiriman menu kategori produk dengan format interaktif *single-select dropdown list*.
+
+7. **`server/messages/carouselMessage.ts`**
+   - Mengombinasikan `@itsliaaa/baileys` (untuk menyusun kartu-kartu varian secara horizontal) dengan relay node `<biz>` native flow `ourin-baileys`.
+   - Menghasilkan thumbnail SVG jika produk belum memiliki gambar spesifik.
+
+8. **`server/messages/adminContactMessage.ts`**
+   - Mengirimkan kontak vCard resmi Admin Wanzt Store (`+62 838-6127-6608`) lengkap dengan quote reply.
+
+9. **`server/handlers/messageDispatcher.ts`**
+   - Titik masuk penanganan event `messages.upsert`.
+   - Mendeteksi respon klik tombol interaktif, respon dropdown list, maupun ketikan teks biasa.
+   - Menerapkan aturan prefix ketat untuk pesan teks manual dan pengecualian otomatis untuk respon tombol.
+   - Meneruskan setiap perintah ke modul pesan yang bersangkutan dengan menyertakan pesan asli `m` untuk dikutip (*quoted*).
+
+10. **`server/botManager.ts`**
+    - Berfungsi sebagai orkestrator utama (*facade controller*).
+    - Bertanggung jawab atas siklus hidup soket (`start`, `stop`, `reset`), manajemen sesi kredensial (`session_ourin`), auto-reconnect saat status 515 (`restartRequired`), dan streaming log.
 
 ---
 
