@@ -4,7 +4,7 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   DisconnectReason,
   Browsers,
-} from 'ourin-baileys';
+} from '@itsliaaa/baileys';
 import NodeCache from '@cacheable/node-cache';
 import pino from 'pino';
 import fs from 'fs';
@@ -88,17 +88,6 @@ class BotManager {
   }
 
   resolveTargetJid(remoteJid: string): string {
-    if (!remoteJid) return remoteJid;
-    if (remoteJid.endsWith('@lid')) {
-      const cleanLid = remoteJid.replace('@lid', '');
-      const reversePath = path.join(SESSION_DIR, `lid-mapping-${cleanLid}_reverse.json`);
-      if (fs.existsSync(reversePath)) {
-        try {
-          const pn = JSON.parse(fs.readFileSync(reversePath, 'utf-8')).trim();
-          if (pn) return `${pn}@s.whatsapp.net`;
-        } catch {}
-      }
-    }
     return remoteJid;
   }
 
@@ -202,7 +191,7 @@ class BotManager {
       fs.mkdirSync(SESSION_DIR, { recursive: true });
     }
 
-    this.addLog('info', `Memulai koneksi bot ourin-baileys untuk nomor ${cleanPhone}...`);
+    this.addLog('info', `Memulai koneksi bot WhatsApp (@itsliaaa/baileys) untuk nomor ${cleanPhone}...`);
 
     try {
       const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
@@ -213,7 +202,7 @@ class BotManager {
         version: waVersion,
         auth: {
           creds: state.creds,
-          keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' })),
+          keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }), undefined),
         },
         logger: pino({ level: 'silent' }),
         browser: Browsers.macOS('Chrome'),

@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import { CommandsConfig } from '../types/bot.types.js';
-import { buildQuoteContextInfo } from '../services/quoteHelper.js';
 
 export async function sendMenuInteractiveMessage(
   sock: any,
@@ -12,58 +11,34 @@ export async function sendMenuInteractiveMessage(
 ): Promise<void> {
   if (!sock) return;
 
-  const nativeButtons: any[] = (config.menuButtons || []).map((btn) => {
+  const buttons: any[] = (config.menuButtons || []).map((btn) => {
     switch (btn.type) {
-      case 'quick_reply':
-        return {
-          name: 'quick_reply',
-          buttonParamsJson: JSON.stringify({
-            display_text: btn.name,
-            id: btn.output || btn.name || 'menu_item',
-          }),
-        };
       case 'cta_url':
         return {
           name: 'cta_url',
-          buttonParamsJson: JSON.stringify({
+          paramsJson: JSON.stringify({
             display_text: btn.name,
             url: btn.output.startsWith('http') ? btn.output : `https://${btn.output}`,
-            merchant_url: btn.output.startsWith('http') ? btn.output : `https://${btn.output}`,
           }),
         };
-      case 'cta_copy':
+      case 'cta_call':
         return {
-          name: 'cta_copy',
-          buttonParamsJson: JSON.stringify({
+          name: 'cta_call',
+          paramsJson: JSON.stringify({
             display_text: btn.name,
-            copy_code: btn.output,
+            phone_number: (btn.callPhoneNumber || btn.output || '').replace(/[^0-9]/g, ''),
           }),
         };
       case 'vcard':
-      case 'cta_call':
         return {
-          name: 'quick_reply',
-          buttonParamsJson: JSON.stringify({
-            display_text: btn.name,
-            id: `vcard_${(btn.callPhoneNumber || btn.output || '').replace(/[^0-9]/g, '') || btn.id}`,
-          }),
+          text: btn.name,
+          id: `vcard_${(btn.callPhoneNumber || btn.output || '').replace(/[^0-9]/g, '') || btn.id}`,
         };
-      case 'cta_reminder':
-      case 'cta_cancel_reminder':
-        return {
-          name: 'quick_reply',
-          buttonParamsJson: JSON.stringify({
-            display_text: btn.name,
-            id: btn.output || 'reminder',
-          }),
-        };
+      case 'quick_reply':
       default:
         return {
-          name: 'quick_reply',
-          buttonParamsJson: JSON.stringify({
-            display_text: btn.name,
-            id: btn.output || 'menu_item',
-          }),
+          text: btn.name,
+          id: btn.output || btn.name || 'menu_item',
         };
     }
   });
@@ -95,32 +70,24 @@ export async function sendMenuInteractiveMessage(
 
   try {
     const payload: any = {
-      interactiveMessage: {
-        title: titleText,
-        footer: footerText,
-        buttons: nativeButtons,
-      },
+      text: titleText,
+      footer: footerText,
+      buttons: buttons.length > 0 ? buttons : [{ text: '📑 List Produk', id: '.list' }],
     };
 
     if (imageInput) {
-      payload.interactiveMessage.image = imageInput;
-    }
-
-    if (quotedMsg) {
-      const userJid = sock.user?.id || sock.authState?.creds?.me?.id || '';
-      const contextInfo = buildQuoteContextInfo(quotedMsg, remoteJid, userJid);
-      if (contextInfo) {
-        payload.interactiveMessage.contextInfo = contextInfo;
-      }
+      payload.image = imageInput;
+      payload.caption = titleText;
+      delete payload.text;
     }
 
     await sock.sendMessage(remoteJid, payload, quotedMsg ? { quoted: quotedMsg } : undefined);
     if (addLog) {
-      addLog('success', `✅ Berhasil mengirim command MENU dengan tombol interaktif ourin-baileys ke ${remoteJid}${imageInput ? ' (dengan gambar)' : ''}`);
+      addLog('success', `✅ Berhasil mengirim command MENU dengan tombol interaktif ke ${remoteJid}${imageInput ? ' (dengan gambar)' : ''}`);
     }
   } catch (err: any) {
     if (addLog) {
-      addLog('warning', `Pengiriman menu interaktif nativeFlow gagal: ${err?.message || err}. Mencoba fallback teks...`);
+      addLog('warning', `Pengiriman menu interaktif gagal: ${err?.message || err}. Mencoba fallback teks...`);
     }
     try {
       await sock.sendMessage(remoteJid, { text: titleText }, quotedMsg ? { quoted: quotedMsg } : undefined);

@@ -468,6 +468,7 @@ export interface SingleSelectSection {
     title: string;
     description: string;
     id: string;
+    rowId: string;
   }>;
 }
 
@@ -486,6 +487,7 @@ export async function getSingleSelectSections(config: CommandsConfig): Promise<S
         title: item,
         description: `Tampilkan varian *${item}*`,
         id: `prod_select:${item}`,
+        rowId: `prod_select:${item}`,
       })),
     }));
   };
@@ -559,6 +561,7 @@ export async function getSingleSelectSections(config: CommandsConfig): Promise<S
           title: item.name,
           description: `Tampilkan varian *${item.name}*`,
           id: `prod_select:${item.name}`,
+          rowId: `prod_select:${item.name}`,
         })),
       });
     }

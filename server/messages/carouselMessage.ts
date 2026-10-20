@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { generateWAMessageFromContent, prepareWAMessageMedia } from 'ourin-baileys';
+import { generateWAMessageFromContent, prepareWAMessageMedia } from '@itsliaaa/baileys';
 import { CommandsConfig } from '../types/bot.types.js';
 import { getProductVariants } from '../services/xavieraService.js';
 import { buildQuoteContextInfo } from '../services/quoteHelper.js';
@@ -206,7 +206,7 @@ export async function sendProductVariantsCarousel(
     ];
 
     await sock.relayMessage(targetJid, fullCarouselMsg.message, {
-      messageId: fullCarouselMsg.key.id,
+      messageId: fullCarouselMsg.key?.id || undefined,
       additionalNodes: bizNodes,
     });
 
