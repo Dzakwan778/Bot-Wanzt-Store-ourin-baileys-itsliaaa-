@@ -1,7 +1,6 @@
 import makeWASocket, {
   useMultiFileAuthState,
   makeCacheableSignalKeyStore,
-  fetchLatestBaileysVersion,
   DisconnectReason,
   Browsers,
 } from '@itsliaaa/baileys';
@@ -195,8 +194,20 @@ class BotManager {
 
     try {
       const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
-      const versionData = await fetchLatestBaileysVersion().catch(() => ({ version: [2, 3000, 1043857760] as [number, number, number] }));
-      const waVersion = (versionData?.version as [number, number, number]) || [2, 3000, 1043857760];
+      let waVersion: [number, number, number] = [2, 3000, 1043857760];
+      try {
+        const res = await fetch('https://raw.githubusercontent.com/WhiskeySockets/Baileys/master/src/Defaults/index.ts', {
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+          signal: AbortSignal.timeout(4000),
+        });
+        if (res.ok) {
+          const text = await res.text();
+          const match = text.match(/const version = \[(\d+),\s*(\d+),\s*(\d+)\]/);
+          if (match) {
+            waVersion = [parseInt(match[1]), parseInt(match[2]), parseInt(match[3])];
+          }
+        }
+      } catch {}
 
       this.sock = makeWASocket({
         version: waVersion,
