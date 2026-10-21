@@ -55,6 +55,8 @@ export interface CommandsConfig {
   includeMedia?: boolean;
   selectedPicture?: string;
   listOutputText: string;
+  carouselOutputText?: string;
+  carouselPicture?: string;
   xavieraApiKey?: string;
   xavieraBaseUrl?: string;
 }

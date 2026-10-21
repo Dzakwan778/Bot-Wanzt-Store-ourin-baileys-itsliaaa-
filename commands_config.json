@@ -32,6 +32,8 @@
   "includeMedia": true,
   "selectedPicture": "snaptik-app-7690985506468908308-slide-2.jpg",
   "listOutputText": "Halo kak! Berikut daftar produk aplikasi yang tersedia di wanztstore.web.id:\n\n{daftarProduk}\n\nKetik nama produk yang ingin Anda pesan.\nwanztstore.web.id • Pilih Produk",
+  "carouselOutputText": "*Wanzt Store*\n\n*{produkName} | {category}*\n\nNikmati produk pilihanmu dengan harga terbaik di Wanzt Store.\n\n*Detail Produk:*\n- Varian: {varian}\n- Harga: {price}\n- Stok: {stock} tersedia\n\nProduk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk melanjutkan.",
+  "carouselPicture": "snaptik-app-7690985506468908308-slide-2.jpg",
   "xavieraApiKey": "xvs_0726effe853aadea27bd6608ef98468cc3121b82e036e5f7",
   "xavieraBaseUrl": "https://xavierastore.com/api/v1"
 }

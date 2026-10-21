@@ -142,7 +142,22 @@ export default function App() {
   const [selectedTab, setSelectedTab] = useState<string>('Command');
 
   // Command State
-  const [selectedCommand, setSelectedCommand] = useState<'Menu' | 'List'>('Menu');
+  const [selectedCommand, setSelectedCommand] = useState<'Menu' | 'List' | 'Carousel'>('Menu');
+  const [carouselOutputText, setCarouselOutputText] = useState<string>(
+    `*Wanzt Store*
+
+*{produkName} | {category}*
+
+Nikmati produk pilihanmu dengan harga terbaik di Wanzt Store.
+
+*Detail Produk:*
+- Varian: {varian}
+- Harga: {price}
+- Stok: {stock} tersedia
+
+Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk melanjutkan.`
+  );
+  const [carouselPicture, setCarouselPicture] = useState<string>('snaptik-app-7690985506468908308-slide-2.jpg');
   const [menuOutputText, setMenuOutputText] = useState<string>(
     'Halo kak! Selamat datang di wanztstore.web.id ✨\n\nSilakan pilih layanan yang ingin Anda pesan melalui tombol interaktif di bawah ini:'
   );
@@ -617,6 +632,8 @@ export default function App() {
             if (data.config.selectedPicture) setSelectedPicture(data.config.selectedPicture);
             if (data.config.xavieraApiKey !== undefined) setXavieraApiKey(data.config.xavieraApiKey);
             if (data.config.xavieraBaseUrl) setXavieraBaseUrl(data.config.xavieraBaseUrl);
+            if (data.config.carouselOutputText) setCarouselOutputText(data.config.carouselOutputText);
+            if (data.config.carouselPicture) setCarouselPicture(data.config.carouselPicture);
           }
         }
       } catch {}
@@ -627,7 +644,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, [customCode]);
 
-  // Simpan otomatis perubahan Menu/List/Gambar/API ke server backend bot
+  // Simpan otomatis perubahan Menu/List/Carousel/Gambar/API ke server backend bot
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const syncConfigToServer = async (
     newMenuText: string = menuOutputText,
@@ -636,7 +653,9 @@ export default function App() {
     newIncludeMedia: boolean = includeMedia,
     newSelectedPicture: string = selectedPicture,
     newApiKey: string = xavieraApiKey,
-    newBaseUrl: string = xavieraBaseUrl
+    newBaseUrl: string = xavieraBaseUrl,
+    newCarouselText: string = carouselOutputText,
+    newCarouselPicture: string = carouselPicture
   ) => {
     setIsSavingConfig(true);
     try {
@@ -649,6 +668,8 @@ export default function App() {
           listOutputText: newListText,
           includeMedia: newIncludeMedia,
           selectedPicture: newSelectedPicture,
+          carouselOutputText: newCarouselText,
+          carouselPicture: newCarouselPicture,
           xavieraApiKey: newApiKey,
           xavieraBaseUrl: newBaseUrl,
         }),
@@ -1345,11 +1366,12 @@ export default function App() {
                         <div className="relative inline-block w-48">
                           <select
                             value={selectedCommand}
-                            onChange={(e) => setSelectedCommand(e.target.value as 'Menu' | 'List')}
+                            onChange={(e) => setSelectedCommand(e.target.value as 'Menu' | 'List' | 'Carousel')}
                             className="w-full appearance-none bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 pr-8 text-sm font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 cursor-pointer shadow-2xs"
                           >
                             <option value="Menu">Menu</option>
                             <option value="List">List</option>
+                            <option value="Carousel">Carousel</option>
                           </select>
                           <ChevronDown className="w-4 h-4 text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                         </div>
@@ -1715,6 +1737,369 @@ export default function App() {
                               </div>
                             </div>
                           </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Jika Command "Carousel" Dipilih */}
+                    {selectedCommand === 'Carousel' && (
+                      <div className="space-y-5">
+                        {/* 1. Pengaturan Media Gambar Carousel (./src/media/picture) */}
+                        <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                              <label className="text-xs font-bold text-slate-800 flex items-center gap-2">
+                                <ImageIcon className="w-4 h-4 text-sky-600" />
+                                Media Gambar Header Carousel (./src/media/picture)
+                              </label>
+                              <p className="text-[11px] text-slate-500 mt-0.5">
+                                Media gambar yang dipilih di bawah ini adalah media yang akan dikirim bersamaan dengan setiap kartu Carousel saat menampilkan varian produk ke pelanggan.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                fetch('/api/media/pictures')
+                                  .then((res) => res.json())
+                                  .then((data) => {
+                                    if (data.pictures) {
+                                      setAvailablePictures(data.pictures);
+                                      showToast('Daftar file gambar ./src/media/picture diperbarui!');
+                                    }
+                                  })
+                                  .catch(() => {});
+                              }}
+                              className="self-start sm:self-auto inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-slate-600 hover:text-sky-700 bg-white border border-slate-200 rounded-lg hover:border-sky-300 transition cursor-pointer shadow-2xs"
+                              title="Muat ulang daftar file gambar dari server"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" />
+                              Refresh Media
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                            {/* Dropdown Pemilih File Gambar */}
+                            <div className="space-y-2">
+                              <label className="block text-[11px] font-semibold text-slate-600">
+                                Pilih File Gambar Header Kartu:
+                              </label>
+                              <div className="relative">
+                                <select
+                                  value={carouselPicture}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setCarouselPicture(val);
+                                    syncConfigToServer(
+                                      menuOutputText,
+                                      menuButtons,
+                                      listOutputText,
+                                      includeMedia,
+                                      selectedPicture,
+                                      xavieraApiKey,
+                                      xavieraBaseUrl,
+                                      carouselOutputText,
+                                      val
+                                    );
+                                    showToast(`Gambar Carousel diubah ke: ${val}`);
+                                  }}
+                                  className="w-full appearance-none bg-white border border-slate-300 rounded-lg px-3 py-2 pr-9 text-xs font-semibold text-slate-800 focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 cursor-pointer shadow-2xs"
+                                >
+                                  {availablePictures.length > 0 ? (
+                                    availablePictures.map((pic) => (
+                                      <option key={pic} value={pic}>
+                                        {pic}
+                                      </option>
+                                    ))
+                                  ) : (
+                                    <option value="">Tidak ada file di ./src/media/picture</option>
+                                  )}
+                                </select>
+                                <ChevronDown className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                              </div>
+
+                              <div className="p-2.5 rounded-lg bg-sky-50/70 border border-sky-100 text-[11px] text-sky-800 leading-relaxed font-sans">
+                                💡 <strong>Info:</strong> Protokol resmi WhatsApp Mobile mengharuskan adanya media header pada setiap kartu Carousel agar dapat dirender dengan sempurna di semua perangkat pengguna.
+                              </div>
+                            </div>
+
+                            {/* Pratinjau Gambar Terpilih */}
+                            <div className="border border-slate-200 rounded-lg bg-white p-2.5 flex items-center gap-3">
+                              {carouselPicture ? (
+                                <>
+                                  <div className="w-24 h-20 rounded-md overflow-hidden bg-slate-100 border border-slate-200 shrink-0 relative flex items-center justify-center">
+                                    <img
+                                      src={`/api/media/view?name=${encodeURIComponent(carouselPicture)}`}
+                                      alt={carouselPicture}
+                                      className="w-full h-full object-cover"
+                                      onError={(e) => {
+                                        (e.target as HTMLElement).style.display = 'none';
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="min-w-0 flex-1 space-y-1">
+                                    <div className="text-xs font-bold text-slate-900 truncate">
+                                      {carouselPicture}
+                                    </div>
+                                    <div className="text-[10px] text-emerald-700 font-mono bg-emerald-50 px-1.5 py-0.5 rounded inline-block border border-emerald-200">
+                                      Terpilih untuk Carousel
+                                    </div>
+                                    <div className="text-[10px] text-slate-500 truncate">
+                                      ./src/media/picture/{carouselPicture}
+                                    </div>
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="text-xs text-slate-400 italic p-3 text-center w-full">
+                                  Belum ada gambar yang dipilih
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 2. Textarea Template Teks Output Carousel dengan Placeholder */}
+                        <div>
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                            <div>
+                              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                <Sparkles className="w-4 h-4 text-sky-600" />
+                                Template Konten Teks Kartu Carousel
+                              </label>
+                              <p className="text-[11px] text-slate-500">
+                                Sesuaikan template teks varian. Gunakan placeholder di bawah ini untuk mengisi data dinamis secara otomatis.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const defaultVal = `*Wanzt Store*\n\n*{produkName} | {category}*\n\nNikmati produk pilihanmu dengan harga terbaik di Wanzt Store.\n\n*Detail Produk:*\n- Varian: {varian}\n- Harga: {price}\n- Stok: {stock} tersedia\n\nProduk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
+                                setCarouselOutputText(defaultVal);
+                                syncConfigToServer(
+                                  menuOutputText,
+                                  menuButtons,
+                                  listOutputText,
+                                  includeMedia,
+                                  selectedPicture,
+                                  xavieraApiKey,
+                                  xavieraBaseUrl,
+                                  defaultVal,
+                                  carouselPicture
+                                );
+                                showToast('Template Carousel direset ke format default!');
+                              }}
+                              className="text-[11px] text-slate-500 hover:text-slate-800 underline font-medium cursor-pointer"
+                            >
+                              Reset Default
+                            </button>
+                          </div>
+
+                          {/* Tombol Sisipkan Placeholder Cepat */}
+                          <div className="flex flex-wrap items-center gap-1.5 mb-2 p-2 rounded-lg bg-slate-100/80 border border-slate-200">
+                            <span className="text-[11px] font-semibold text-slate-500 mr-1 flex items-center gap-1">
+                              Sisipkan:
+                            </span>
+                            {[
+                              { tag: '{produkName}', label: 'Nama Produk', desc: 'YouTube, Disney+' },
+                              { tag: '{category}', label: 'Kategori', desc: 'Streaming, Musik' },
+                              { tag: '{varian}', label: 'Varian', desc: 'YouTube Famplan 1 Bulan' },
+                              { tag: '{price}', label: 'Harga', desc: 'Rp22.000' },
+                              { tag: '{stock}', label: 'Stok', desc: '21' },
+                            ].map((item) => (
+                              <button
+                                key={item.tag}
+                                type="button"
+                                onClick={() => {
+                                  const updated = `${carouselOutputText} ${item.tag}`;
+                                  setCarouselOutputText(updated);
+                                  showToast(`Placeholder ${item.tag} disisipkan!`);
+                                }}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-mono font-semibold bg-white text-sky-800 border border-slate-200 hover:border-sky-400 hover:bg-sky-50 hover:text-sky-900 transition cursor-pointer shadow-2xs"
+                                title={`${item.tag} — ${item.label} (${item.desc})`}
+                              >
+                                <Plus className="w-3 h-3 text-sky-600" />
+                                <code>{item.tag}</code>
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Textarea Input Template */}
+                          <textarea
+                            rows={8}
+                            value={carouselOutputText}
+                            onChange={(e) => setCarouselOutputText(e.target.value)}
+                            placeholder="Tulis template kartu carousel di sini..."
+                            className="w-full bg-slate-50 border border-slate-300 rounded-lg p-3 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 transition shadow-2xs leading-relaxed font-mono"
+                          />
+                        </div>
+
+                        {/* 3. Panduan Placeholder & Penjelasan Fungsi */}
+                        <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                              <Layers className="w-4 h-4 text-sky-600" />
+                              Daftar Placeholder Resmi Carousel
+                            </span>
+                            <span className="text-[10px] uppercase font-mono font-semibold text-sky-700 bg-sky-100/70 px-2 py-0.5 rounded border border-sky-200">
+                              Auto-Replaced
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                            <div className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1 shadow-2xs">
+                              <div className="flex items-center justify-between">
+                                <code className="font-mono font-bold text-xs text-sky-700 bg-sky-50 px-1.5 py-0.5 rounded">
+                                  {'{produkName}'}
+                                </code>
+                                <span className="text-[10px] text-slate-400 font-mono">string</span>
+                              </div>
+                              <p className="text-[11px] text-slate-600 leading-normal">
+                                Menampilkan nama produk yang dipilih pelanggan, misal: <span className="font-semibold text-slate-800">YouTube, Disney+, Netflix</span>.
+                              </p>
+                            </div>
+
+                            <div className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1 shadow-2xs">
+                              <div className="flex items-center justify-between">
+                                <code className="font-mono font-bold text-xs text-sky-700 bg-sky-50 px-1.5 py-0.5 rounded">
+                                  {'{category}'}
+                                </code>
+                                <span className="text-[10px] text-slate-400 font-mono">string</span>
+                              </div>
+                              <p className="text-[11px] text-slate-600 leading-normal">
+                                Menampilkan kategori produk dari API Xaviera Store, misal: <span className="font-semibold text-slate-800">Streaming, Musik, Editing</span>.
+                              </p>
+                            </div>
+
+                            <div className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1 shadow-2xs">
+                              <div className="flex items-center justify-between">
+                                <code className="font-mono font-bold text-xs text-sky-700 bg-sky-50 px-1.5 py-0.5 rounded">
+                                  {'{varian}'}
+                                </code>
+                                <span className="text-[10px] text-slate-400 font-mono">string</span>
+                              </div>
+                              <p className="text-[11px] text-slate-600 leading-normal">
+                                Menampilkan nama varian spesifik pada kartu tersebut, misal: <span className="font-semibold text-slate-800">YouTube Famplan Email Buyer 1 Bulan</span>.
+                              </p>
+                            </div>
+
+                            <div className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1 shadow-2xs">
+                              <div className="flex items-center justify-between">
+                                <code className="font-mono font-bold text-xs text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                  {'{price}'}
+                                </code>
+                                <span className="text-[10px] text-slate-400 font-mono">currency</span>
+                              </div>
+                              <p className="text-[11px] text-slate-600 leading-normal">
+                                Menampilkan harga resmi varian yang sesuai, diformat rapi dalam Rupiah, misal: <span className="font-semibold text-emerald-700">Rp22.000</span>.
+                              </p>
+                            </div>
+
+                            <div className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1 shadow-2xs sm:col-span-2 lg:col-span-2">
+                              <div className="flex items-center justify-between">
+                                <code className="font-mono font-bold text-xs text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">
+                                  {'{stock}'}
+                                </code>
+                                <span className="text-[10px] text-slate-400 font-mono">number</span>
+                              </div>
+                              <p className="text-[11px] text-slate-600 leading-normal">
+                                Menampilkan stok yang tersedia dari varian bersangkutan. Stok dijamin sinkron dan akurat per varian produk tanpa tertukar.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 4. Live WhatsApp Preview Simulasi Output Sesuai Contoh Pengguna */}
+                        <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                              <Sparkles className="w-4 h-4 text-emerald-600" />
+                              Pratinjau Hasil Output Carousel (POV Pelanggan di WhatsApp)
+                            </span>
+                            <span className="text-[10px] uppercase font-mono font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                              Live Preview
+                            </span>
+                          </div>
+
+                          {/* WhatsApp Chat Card Container */}
+                          <div className="max-w-md mx-auto bg-white rounded-2xl border border-slate-300 shadow-sm overflow-hidden">
+                            {/* Card Header Top Bar */}
+                            <div className="bg-slate-900 text-white px-3 py-2 flex items-center justify-between text-[11px]">
+                              <span className="font-semibold flex items-center gap-1.5 text-sky-400">
+                                🎠 Carousel Card • Varian 1
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-mono">1/4 Kartu Varian</span>
+                            </div>
+
+                            {/* Card Media Image Header */}
+                            <div className="h-36 bg-slate-800 relative overflow-hidden flex items-center justify-center border-b border-slate-200">
+                              {carouselPicture ? (
+                                <img
+                                  src={`/api/media/view?name=${encodeURIComponent(carouselPicture)}`}
+                                  alt="Carousel Media Header"
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    (e.target as HTMLElement).style.display = 'none';
+                                  }}
+                                />
+                              ) : (
+                                <div className="text-center p-3 text-white space-y-1">
+                                  <div className="text-xs font-bold">WANZT STORE</div>
+                                  <div className="text-[10px] text-slate-300">Pilih media di menu atas</div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Card Body dengan Placeholder yang Sudah Di-Render Sesuai Contoh Pengguna */}
+                            <div className="p-4 space-y-3 text-xs leading-relaxed bg-[#f0f2f5]/40">
+                              <div className="whitespace-pre-wrap font-sans text-slate-800 bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
+                                {carouselOutputText
+                                  .replace(/\{produkName\}|\{productName\}/gi, 'YouTube')
+                                  .replace(/\{category\}|\{kategori\}/gi, 'Streaming')
+                                  .replace(/\{varian\}|\{variant\}/gi, 'YouTube Famplan Email Buyer 1 Bulan')
+                                  .replace(/\{price\}|\{harga\}/gi, 'Rp22.000')
+                                  .replace(/\{stock\}|\{stok\}/gi, '21')}
+                              </div>
+
+                              {/* Interactive Action Buttons */}
+                              <div className="space-y-1.5 pt-1">
+                                <div className="w-full py-2 px-3 rounded-lg bg-sky-600 text-white font-semibold text-center text-xs flex items-center justify-center gap-1.5 shadow-2xs">
+                                  <span>🛒</span> Order
+                                </div>
+                                <div className="w-full py-2 px-3 rounded-lg bg-white border border-slate-300 text-slate-700 font-medium text-center text-xs flex items-center justify-center gap-1.5 shadow-2xs">
+                                  <span>📞</span> Contact Admin
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 5. Tombol Simpan Perubahan Carousel */}
+                        <div className="flex items-center justify-end gap-3 pt-2">
+                          <button
+                            type="button"
+                            disabled={isSavingConfig}
+                            onClick={() => {
+                              syncConfigToServer(
+                                menuOutputText,
+                                menuButtons,
+                                listOutputText,
+                                includeMedia,
+                                selectedPicture,
+                                xavieraApiKey,
+                                xavieraBaseUrl,
+                                carouselOutputText,
+                                carouselPicture
+                              );
+                              showToast('Pengaturan Carousel berhasil disimpan!');
+                            }}
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-sm transition disabled:opacity-50 cursor-pointer"
+                          >
+                            {isSavingConfig ? (
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <CheckCircle2 className="w-4 h-4" />
+                            )}
+                            Simpan Perubahan Carousel
+                          </button>
                         </div>
                       </div>
                     )}

@@ -1,6 +1,19 @@
 import fs from 'fs';
 import { CommandsConfig, CONFIG_FILE } from '../types/bot.types.js';
 
+export const DEFAULT_CAROUSEL_TEMPLATE = `*Wanzt Store*
+
+*{produkName} | {category}*
+
+Nikmati produk pilihanmu dengan harga terbaik di Wanzt Store.
+
+*Detail Produk:*
+- Varian: {varian}
+- Harga: {price}
+- Stok: {stock} tersedia
+
+Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
+
 export const DEFAULT_CONFIG: CommandsConfig = {
   menuOutputText:
     'Halo kak! Selamat datang di wanztstore.web.id ✨\n\nSilakan pilih layanan yang ingin Anda pesan melalui tombol interaktif di bawah ini:',
@@ -30,6 +43,8 @@ export const DEFAULT_CONFIG: CommandsConfig = {
   selectedPicture: '',
   listOutputText:
     'Halo kak! Berikut daftar produk aplikasi yang tersedia di wanztstore.web.id:\n\n{daftarProduk}\n\nKetik nama produk yang ingin Anda pesan.\nwanztstore.web.id • Pilih Produk',
+  carouselOutputText: DEFAULT_CAROUSEL_TEMPLATE,
+  carouselPicture: 'snaptik-app-7690985506468908308-slide-2.jpg',
   xavieraApiKey: '',
   xavieraBaseUrl: 'https://xavierastore.com/api/v1',
 };

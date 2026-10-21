@@ -44,7 +44,7 @@ export async function sendProductVariantsCarousel(
   // dan akan memunculkan "Versi WhatsApp Anda tidak mendukungnya. Perbarui WhatsApp".
   let uploadedMedia: any = null;
   try {
-    const pictureName = config.selectedPicture || 'snaptik-app-7690985506468908308-slide-2.jpg';
+    const pictureName = config.carouselPicture || config.selectedPicture || 'snaptik-app-7690985506468908308-slide-2.jpg';
     const pictureDir = path.join(process.cwd(), 'src', 'media', 'picture');
     let imageBuffer: Buffer | null = null;
 
@@ -71,24 +71,33 @@ export async function sendProductVariantsCarousel(
     }
   }
 
+  const defaultTemplate = `*Wanzt Store*
+
+*{produkName} | {category}*
+
+Nikmati produk pilihanmu dengan harga terbaik di Wanzt Store.
+
+*Detail Produk:*
+- Varian: {varian}
+- Harga: {price}
+- Stok: {stock} tersedia
+
+Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
+
+  const template = config.carouselOutputText?.trim() || defaultTemplate;
+
   // Bangun daftar kartu varian (dengan header media gambar valid agar dapat dirender oleh WhatsApp)
   const cards = variants.slice(0, 10).map((v) => {
-    const formattedPrice = Number(v.price).toLocaleString('id-ID');
+    const formattedPrice = `Rp${Number(v.price).toLocaleString('id-ID')}`;
     const cat = (v.category || 'Streaming').trim();
     const pName = v.name || productName;
 
-    let intro = `Nikmati hiburan favoritmu dengan pilihan paket ${pName} yang tersedia di Wanzt Store.`;
-    const catLower = cat.toLowerCase();
-    if (
-      catLower.includes('ai') ||
-      catLower.includes('produktivitas') ||
-      catLower.includes('editing') ||
-      catLower.includes('design')
-    ) {
-      intro = `Tingkatkan produktivitas dan kreativitasmu dengan pilihan paket ${pName} yang tersedia di Wanzt Store.`;
-    }
-
-    const captionText = `*${pName} | ${cat}*\n${intro}\n\n*Detail Produk*\n• Varian: ${v.variant}\n• Harga: Rp${formattedPrice}\n• Stok: ${v.stock} tersedia\n\nPaket tersedia selama stok masih ada. Pastikan kamu memilih varian yang sesuai sebelum melanjutkan pesanan.\n\nSilakan pilih tindakan di bawah ini untuk melanjutkan.`;
+    const captionText = template
+      .replace(/\{produkName\}|\{productName\}/gi, pName)
+      .replace(/\{category\}|\{kategori\}/gi, cat)
+      .replace(/\{varian\}|\{variant\}/gi, v.variant)
+      .replace(/\{stock\}|\{stok\}/gi, `${v.stock}`)
+      .replace(/\{price\}|\{harga\}/gi, formattedPrice);
 
     const cardHeader: any = {
       title: v.variant || productName,
