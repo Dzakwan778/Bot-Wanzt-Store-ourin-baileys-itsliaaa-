@@ -52,6 +52,7 @@ import { sendListInteractiveMessage } from './messages/listMessage.js';
 import { sendProductVariantsCarousel } from './messages/carouselMessage.js';
 import { sendAdminContactMessage } from './messages/adminContactMessage.js';
 import { dispatchIncomingMessages, markMessageAsBotSent } from './handlers/messageDispatcher.js';
+import { GroupItem, loadGroupsConfig, setGroupToggle } from './services/groupService.js';
 
 class BotManager {
   public status: BotStatus = 'idle';
@@ -143,7 +144,7 @@ class BotManager {
   }
 
   async sendAdminContact(remoteJid: string, quotedMsg?: any): Promise<void> {
-    return sendAdminContactMessage(this.sock, remoteJid, quotedMsg, (t, m) => this.addLog(t, m));
+    return sendAdminContactMessage(this.sock, this.config, remoteJid, quotedMsg, (t, m) => this.addLog(t, m));
   }
 
   // --- Socket Lifecycle ---
@@ -371,6 +372,56 @@ class BotManager {
     this.customCode = DEFAULT_CUSTOM_CODE;
     this.user = null;
     this.addLog('warning', 'Folder sesi telah dibersihkan total. Siap untuk penautan baru.');
+  }
+
+  async getParticipatingGroups(): Promise<{ connected: boolean; groups: GroupItem[]; message?: string }> {
+    if (!this.sock || this.status !== 'connected') {
+      return {
+        connected: false,
+        groups: [],
+        message: 'Bot belum terhubung ke WhatsApp. Silakan hubungkan bot terlebih dahulu di tab status.',
+      };
+    }
+
+    try {
+      this.addLog('info', 'Mengambil seluruh grup WhatsApp yang diikuti oleh nomor bot...');
+      const rawGroups = await this.sock.groupFetchAllParticipating();
+      const toggleMap = loadGroupsConfig();
+
+      const groups: GroupItem[] = Object.values(rawGroups).map((g: any) => {
+        const id = g.id || '';
+        const memberCount = Array.isArray(g.participants) ? g.participants.length : (g.size || 0);
+        return {
+          id,
+          subject: g.subject || 'Tanpa Nama Grup',
+          memberCount,
+          creation: g.creation,
+          owner: g.owner,
+          desc: g.desc ? (typeof g.desc === 'string' ? g.desc : g.desc.toString('utf-8')) : undefined,
+          enabled: toggleMap[id] ?? false,
+        };
+      });
+
+      // Urutkan grup berdasarkan nama secara alfabetis
+      groups.sort((a, b) => a.subject.localeCompare(b.subject, 'id', { sensitivity: 'base' }));
+
+      this.addLog('success', `Berhasil memuat ${groups.length} grup WhatsApp.`);
+      return {
+        connected: true,
+        groups,
+      };
+    } catch (err: any) {
+      this.addLog('error', `Gagal mengambil daftar grup dari WhatsApp: ${err?.message || err}`);
+      return {
+        connected: true,
+        groups: [],
+        message: `Gagal memuat grup: ${err?.message || err}`,
+      };
+    }
+  }
+
+  setGroupToggle(groupId: string, enabled: boolean) {
+    return setGroupToggle(groupId, enabled);
   }
 }
 

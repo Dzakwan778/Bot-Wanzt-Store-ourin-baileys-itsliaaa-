@@ -5,6 +5,7 @@ import { generateWAMessageFromContent, prepareWAMessageMedia } from '@itsliaaa/b
 import { CommandsConfig } from '../types/bot.types.js';
 import { getProductVariants } from '../services/xavieraService.js';
 import { buildQuoteContextInfo } from '../services/quoteHelper.js';
+import { resolvePlaceholders } from '../services/placeholderHelper.js';
 
 export async function sendProductVariantsCarousel(
   sock: any,
@@ -88,16 +89,26 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
 
   // Bangun daftar kartu varian (dengan header media gambar valid agar dapat dirender oleh WhatsApp)
   const cards = variants.slice(0, 10).map((v) => {
-    const formattedPrice = `Rp${Number(v.price).toLocaleString('id-ID')}`;
     const cat = (v.category || 'Streaming').trim();
     const pName = v.name || productName;
 
-    const captionText = template
-      .replace(/\{produkName\}|\{productName\}/gi, pName)
-      .replace(/\{category\}|\{kategori\}/gi, cat)
-      .replace(/\{varian\}|\{variant\}/gi, v.variant)
-      .replace(/\{stock\}|\{stok\}/gi, `${v.stock}`)
-      .replace(/\{price\}|\{harga\}/gi, formattedPrice);
+    const captionText = resolvePlaceholders(template, config, {
+      name: pName,
+      category: cat,
+      variant: v.variant,
+      stock: v.stock,
+      price: v.price,
+    });
+
+    const cardFooterText = resolvePlaceholders(
+      config.carouselFooterText || '{storeName} Official',
+      config,
+      {
+        name: pName,
+        category: cat,
+        variant: v.variant,
+      }
+    );
 
     const cardHeader: any = {
       title: v.variant || productName,
@@ -115,7 +126,7 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
         text: captionText,
       },
       footer: {
-        text: 'Wanzt Store Official',
+        text: cardFooterText,
       },
       nativeFlowMessage: {
         buttons: [
@@ -142,9 +153,13 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
     const targetJid = resolveTargetJid ? resolveTargetJid(remoteJid) : remoteJid;
     const userJid = sock.user?.id || sock.authState?.creds?.me?.id || '';
 
+    const storeTitle = resolvePlaceholders('{storeName}', config);
+    const mainBody = `Katalog Varian Produk *${productName}* • ${storeTitle}`;
+    const mainFooter = `${storeTitle} • Silakan geser kartu varian di bawah ini`;
+
     const interactiveContent: any = {
-      body: { text: `Katalog Varian Produk *${productName}* • Wanzt Store` },
-      footer: { text: 'Wanzt Store • Silakan geser kartu varian di bawah ini' },
+      body: { text: mainBody },
+      footer: { text: mainFooter },
       header: {
         title: '',
         hasMediaAttachment: false,

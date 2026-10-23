@@ -1,0 +1,5 @@
+{
+  "carouselOutputText": "*{storeName}*\n\n*{produkName} | {category}*\n\nNikmati produk pilihanmu dengan harga terbaik di {storeName}.\n\n*Detail Produk:*\n- Varian: {varian}\n- Harga: {price}\n- Stok: {stock} tersedia\n\nProduk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk melanjutkan.",
+  "carouselFooterText": "{storeName} Official",
+  "carouselPicture": "snaptik-app-7690985506468908308-slide-2.jpg"
+}

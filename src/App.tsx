@@ -48,6 +48,7 @@ import {
   TrendingUp,
   Gamepad2,
   Zap,
+  Users,
 } from 'lucide-react';
 
 interface LogEntry {
@@ -76,6 +77,17 @@ export type WhatsAppButtonType =
   | 'cta_call'
   | 'cta_reminder'
   | 'cta_cancel_reminder';
+
+export interface StoreInfoConfig {
+  storeName: string;
+  ownerName: string;
+  ownerNumber: string;
+  adminName?: string;
+  adminNumber?: string;
+  webLink?: string;
+  telegramBot?: string;
+  waLink?: string;
+}
 
 export interface WhatsAppButton {
   id: string;
@@ -120,6 +132,16 @@ export interface TopUpItem {
   status?: 'available' | 'empty';
 }
 
+export interface WhatsAppGroupItem {
+  id: string;
+  subject: string;
+  memberCount: number;
+  creation?: number;
+  owner?: string;
+  desc?: string;
+  enabled: boolean;
+}
+
 export const detectSmmPlatform = (categoryName: string = '', serviceName: string = ''): string => {
   const combined = `${categoryName} ${serviceName}`.toLowerCase();
   if (combined.includes('tiktok')) return 'Layanan TikTok';
@@ -134,12 +156,29 @@ export const detectSmmPlatform = (categoryName: string = '', serviceName: string
 };
 
 export default function App() {
-  const [phone, setPhone] = useState('87783369472');
+  const [phone, setPhone] = useState('81234567890');
   const [customCode, setCustomCode] = useState('WANZTSTR');
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [selectedTab, setSelectedTab] = useState<string>('Command');
+
+  // Store Info State
+  const [storeInfo, setStoreInfo] = useState<StoreInfoConfig>({
+    storeName: 'Wanzt Store',
+    ownerName: 'Wanzt',
+    ownerNumber: '6282173515807',
+    adminName: 'Admin Store',
+    adminNumber: '6285712439395',
+    webLink: 'https://wanztstore.web.id',
+    telegramBot: '',
+    waLink: '',
+  });
+
+  // Footer States per Command
+  const [menuFooterText, setMenuFooterText] = useState<string>('{webLink} • Otomatis');
+  const [listFooterText, setListFooterText] = useState<string>('{webLink} • Pilih Produk');
+  const [carouselFooterText, setCarouselFooterText] = useState<string>('{storeName} Official');
 
   // Command State
   const [selectedCommand, setSelectedCommand] = useState<'Menu' | 'List' | 'Carousel'>('Menu');
@@ -238,6 +277,70 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  // WhatsApp Grup State (Tab 04 / Grup)
+  const [groups, setGroups] = useState<WhatsAppGroupItem[]>([]);
+  const [isLoadingGroups, setIsLoadingGroups] = useState<boolean>(false);
+  const [groupsError, setGroupsError] = useState<string | null>(null);
+  const [groupSearchQuery, setGroupSearchQuery] = useState<string>('');
+  const [copiedGroupId, setCopiedGroupId] = useState<string | null>(null);
+  const [togglingGroupId, setTogglingGroupId] = useState<string | null>(null);
+
+  const fetchGroups = async () => {
+    setIsLoadingGroups(true);
+    setGroupsError(null);
+    try {
+      const res = await fetch('/api/bot/groups');
+      const data = await res.json();
+      if (data.connected === false) {
+        setGroupsError(data.message || 'Bot belum terhubung ke WhatsApp.');
+        setGroups([]);
+      } else if (data.groups) {
+        setGroups(data.groups);
+      }
+    } catch (err: any) {
+      setGroupsError(err?.message || 'Gagal memuat grup WhatsApp.');
+    } finally {
+      setIsLoadingGroups(false);
+    }
+  };
+
+  const handleToggleGroup = async (groupId: string, currentEnabled: boolean) => {
+    const nextVal = !currentEnabled;
+    setGroups((prev) =>
+      prev.map((g) => (g.id === groupId ? { ...g, enabled: nextVal } : g))
+    );
+    setTogglingGroupId(groupId);
+    try {
+      const res = await fetch('/api/bot/groups/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupId, enabled: nextVal }),
+      });
+      if (!res.ok) {
+        setGroups((prev) =>
+          prev.map((g) => (g.id === groupId ? { ...g, enabled: currentEnabled } : g))
+        );
+        showToast('Gagal memperbarui status toggle grup.');
+      } else {
+        showToast(`Grup ${nextVal ? 'diaktifkan' : 'dinonaktifkan'}.`);
+      }
+    } catch {
+      setGroups((prev) =>
+        prev.map((g) => (g.id === groupId ? { ...g, enabled: currentEnabled } : g))
+      );
+      showToast('Koneksi gagal saat mengubah status grup.');
+    } finally {
+      setTogglingGroupId(null);
+    }
+  };
+
+  const copyGroupIdToClipboard = (id: string) => {
+    navigator.clipboard.writeText(id);
+    setCopiedGroupId(id);
+    showToast('ID Grup berhasil disalin ke clipboard!');
+    setTimeout(() => setCopiedGroupId(null), 2000);
+  };
+
   // Xaviera API State (tab06)
   const [xavieraApiKey, setXavieraApiKey] = useState<string>('');
   const [xavieraBaseUrl, setXavieraBaseUrl] = useState<string>('https://xavierastore.com/api/v1');
@@ -322,101 +425,14 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
     fetchXavieraProfile();
   }, [xavieraApiKey, xavieraBaseUrl]);
 
-  // Premium Products Data (Tab Produk)
-  const SAMPLE_PREMIUM_PRODUCTS: PremiumProduct[] = [
-    // YouTube
-    { id: 'yt-1', name: 'YouTube', variant: 'YouTube Famplan 1 Bulan', stock: 9, price: 3000, category: 'Streaming', status: 'available' },
-    { id: 'yt-2', name: 'YouTube', variant: 'YouTube Famplan 2 Bulan', stock: 14, price: 5000, category: 'Streaming', status: 'available' },
-    { id: 'yt-3', name: 'YouTube', variant: 'YouTube Indplan 3 Bulan', stock: 7, price: 11000, category: 'Streaming', status: 'available' },
-    { id: 'yt-4', name: 'YouTube', variant: 'YouTube Premium 1 Bulan', stock: 12, price: 4000, category: 'Streaming', status: 'available' },
-    { id: 'yt-5', name: 'YouTube', variant: 'YouTube Premium 3 Bulan', stock: 6, price: 10000, category: 'Streaming', status: 'available' },
-    { id: 'yt-6', name: 'YouTube', variant: 'YouTube Premium 6 Bulan', stock: 3, price: 18000, category: 'Streaming', status: 'available' },
-    { id: 'yt-7', name: 'YouTube', variant: 'YouTube Premium 12 Bulan', stock: 5, price: 32000, category: 'Streaming', status: 'available' },
-    { id: 'yt-8', name: 'YouTube', variant: 'YouTube Famplan 1 Bulan No Garansi', stock: 11, price: 2500, category: 'Streaming', status: 'available' },
-    // Spotify
-    { id: 'sp-1', name: 'Spotify', variant: 'Spotify Famplan 2 Bulan', stock: 4, price: 7000, category: 'Music', status: 'available' },
-    { id: 'sp-2', name: 'Spotify', variant: 'Spotify Indplan 3 Bulan No Garansi', stock: 8, price: 5000, category: 'Music', status: 'available' },
-    { id: 'sp-3', name: 'Spotify', variant: 'Spotify Premium 1 Bulan', stock: 15, price: 3000, category: 'Music', status: 'available' },
-    { id: 'sp-4', name: 'Spotify', variant: 'Spotify Premium 2 Bulan', stock: 10, price: 5500, category: 'Music', status: 'available' },
-    { id: 'sp-5', name: 'Spotify', variant: 'Spotify Premium 3 Bulan', stock: 7, price: 8000, category: 'Music', status: 'available' },
-    { id: 'sp-6', name: 'Spotify', variant: 'Spotify Premium 6 Bulan', stock: 5, price: 15000, category: 'Music', status: 'available' },
-    { id: 'sp-7', name: 'Spotify', variant: 'Spotify Premium 12 Bulan', stock: 2, price: 28000, category: 'Music', status: 'available' },
-    { id: 'sp-8', name: 'Spotify', variant: 'Spotify Famplan 1 Bulan', stock: 13, price: 4000, category: 'Music', status: 'available' },
-    // Netflix
-    { id: 'nf-1', name: 'Netflix', variant: 'Netflix Premium 1 Bulan', stock: 6, price: 12000, category: 'Streaming', status: 'available' },
-    { id: 'nf-2', name: 'Netflix', variant: 'Netflix Premium 2 Bulan', stock: 4, price: 22000, category: 'Streaming', status: 'available' },
-    { id: 'nf-3', name: 'Netflix', variant: 'Netflix Sharing 1 Bulan', stock: 12, price: 5000, category: 'Streaming', status: 'available' },
-    { id: 'nf-4', name: 'Netflix', variant: 'Netflix Sharing 2 Bulan', stock: 8, price: 9000, category: 'Streaming', status: 'available' },
-    { id: 'nf-5', name: 'Netflix', variant: 'Netflix Private 1 Bulan', stock: 3, price: 25000, category: 'Streaming', status: 'available' },
-    { id: 'nf-6', name: 'Netflix', variant: 'Netflix Private 3 Bulan', stock: 2, price: 65000, category: 'Streaming', status: 'available' },
-    // Canva
-    { id: 'cv-1', name: 'Canva', variant: 'Canva Pro 1 Bulan', stock: 10, price: 4000, category: 'Design', status: 'available' },
-    { id: 'cv-2', name: 'Canva', variant: 'Canva Pro 3 Bulan', stock: 7, price: 10000, category: 'Design', status: 'available' },
-    { id: 'cv-3', name: 'Canva Pro', variant: 'Canva Pro 6 Bulan', stock: 5, price: 18000, category: 'Design', status: 'available' },
-    { id: 'cv-4', name: 'Canva Pro', variant: 'Canva Pro 12 Bulan', stock: 3, price: 30000, category: 'Design', status: 'available' },
-    { id: 'cv-5', name: 'Canva', variant: 'Canva Teams 1 Bulan', stock: 8, price: 6000, category: 'Design', status: 'available' },
-    { id: 'cv-6', name: 'Canva', variant: 'Canva Teams 3 Bulan', stock: 4, price: 15000, category: 'Design', status: 'available' },
-    // CapCut
-    { id: 'cc-1', name: 'CapCut', variant: 'CapCut Pro 1 Bulan', stock: 9, price: 8000, category: 'Editing', status: 'available' },
-    { id: 'cc-2', name: 'CapCut', variant: 'CapCut Pro 3 Bulan', stock: 6, price: 20000, category: 'Editing', status: 'available' },
-    { id: 'cc-3', name: 'CapCut', variant: 'CapCut Pro 12 Bulan', stock: 2, price: 70000, category: 'Editing', status: 'available' },
-  ];
-
-  const [productsList, setProductsList] = useState<PremiumProduct[]>(SAMPLE_PREMIUM_PRODUCTS);
+  // Premium Products Data (Tab Produk) - Murni dari API Xaviera
+  const [productsList, setProductsList] = useState<PremiumProduct[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [productSearch, setProductSearch] = useState('');
   const [selectedProductCategory, setSelectedProductCategory] = useState<string>('Semua');
 
-  // SMM / SSM Services State
-  const SAMPLE_SMM_SERVICES: SmmService[] = [
-    // TikTok
-    { service: 1021, name: 'TikTok Followers Indonesia Real Aktif [Max 50K] [Instant Start]', category: 'TikTok Followers Indonesia', rate: 28000, min: 50, max: 50000, refill: true, platformCategory: 'Layanan TikTok' },
-    { service: 1022, name: 'TikTok Likes Instant High Quality [Fast Server] [Refill 30D]', category: 'TikTok Likes', rate: 6500, min: 100, max: 100000, refill: true, platformCategory: 'Layanan TikTok' },
-    { service: 1023, name: 'TikTok Video Views Ultra Fast [Day 10M] [Non-Drop]', category: 'TikTok Views', rate: 500, min: 500, max: 1000000, refill: false, platformCategory: 'Layanan TikTok' },
-    { service: 1024, name: 'TikTok Saves & Shares Organik [Meningkatkan FYP]', category: 'TikTok Saves & Shares', rate: 2000, min: 100, max: 50000, refill: false, platformCategory: 'Layanan TikTok' },
-    { service: 1025, name: 'TikTok Live Streaming Views [30 Menit - Instant Start]', category: 'TikTok Live', rate: 18000, min: 100, max: 5000, refill: false, platformCategory: 'Layanan TikTok' },
-
-    // YouTube
-    { service: 2011, name: 'YouTube Subscribers Non-Drop Garansi 30 Hari [Real Human]', category: 'YouTube Subscribers', rate: 85000, min: 50, max: 10000, refill: true, platformCategory: 'Layanan YouTube' },
-    { service: 2012, name: 'YouTube Video Views Real High Retention [Rekomendasi Algoritma]', category: 'YouTube Views', rate: 16000, min: 500, max: 500000, refill: true, platformCategory: 'Layanan YouTube' },
-    { service: 2013, name: 'YouTube Likes Instant Speed [No Drop] [Refill Lifetime]', category: 'YouTube Likes', rate: 9500, min: 100, max: 50000, refill: true, platformCategory: 'Layanan YouTube' },
-    { service: 2014, name: 'YouTube Watch Time 4000 Jam Syarat Monetisasi [Full Garansi]', category: 'YouTube Watchtime', rate: 195000, min: 500, max: 4000, refill: true, platformCategory: 'Layanan YouTube' },
-    { service: 2015, name: 'YouTube Shorts Views Ultra Fast [Meningkatkan Jangkauan]', category: 'YouTube Shorts', rate: 4500, min: 500, max: 1000000, refill: false, platformCategory: 'Layanan YouTube' },
-
-    // Instagram
-    { service: 3011, name: 'Instagram Followers Indonesia Real Human [Aktif Berkualitas]', category: 'Instagram Followers Indonesia', rate: 35000, min: 100, max: 20000, refill: true, platformCategory: 'Layanan Instagram' },
-    { service: 3012, name: 'Instagram Likes Super Instant [Auto Refill 30 Hari]', category: 'Instagram Likes', rate: 4500, min: 50, max: 100000, refill: true, platformCategory: 'Layanan Instagram' },
-    { service: 3013, name: 'Instagram Reels Views [Max Unlimited] [Instant Start Day 1M]', category: 'Instagram Views', rate: 800, min: 100, max: 2000000, refill: false, platformCategory: 'Layanan Instagram' },
-    { service: 3014, name: 'Instagram Story Views + Profile Visits & Impressions', category: 'Instagram Story', rate: 3000, min: 100, max: 50000, refill: false, platformCategory: 'Layanan Instagram' },
-    { service: 3015, name: 'Instagram Comments Custom Positif Indonesia [Real User]', category: 'Instagram Comments', rate: 45000, min: 10, max: 5000, refill: true, platformCategory: 'Layanan Instagram' },
-
-    // Facebook
-    { service: 4011, name: 'Facebook Page Likes & Followers Indonesia [Real Accounts]', category: 'Facebook Fanspage', rate: 42000, min: 100, max: 50000, refill: true, platformCategory: 'Layanan Facebook' },
-    { service: 4012, name: 'Facebook Post Likes / Reaction Mix [Like, Love, Wow]', category: 'Facebook Reactions', rate: 7500, min: 50, max: 25000, refill: true, platformCategory: 'Layanan Facebook' },
-    { service: 4013, name: 'Facebook Video Views Monetisasi [High Retention]', category: 'Facebook Views', rate: 8000, min: 500, max: 500000, refill: false, platformCategory: 'Layanan Facebook' },
-    { service: 4014, name: 'Facebook Group Members Non-Drop [Permanent]', category: 'Facebook Group', rate: 26000, min: 100, max: 20000, refill: true, platformCategory: 'Layanan Facebook' },
-
-    // Telegram
-    { service: 5011, name: 'Telegram Channel / Group Members Non-Drop [Garansi 30 Hari]', category: 'Telegram Members', rate: 22000, min: 50, max: 50000, refill: true, platformCategory: 'Layanan Telegram' },
-    { service: 5012, name: 'Telegram Post Views 1 Post / Multi Post [Instant]', category: 'Telegram Views', rate: 600, min: 100, max: 1000000, refill: false, platformCategory: 'Layanan Telegram' },
-    { service: 5013, name: 'Telegram Reactions Emoji Positif [Mix / Single Reaction]', category: 'Telegram Reactions', rate: 3500, min: 100, max: 100000, refill: false, platformCategory: 'Layanan Telegram' },
-
-    // Twitter / X
-    { service: 6011, name: 'Twitter / X Followers Global High Quality [Non-Drop Safe]', category: 'Twitter Followers', rate: 48000, min: 100, max: 30000, refill: true, platformCategory: 'Layanan Twitter / X' },
-    { service: 6012, name: 'Twitter / X Retweet & Likes Combo [Organik Engagement]', category: 'Twitter Engagement', rate: 12000, min: 50, max: 15000, refill: true, platformCategory: 'Layanan Twitter / X' },
-    { service: 6013, name: 'Twitter / X Impressions & Video Views [Trending Booster]', category: 'Twitter Views', rate: 1500, min: 500, max: 1000000, refill: false, platformCategory: 'Layanan Twitter / X' },
-
-    // Shopee
-    { service: 7011, name: 'Shopee Followers Toko Indonesia [Real Aktif Meningkatkan Trust]', category: 'Shopee Followers Indonesia', rate: 55000, min: 50, max: 10000, refill: true, platformCategory: 'Layanan Shopee' },
-    { service: 7012, name: 'Shopee Video Views & Likes Indonesia [FYP Booster]', category: 'Shopee Video', rate: 8500, min: 100, max: 20000, refill: false, platformCategory: 'Layanan Shopee' },
-    { service: 7013, name: 'Shopee Live Streaming Views & Like [Meningkatkan Penjualan]', category: 'Shopee Live', rate: 25000, min: 100, max: 5000, refill: false, platformCategory: 'Layanan Shopee' },
-
-    // Musik
-    { service: 8011, name: 'Spotify Track Plays / Streams Indonesia Royalty Eligible', category: 'Spotify Streams', rate: 15000, min: 500, max: 500000, refill: true, platformCategory: 'Layanan Musik' },
-    { service: 8012, name: 'SoundCloud Plays & Reposts Global Fast', category: 'SoundCloud Plays', rate: 6000, min: 200, max: 200000, refill: false, platformCategory: 'Layanan Musik' },
-  ];
-
-  const [smmList, setSmmList] = useState<SmmService[]>(SAMPLE_SMM_SERVICES);
+  // SMM / SSM Services State - Murni dari API Xaviera
+  const [smmList, setSmmList] = useState<SmmService[]>([]);
   const [loadingSmm, setLoadingSmm] = useState<boolean>(false);
   const [smmSearch, setSmmSearch] = useState<string>('');
   const [selectedSmmCategory, setSelectedSmmCategory] = useState<string>('Semua');
@@ -477,8 +493,9 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
           }
         }
       }
+      setProductsList([]);
     } catch {
-      // Pertahankan sample produk berkualitas
+      setProductsList([]);
     } finally {
       setLoadingProducts(false);
     }
@@ -516,69 +533,16 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
           }
         }
       }
+      setSmmList([]);
     } catch (err) {
-      console.error('Gagal fetch SMM services:', err);
+      setSmmList([]);
     } finally {
       setLoadingSmm(false);
     }
   };
 
-  // Top Up Games & Digital Services State
-  const SAMPLE_TOPUP_ITEMS: TopUpItem[] = [
-    // Mobile Legends
-    { id: 'ml-1', game: 'Mobile Legends', item: '86 Diamonds (78 + 8 Bonus)', category: 'Mobile Legends', originalPrice: 19000, stock: '999+', server: 'ID & Zone ID', badge: '⚡ Instan 1-3 Detik' },
-    { id: 'ml-2', game: 'Mobile Legends', item: '172 Diamonds (156 + 16 Bonus)', category: 'Mobile Legends', originalPrice: 38000, stock: '999+', server: 'ID & Zone ID', badge: '⚡ Instan' },
-    { id: 'ml-3', game: 'Mobile Legends', item: '257 Diamonds (234 + 23 Bonus)', category: 'Mobile Legends', originalPrice: 57000, stock: '999+', server: 'ID & Zone ID', badge: '🔥 Terlaris' },
-    { id: 'ml-4', game: 'Mobile Legends', item: 'Weekly Diamond Pass (WDP)', category: 'Mobile Legends', originalPrice: 27500, stock: '999+', server: 'ID & Zone ID', badge: '⭐ Best Value' },
-    { id: 'ml-5', game: 'Mobile Legends', item: '344 Diamonds (312 + 32 Bonus)', category: 'Mobile Legends', originalPrice: 76000, stock: '999+', server: 'ID & Zone ID' },
-    { id: 'ml-6', game: 'Mobile Legends', item: '706 Diamonds (636 + 70 Bonus)', category: 'Mobile Legends', originalPrice: 152000, stock: '999+', server: 'ID & Zone ID' },
-    { id: 'ml-7', game: 'Mobile Legends', item: 'Twilight Pass', category: 'Mobile Legends', originalPrice: 135000, stock: '500+', server: 'ID & Zone ID' },
-
-    // Free Fire
-    { id: 'ff-1', game: 'Free Fire', item: '70 Diamonds', category: 'Free Fire', originalPrice: 9000, stock: '999+', server: 'User ID', badge: '⚡ Instan' },
-    { id: 'ff-2', game: 'Free Fire', item: '140 Diamonds', category: 'Free Fire', originalPrice: 18000, stock: '999+', server: 'User ID' },
-    { id: 'ff-3', game: 'Free Fire', item: '355 Diamonds', category: 'Free Fire', originalPrice: 45000, stock: '999+', server: 'User ID', badge: '🔥 Terlaris' },
-    { id: 'ff-4', game: 'Free Fire', item: 'Membership Mingguan FF', category: 'Free Fire', originalPrice: 28000, stock: '999+', server: 'User ID', badge: '⭐ Best Value' },
-    { id: 'ff-5', game: 'Free Fire', item: '720 Diamonds', category: 'Free Fire', originalPrice: 90000, stock: '999+', server: 'User ID' },
-    { id: 'ff-6', game: 'Free Fire', item: 'Membership Bulanan FF', category: 'Free Fire', originalPrice: 85000, stock: '999+', server: 'User ID' },
-
-    // PUBG Mobile
-    { id: 'pubg-1', game: 'PUBG Mobile', item: '60 UC (Unknown Cash)', category: 'PUBG Mobile', originalPrice: 14500, stock: '999+', server: 'Player ID', badge: '⚡ Instan' },
-    { id: 'pubg-2', game: 'PUBG Mobile', item: '300 + 25 UC', category: 'PUBG Mobile', originalPrice: 72000, stock: '999+', server: 'Player ID', badge: '🔥 Populer' },
-    { id: 'pubg-3', game: 'PUBG Mobile', item: '600 + 60 UC', category: 'PUBG Mobile', originalPrice: 142000, stock: '999+', server: 'Player ID' },
-    { id: 'pubg-4', game: 'PUBG Mobile', item: 'Royale Pass Upgrade', category: 'PUBG Mobile', originalPrice: 150000, stock: '500+', server: 'Player ID', badge: '⭐ Best Value' },
-
-    // Valorant
-    { id: 'val-1', game: 'Valorant', item: '475 VP (Valorant Points)', category: 'Valorant', originalPrice: 52000, stock: '999+', server: 'Riot ID & Tagline', badge: '⚡ Instan' },
-    { id: 'val-2', game: 'Valorant', item: '1000 VP', category: 'Valorant', originalPrice: 108000, stock: '999+', server: 'Riot ID & Tagline', badge: '🔥 Terlaris' },
-    { id: 'val-3', game: 'Valorant', item: '2050 VP', category: 'Valorant', originalPrice: 215000, stock: '999+', server: 'Riot ID & Tagline' },
-    { id: 'val-4', game: 'Valorant', item: 'Battlepass Act Premium', category: 'Valorant', originalPrice: 110000, stock: '500+', server: 'Riot ID & Tagline' },
-
-    // Genshin Impact
-    { id: 'gi-1', game: 'Genshin Impact', item: 'Blessing of the Welkin Moon', category: 'Genshin Impact', originalPrice: 68000, stock: '999+', server: 'UID & Server', badge: '⭐ Best Value' },
-    { id: 'gi-2', game: 'Genshin Impact', item: '60 Genesis Crystals', category: 'Genshin Impact', originalPrice: 15000, stock: '999+', server: 'UID & Server' },
-    { id: 'gi-3', game: 'Genshin Impact', item: '300 + 30 Genesis Crystals', category: 'Genshin Impact', originalPrice: 72000, stock: '999+', server: 'UID & Server', badge: '🔥 Populer' },
-    { id: 'gi-4', game: 'Genshin Impact', item: '980 + 110 Genesis Crystals', category: 'Genshin Impact', originalPrice: 225000, stock: '999+', server: 'UID & Server' },
-
-    // Honor of Kings
-    { id: 'hok-1', game: 'Honor of Kings', item: '80 + 8 Tokens', category: 'Honor of Kings', originalPrice: 14500, stock: '999+', server: 'Player ID', badge: '⚡ Instan' },
-    { id: 'hok-2', game: 'Honor of Kings', item: '240 + 24 Tokens', category: 'Honor of Kings', originalPrice: 43500, stock: '999+', server: 'Player ID', badge: '🔥 Populer' },
-    { id: 'hok-3', game: 'Honor of Kings', item: 'Weekly Card HOK', category: 'Honor of Kings', originalPrice: 22000, stock: '999+', server: 'Player ID', badge: '⭐ Best Value' },
-
-    // Roblox
-    { id: 'rbx-1', game: 'Roblox', item: '80 Robux Fast Delivery', category: 'Roblox', originalPrice: 14000, stock: '999+', server: 'Username Roblox', badge: '⚡ Instan' },
-    { id: 'rbx-2', game: 'Roblox', item: '400 Robux', category: 'Roblox', originalPrice: 68000, stock: '999+', server: 'Username Roblox', badge: '🔥 Terlaris' },
-    { id: 'rbx-3', game: 'Roblox', item: '800 Robux', category: 'Roblox', originalPrice: 135000, stock: '999+', server: 'Username Roblox' },
-
-    // E-Wallet & Pulsa
-    { id: 'ew-1', game: 'DANA', item: 'Saldo DANA Rp20.000', category: 'E-Wallet & Pulsa', originalPrice: 20600, stock: '999+', server: 'Nomor HP DANA', badge: '⚡ Otomatis' },
-    { id: 'ew-2', game: 'DANA', item: 'Saldo DANA Rp50.000', category: 'E-Wallet & Pulsa', originalPrice: 50600, stock: '999+', server: 'Nomor HP DANA', badge: '🔥 Terlaris' },
-    { id: 'ew-3', game: 'GoPay', item: 'Saldo GoPay Rp50.000', category: 'E-Wallet & Pulsa', originalPrice: 50700, stock: '999+', server: 'Nomor HP GoPay' },
-    { id: 'pls-1', game: 'Telkomsel', item: 'Pulsa Telkomsel Rp25.000', category: 'E-Wallet & Pulsa', originalPrice: 25400, stock: '999+', server: 'Nomor Telkomsel', badge: '⚡ 24 Jam' },
-    { id: 'pls-2', game: 'Indosat', item: 'Pulsa Indosat Rp50.000', category: 'E-Wallet & Pulsa', originalPrice: 49900, stock: '999+', server: 'Nomor Indosat', badge: '⚡ Promo' },
-  ];
-
-  const [topUpList, setTopUpList] = useState<TopUpItem[]>(SAMPLE_TOPUP_ITEMS);
+  // Top Up Games & Digital Services State - Murni dari API Xaviera
+  const [topUpList, setTopUpList] = useState<TopUpItem[]>([]);
   const [loadingTopUp, setLoadingTopUp] = useState<boolean>(false);
   const [topUpSearch, setTopUpSearch] = useState<string>('');
   const [selectedTopUpCategory, setSelectedTopUpCategory] = useState<string>('Semua');
@@ -591,22 +555,68 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
       const res = await fetch('/api/xaviera/games');
       if (res.ok) {
         const json = await res.json();
-        if (json.success && json.data && Array.isArray(json.data.games)) {
-          showToast(`Berhasil menyinkronkan ${json.data.games.length} brand game dari Xaviera Store!`);
+        if (json.success && json.data) {
+          const rawGames = Array.isArray(json.data.games)
+            ? json.data.games
+            : Array.isArray(json.data)
+            ? json.data
+            : [];
+          if (rawGames.length > 0) {
+            const mapped: TopUpItem[] = [];
+            for (const g of rawGames) {
+              const gameTitle = g.name || g.title || g.game || 'Game';
+              const items = Array.isArray(g.items) ? g.items : Array.isArray(g.variants) ? g.variants : [];
+              if (items.length > 0) {
+                for (const it of items) {
+                  mapped.push({
+                    id: it.id || `${g.id}-${it.name}`,
+                    game: gameTitle,
+                    item: it.name || it.item || `${gameTitle} Item`,
+                    category: gameTitle,
+                    originalPrice: Number(it.price || it.harga || 0),
+                    stock: it.stock !== undefined ? String(it.stock) : 'Tersedia',
+                    server: it.server || g.target || 'Server/ID',
+                    badge: it.badge,
+                    status: 'available',
+                  });
+                }
+              } else {
+                mapped.push({
+                  id: g.id || `game-${mapped.length}`,
+                  game: gameTitle,
+                  item: g.desc || `${gameTitle} Voucher / Top Up`,
+                  category: gameTitle,
+                  originalPrice: Number(g.price || g.harga || 0),
+                  stock: 'Tersedia',
+                  server: g.target || 'User ID & Server',
+                  status: 'available',
+                });
+              }
+            }
+            if (mapped.length > 0) {
+              setTopUpList(mapped);
+              return;
+            }
+          }
         }
       }
+      setTopUpList([]);
     } catch (err) {
-      console.error('Gagal fetch games:', err);
+      setTopUpList([]);
     } finally {
       setLoadingTopUp(false);
     }
   };
 
   useEffect(() => {
-    if (xavieraApiKey) {
+    if (xavieraApiKey && xavieraApiKey.trim()) {
       fetchXavieraProducts();
       fetchXavieraSmm();
       fetchXavieraGames();
+    } else {
+      setProductsList([]);
+      setSmmList([]);
+      setTopUpList([]);
     }
   }, [xavieraApiKey, xavieraBaseUrl]);
 
@@ -634,6 +644,10 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
             if (data.config.xavieraBaseUrl) setXavieraBaseUrl(data.config.xavieraBaseUrl);
             if (data.config.carouselOutputText) setCarouselOutputText(data.config.carouselOutputText);
             if (data.config.carouselPicture) setCarouselPicture(data.config.carouselPicture);
+            if (data.config.storeInfo) setStoreInfo(data.config.storeInfo);
+            if (data.config.menuFooterText) setMenuFooterText(data.config.menuFooterText);
+            if (data.config.listFooterText) setListFooterText(data.config.listFooterText);
+            if (data.config.carouselFooterText) setCarouselFooterText(data.config.carouselFooterText);
           }
         }
       } catch {}
@@ -644,35 +658,70 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
     return () => clearInterval(interval);
   }, [customCode]);
 
-  // Simpan otomatis perubahan Menu/List/Carousel/Gambar/API ke server backend bot
+  // Muat data grup secara otomatis ketika tab Grup dipilih
+  useEffect(() => {
+    if (selectedTab === 'Grup' || selectedTab === 'tab04') {
+      fetchGroups();
+    }
+  }, [selectedTab, botData.status]);
+
+  // Simpan otomatis perubahan Store Info/Menu/List/Carousel/Gambar/API ke database terpisah
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const syncConfigToServer = async (
-    newMenuText: string = menuOutputText,
-    newButtons: WhatsAppButton[] = menuButtons,
-    newListText: string = listOutputText,
-    newIncludeMedia: boolean = includeMedia,
-    newSelectedPicture: string = selectedPicture,
-    newApiKey: string = xavieraApiKey,
-    newBaseUrl: string = xavieraBaseUrl,
-    newCarouselText: string = carouselOutputText,
-    newCarouselPicture: string = carouselPicture
+    firstArg?: any,
+    newButtons?: WhatsAppButton[],
+    newListText?: string,
+    newIncludeMedia?: boolean,
+    newSelectedPicture?: string,
+    newApiKey?: string,
+    newBaseUrl?: string,
+    newCarouselText?: string,
+    newCarouselPicture?: string,
+    newStoreInfo?: StoreInfoConfig,
+    newMenuFooter?: string,
+    newListFooter?: string,
+    newCarouselFooter?: string
   ) => {
     setIsSavingConfig(true);
     try {
+      let payload: any = {
+        storeInfo,
+        menuOutputText,
+        menuFooterText,
+        menuButtons,
+        listOutputText,
+        listFooterText,
+        includeMedia,
+        selectedPicture,
+        carouselOutputText,
+        carouselFooterText,
+        carouselPicture,
+        xavieraApiKey,
+        xavieraBaseUrl,
+      };
+
+      if (firstArg && typeof firstArg === 'object' && !Array.isArray(firstArg)) {
+        payload = { ...payload, ...firstArg };
+      } else {
+        if (firstArg !== undefined && typeof firstArg === 'string') payload.menuOutputText = firstArg;
+        if (newButtons !== undefined) payload.menuButtons = newButtons;
+        if (newListText !== undefined) payload.listOutputText = newListText;
+        if (newIncludeMedia !== undefined) payload.includeMedia = newIncludeMedia;
+        if (newSelectedPicture !== undefined) payload.selectedPicture = newSelectedPicture;
+        if (newApiKey !== undefined) payload.xavieraApiKey = newApiKey;
+        if (newBaseUrl !== undefined) payload.xavieraBaseUrl = newBaseUrl;
+        if (newCarouselText !== undefined) payload.carouselOutputText = newCarouselText;
+        if (newCarouselPicture !== undefined) payload.carouselPicture = newCarouselPicture;
+        if (newStoreInfo !== undefined) payload.storeInfo = newStoreInfo;
+        if (newMenuFooter !== undefined) payload.menuFooterText = newMenuFooter;
+        if (newListFooter !== undefined) payload.listFooterText = newListFooter;
+        if (newCarouselFooter !== undefined) payload.carouselFooterText = newCarouselFooter;
+      }
+
       await fetch('/api/bot/save-config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          menuOutputText: newMenuText,
-          menuButtons: newButtons,
-          listOutputText: newListText,
-          includeMedia: newIncludeMedia,
-          selectedPicture: newSelectedPicture,
-          carouselOutputText: newCarouselText,
-          carouselPicture: newCarouselPicture,
-          xavieraApiKey: newApiKey,
-          xavieraBaseUrl: newBaseUrl,
-        }),
+        body: JSON.stringify(payload),
       });
     } catch (e) {
       console.error('Gagal menyimpan config ke server', e);
@@ -821,8 +870,9 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
       finalOutput = quickReplyOutput.trim();
     } else if (modalBtnType === 'cta_url') {
       const cleanUrl = urlOutput.trim();
-      if (!cleanUrl.startsWith('https://') || cleanUrl === 'https://') {
-        showToast('Output cta_url wajib diisi dengan URL valid yang diawali https://');
+      const hasUrlPlaceholder = cleanUrl.includes('{') && cleanUrl.includes('}');
+      if (!hasUrlPlaceholder && !cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+        showToast('Output cta_url wajib diisi dengan URL valid (diawali https:// atau placeholder {webLink}).');
         return;
       }
       finalOutput = cleanUrl;
@@ -834,15 +884,16 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
       finalOutput = copyOutput.trim();
     } else if (modalBtnType === 'vcard' || modalBtnType === 'cta_call') {
       if (!callTarget.trim()) {
-        showToast('Nama kontak vCard wajib diisi (misal: Admin Store atau Owner).');
+        showToast('Nama kontak vCard wajib diisi (misal: Admin Store, Owner, atau {adminName}).');
         return;
       }
+      const hasPhonePlaceholder = callPhone.includes('{') && callPhone.includes('}');
       const cleanPhone = callPhone.replace(/[^0-9+]/g, '');
-      if (!cleanPhone || cleanPhone.length < 8) {
-        showToast('Nomor WhatsApp kontak vCard tidak valid.');
+      if (!hasPhonePlaceholder && (!cleanPhone || cleanPhone.length < 8)) {
+        showToast('Nomor WhatsApp kontak vCard tidak valid (minimal 8 digit atau placeholder {ownerNumber}).');
         return;
       }
-      finalOutput = `${callTarget.trim()} (${cleanPhone})`;
+      finalOutput = `${callTarget.trim()} (${callPhone.trim()})`;
     } else if (modalBtnType === 'cta_reminder') {
       if (!reminderOutput.trim()) {
         showToast('Judul atau ID pengingat wajib diisi.');
@@ -951,12 +1002,12 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
       <header className="sticky top-0 z-30 bg-white border-b border-slate-200/90 shadow-xs">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-sky-600 flex items-center justify-center text-white shadow-xs font-bold text-sm tracking-wider">
-              WS
+            <div className="w-9 h-9 rounded-full bg-sky-50 border border-sky-200 text-sky-600 flex items-center justify-center shadow-2xs">
+              <User className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-bold text-base text-slate-900 tracking-tight">wanztstore.web.id</span>
+                <span className="font-bold text-base text-slate-900 tracking-tight">Dashboard Bot WhatsApp</span>
                 <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
                   Bot Console
                 </span>
@@ -984,17 +1035,12 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
               <div className="space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[11px] font-semibold uppercase tracking-wider text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
-                    Xaviera Developer API
+                    INFO PROFIL ANDA
                   </span>
-                  {xavieraProfile.configured && (
-                    <span className="text-xs text-slate-500 font-mono">
-                      @{xavieraProfile.data?.username || 'wanztstore'}
-                    </span>
-                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
-                    {xavieraProfile.data?.storeName || (xavieraProfile.configured ? 'Wanzt Store' : 'Wanzt Store Official')}
+                    {storeInfo.storeName || 'Wanzt Store'}
                   </h1>
                   <BadgeCheck className="w-4 h-4 text-sky-600 shrink-0" />
                 </div>
@@ -1013,7 +1059,7 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
                 <div className="flex items-center justify-between gap-3 text-slate-500 mb-1">
                   <span className="text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1.5">
                     <Wallet className="w-3.5 h-3.5 text-slate-400" />
-                    Saldo Xaviera
+                    Saldo Anda
                   </span>
                   <button
                     type="button"
@@ -1119,7 +1165,7 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
                     />
                   </div>
                   <p className="text-[11px] text-slate-500 mt-1.5">
-                    Masukkan nomor tanpa angka 0 di depan (contoh: 85712439395).
+                    Masukkan nomor tanpa angka 0 di depan (contoh: 81234567890).
                   </p>
                 </div>
 
@@ -1310,8 +1356,7 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
               </div>
 
               {/* Terminal Footer */}
-              <div className="bg-slate-900/90 px-4 py-2.5 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between shrink-0">
-                <span>Mesin: <code className="text-slate-300 font-mono">@itsliaaa/baileys</code> (Carousel & Native Flow)</span>
+              <div className="bg-slate-900/90 px-4 py-2.5 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-end shrink-0">
                 <span className="flex items-center gap-1.5 text-sky-400 font-mono">
                   <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse"></span>
                   Ready to link
@@ -1331,11 +1376,12 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
             <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
               {/* Tab Navigation Bar */}
               <div className="border-b border-slate-200 bg-slate-50/70 px-2 sm:px-4 flex items-center gap-1 overflow-x-auto scrollbar-none">
-                {['Command', 'Produk', 'SSM', 'Top Up', 'tab04', 'tab05', 'Connection'].map((tabName) => {
+                {['Store Info', 'Command', 'Produk', 'SSM', 'Top Up', 'Grup', 'tab05', 'Connection'].map((tabName) => {
                   const isActive =
                     selectedTab === tabName ||
                     (tabName === 'SSM' && selectedTab === 'tab02') ||
-                    (tabName === 'Top Up' && selectedTab === 'tab03');
+                    (tabName === 'Top Up' && selectedTab === 'tab03') ||
+                    (tabName === 'Grup' && (selectedTab === 'tab04' || selectedTab === 'Grup'));
                   return (
                     <button
                       key={tabName}
@@ -1355,7 +1401,294 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
 
               {/* Tab Content Body */}
               <div className="p-4 sm:p-5">
-                {selectedTab === 'Command' ? (
+                {selectedTab === 'Store Info' ? (
+                  <div className="space-y-6">
+                    {/* Header Store Info */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Store className="w-5 h-5 text-sky-600" />
+                          <h3 className="text-sm font-bold text-slate-900 tracking-tight">
+                            Pengaturan Informasi Toko (Store Info)
+                          </h3>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Atur identitas toko, kontak owner, admin, dan tautan resmi. Data ini disimpan terpisah di <code className="font-mono text-sky-700 bg-sky-50 px-1 py-0.5 rounded border border-sky-200">database/store_info.json</code> dan dapat dipanggil dinamis menggunakan placeholder.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-mono font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200 flex items-center gap-1.5">
+                          <BadgeCheck className="w-3.5 h-3.5" />
+                          Multi-File DB Active
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Form Grid: Data Wajib & Data Opsional */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                      {/* Kolom Kiri: Form Wajib */}
+                      <div className="space-y-4 bg-slate-50/70 p-4 rounded-xl border border-slate-200">
+                        <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
+                          <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                            Informasi Utama Toko (Wajib)
+                          </span>
+                          <span className="text-[10px] font-mono font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                            REQUIRED
+                          </span>
+                        </div>
+
+                        {/* Nama Store */}
+                        <div>
+                          <label className="text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">
+                              <Store className="w-3.5 h-3.5 text-sky-600" />
+                              Nama Store <span className="text-rose-500">*</span>
+                            </span>
+                            <code className="text-[10px] font-mono text-sky-700 bg-sky-100/70 px-1 rounded">{'{storeName}'}</code>
+                          </label>
+                          <input
+                            type="text"
+                            value={storeInfo.storeName}
+                            onChange={(e) => setStoreInfo({ ...storeInfo, storeName: e.target.value })}
+                            placeholder="Contoh: Wanzt Store"
+                            className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 shadow-2xs font-medium"
+                          />
+                          <p className="text-[10px] text-slate-500 mt-1">Nama resmi toko/brand yang akan ditampilkan ke pelanggan.</p>
+                        </div>
+
+                        {/* Nama Owner */}
+                        <div>
+                          <label className="text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">
+                              <User className="w-3.5 h-3.5 text-sky-600" />
+                              Nama Owner <span className="text-rose-500">*</span>
+                            </span>
+                            <code className="text-[10px] font-mono text-sky-700 bg-sky-100/70 px-1 rounded">{'{ownerName}'}</code>
+                          </label>
+                          <input
+                            type="text"
+                            value={storeInfo.ownerName}
+                            onChange={(e) => setStoreInfo({ ...storeInfo, ownerName: e.target.value })}
+                            placeholder="Contoh: Wanzt"
+                            className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 shadow-2xs font-medium"
+                          />
+                          <p className="text-[10px] text-slate-500 mt-1">Nama pemilik atau penanggung jawab toko.</p>
+                        </div>
+
+                        {/* Nomor WhatsApp Owner */}
+                        <div>
+                          <label className="text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">
+                              <PhoneIcon className="w-3.5 h-3.5 text-sky-600" />
+                              Nomor WhatsApp Owner <span className="text-rose-500">*</span>
+                            </span>
+                            <code className="text-[10px] font-mono text-sky-700 bg-sky-100/70 px-1 rounded">{'{ownerNumber}'}</code>
+                          </label>
+                          <input
+                            type="text"
+                            value={storeInfo.ownerNumber}
+                            onChange={(e) => setStoreInfo({ ...storeInfo, ownerNumber: e.target.value })}
+                            placeholder="Contoh: 6282173515807"
+                            className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 font-mono focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 shadow-2xs"
+                          />
+                          <p className="text-[10px] text-slate-500 mt-1">Nomor WhatsApp owner (diawali kode negara 62 atau 08).</p>
+                        </div>
+                      </div>
+
+                      {/* Kolom Kanan: Form Opsional */}
+                      <div className="space-y-4 bg-slate-50/70 p-4 rounded-xl border border-slate-200">
+                        <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
+                          <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                            Kontak & Tautan Pendukung (Opsional)
+                          </span>
+                          <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded border border-slate-300">
+                            OPTIONAL
+                          </span>
+                        </div>
+
+                        {/* Nama & Nomor Admin */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          <div>
+                            <label className="text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                              <span className="truncate">Nama Admin</span>
+                              <code className="text-[10px] font-mono text-sky-700 bg-sky-100/70 px-1 rounded">{'{adminName}'}</code>
+                            </label>
+                            <input
+                              type="text"
+                              value={storeInfo.adminName || ''}
+                              onChange={(e) => setStoreInfo({ ...storeInfo, adminName: e.target.value })}
+                              placeholder="Admin Store"
+                              className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 shadow-2xs"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                              <span className="truncate">Nomor Admin</span>
+                              <code className="text-[10px] font-mono text-sky-700 bg-sky-100/70 px-1 rounded">{'{adminNumber}'}</code>
+                            </label>
+                            <input
+                              type="text"
+                              value={storeInfo.adminNumber || ''}
+                              onChange={(e) => setStoreInfo({ ...storeInfo, adminNumber: e.target.value })}
+                              placeholder="6285712439395"
+                              className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 font-mono focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 shadow-2xs"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Link Website */}
+                        <div>
+                          <label className="text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">
+                              <Globe className="w-3.5 h-3.5 text-sky-600" />
+                              Link Website Store
+                            </span>
+                            <code className="text-[10px] font-mono text-sky-700 bg-sky-100/70 px-1 rounded">{'{webLink}'}</code>
+                          </label>
+                          <input
+                            type="text"
+                            value={storeInfo.webLink || ''}
+                            onChange={(e) => setStoreInfo({ ...storeInfo, webLink: e.target.value })}
+                            placeholder="https://wanztstore.web.id"
+                            className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 font-mono focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 shadow-2xs"
+                          />
+                        </div>
+
+                        {/* Bot Telegram & Saluran WA */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          <div>
+                            <label className="text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                              <span className="truncate">Bot Telegram</span>
+                              <code className="text-[10px] font-mono text-sky-700 bg-sky-100/70 px-1 rounded">{'{telegramBot}'}</code>
+                            </label>
+                            <input
+                              type="text"
+                              value={storeInfo.telegramBot || ''}
+                              onChange={(e) => setStoreInfo({ ...storeInfo, telegramBot: e.target.value })}
+                              placeholder="@wanztstore_bot"
+                              className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 font-mono focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 shadow-2xs"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                              <span className="truncate">Link Saluran WA</span>
+                              <code className="text-[10px] font-mono text-sky-700 bg-sky-100/70 px-1 rounded">{'{waLink}'}</code>
+                            </label>
+                            <input
+                              type="text"
+                              value={storeInfo.waLink || ''}
+                              onChange={(e) => setStoreInfo({ ...storeInfo, waLink: e.target.value })}
+                              placeholder="https://whatsapp.com/channel/..."
+                              className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 font-mono focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 shadow-2xs"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Preview Kartu Identitas Toko & Daftar Placeholder */}
+                    <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                          <Sparkles className="w-4 h-4 text-sky-600" />
+                          Pratinjau Identitas Toko & Panduan Placeholder
+                        </span>
+                        <span className="text-[10px] font-mono font-semibold text-sky-700 bg-sky-100/70 px-2 py-0.5 rounded border border-sky-200">
+                          Live Store Profile
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-1 shadow-2xs">
+                          <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold block">Store & Owner</span>
+                          <div className="font-bold text-sm text-slate-900">{storeInfo.storeName || '-'}</div>
+                          <div className="text-xs text-slate-600">Owner: <span className="font-semibold text-slate-800">{storeInfo.ownerName || '-'}</span> ({storeInfo.ownerNumber || '-'})</div>
+                        </div>
+
+                        <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-1 shadow-2xs">
+                          <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold block">Customer Service / Admin</span>
+                          <div className="font-bold text-sm text-slate-900">{storeInfo.adminName || 'Admin Store'}</div>
+                          <div className="text-xs text-slate-600 font-mono">{storeInfo.adminNumber || 'Belum diisi'}</div>
+                        </div>
+
+                        <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-1 shadow-2xs">
+                          <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold block">Website & Channels</span>
+                          <div className="text-xs text-sky-700 font-mono truncate">{storeInfo.webLink || 'Belum diisi'}</div>
+                          <div className="text-[11px] text-slate-500 truncate">Saluran: {storeInfo.waLink || '-'}</div>
+                        </div>
+                      </div>
+
+                      {/* Baris Cheat Sheet Placeholder */}
+                      <div className="pt-2 border-t border-slate-200">
+                        <span className="text-[11px] font-semibold text-slate-600 block mb-1.5">
+                          Klik untuk menyalin tag placeholder ke clipboard:
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {[
+                            { tag: '{storeName}', label: 'Nama Store' },
+                            { tag: '{ownerName}', label: 'Nama Owner' },
+                            { tag: '{ownerNumber}', label: 'No. Owner' },
+                            { tag: '{adminName}', label: 'Nama Admin' },
+                            { tag: '{adminNumber}', label: 'No. Admin' },
+                            { tag: '{webLink}', label: 'Website' },
+                            { tag: '{waLink}', label: 'Saluran WA' },
+                            { tag: '{telegramBot}', label: 'Bot Telegram' },
+                          ].map((ph) => (
+                            <button
+                              key={ph.tag}
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(ph.tag);
+                                showToast(`Placeholder ${ph.tag} disalin ke clipboard!`);
+                              }}
+                              className="px-2 py-1 bg-white hover:bg-sky-50 text-sky-800 border border-slate-200 hover:border-sky-300 rounded text-[11px] font-mono transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                              title={`Salin ${ph.tag} (${ph.label})`}
+                            >
+                              <code>{ph.tag}</code>
+                              <span className="text-[10px] text-slate-400">({ph.label})</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Tombol Simpan Store Info */}
+                    <div className="flex items-center justify-end gap-3 pt-2">
+                      <button
+                        type="button"
+                        disabled={isSavingConfig}
+                        onClick={() => {
+                          syncConfigToServer(
+                            menuOutputText,
+                            menuButtons,
+                            listOutputText,
+                            includeMedia,
+                            selectedPicture,
+                            xavieraApiKey,
+                            xavieraBaseUrl,
+                            carouselOutputText,
+                            carouselPicture,
+                            storeInfo,
+                            menuFooterText,
+                            listFooterText,
+                            carouselFooterText
+                          );
+                          showToast('✅ Informasi Store berhasil disimpan ke database/store_info.json!');
+                        }}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-sm transition disabled:opacity-50 cursor-pointer"
+                      >
+                        {isSavingConfig ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Save className="w-4 h-4" />
+                        )}
+                        Simpan Informasi Toko
+                      </button>
+                    </div>
+                  </div>
+                ) : selectedTab === 'Command' ? (
                   <div className="space-y-5">
                     {/* Header & Dropdown Selector */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
@@ -1398,26 +1731,94 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
                             <button
                               type="button"
                               onClick={() => {
-                                syncConfigToServer(menuOutputText, menuButtons, listOutputText);
-                                showToast('Teks respon command Menu berhasil disimpan!');
+                                syncConfigToServer(
+                                  menuOutputText,
+                                  menuButtons,
+                                  listOutputText,
+                                  includeMedia,
+                                  selectedPicture,
+                                  xavieraApiKey,
+                                  xavieraBaseUrl,
+                                  carouselOutputText,
+                                  carouselPicture,
+                                  storeInfo,
+                                  menuFooterText,
+                                  listFooterText,
+                                  carouselFooterText
+                                );
+                                showToast('Teks & footer command Menu berhasil disimpan!');
                               }}
                               className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline flex items-center gap-1 cursor-pointer"
                             >
                               <Check className="w-3.5 h-3.5" />
-                              Simpan Teks
+                              Simpan Teks & Footer
                             </button>
                           </div>
+
+                          {/* Placeholder chips for Menu */}
+                          <div className="flex flex-wrap items-center gap-1.5 mb-2 p-2 rounded-lg bg-slate-100/80 border border-slate-200">
+                            <span className="text-[11px] font-semibold text-slate-500 mr-1">Sisipkan Placeholder:</span>
+                            {['{storeName}', '{ownerName}', '{ownerNumber}', '{adminNumber}', '{webLink}', '{waLink}'].map((ph) => (
+                              <button
+                                key={ph}
+                                type="button"
+                                onClick={() => {
+                                  const updated = `${menuOutputText} ${ph}`;
+                                  setMenuOutputText(updated);
+                                  showToast(`Placeholder ${ph} disisipkan!`);
+                                }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-white hover:bg-sky-50 text-sky-700 border border-slate-200 hover:border-sky-300 transition cursor-pointer shadow-2xs"
+                              >
+                                <Plus className="w-3 h-3 text-sky-600" />
+                                <code>{ph}</code>
+                              </button>
+                            ))}
+                          </div>
+
                           <textarea
                             rows={4}
                             value={menuOutputText}
                             onChange={(e) => setMenuOutputText(e.target.value)}
-                            onBlur={() => syncConfigToServer(menuOutputText, menuButtons, listOutputText)}
                             placeholder="Ketikkan teks pesan yang akan keluar saat command Menu dipanggil..."
                             className="w-full bg-slate-50 border border-slate-300 rounded-lg p-3 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 transition shadow-2xs leading-relaxed"
                           />
                           <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1">
-                            <span>Format teks mendukung *tebal*, _miring_, atau baris baru.</span>
+                            <span>Format teks mendukung *tebal*, _miring_, atau placeholder dinamis.</span>
                             <span className="text-[11px] text-slate-400">Pemicu: tombol Quick Reply tidak butuh prefix</span>
+                          </div>
+
+                          {/* Form Teks Footer Command Menu */}
+                          <div className="mt-3 pt-3 border-t border-slate-200/80">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                                <FileText className="w-3.5 h-3.5 text-sky-600" />
+                                Teks Footer Command Menu
+                              </label>
+                              <span className="text-[10px] text-slate-400 font-mono">Dukungan Placeholder</span>
+                            </div>
+                            <input
+                              type="text"
+                              value={menuFooterText}
+                              onChange={(e) => setMenuFooterText(e.target.value)}
+                              placeholder="{webLink} • Otomatis"
+                              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:bg-white focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 font-mono shadow-2xs"
+                            />
+                            <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                              <span className="text-[10px] text-slate-500 font-medium">Sisipkan ke footer:</span>
+                              {['{webLink}', '{storeName}', '{ownerNumber}', '{adminNumber}', '{waLink}'].map((ph) => (
+                                <button
+                                  key={ph}
+                                  type="button"
+                                  onClick={() => {
+                                    setMenuFooterText((prev) => `${prev} ${ph}`);
+                                    showToast(`Placeholder ${ph} disisipkan ke footer!`);
+                                  }}
+                                  className="px-1.5 py-0.5 text-[10px] font-mono bg-white hover:bg-sky-50 text-sky-700 border border-slate-200 rounded cursor-pointer"
+                                >
+                                  {ph}
+                                </button>
+                              ))}
+                            </div>
                           </div>
                         </div>
 
@@ -1608,29 +2009,48 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
                       <div className="space-y-4">
                         <div>
                           <div className="flex items-center justify-between mb-1.5">
-                            <label className="block text-xs font-semibold text-slate-700">
-                              Teks Output Command List
+                            <label className="text-xs font-semibold text-slate-700 flex items-center gap-2">
+                              <span>Teks Output Command List</span>
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                Prefix: / . ! ? # $ % &
+                              </span>
                             </label>
                             <button
                               type="button"
                               onClick={() => {
-                                const placeholder = '{daftarProduk}';
-                                if (!listOutputText.includes(placeholder)) {
-                                  const updated = listOutputText ? `${listOutputText.trim()}\n\n${placeholder}` : placeholder;
-                                  setListOutputText(updated);
-                                  syncConfigToServer(menuOutputText, menuButtons, updated);
-                                  showToast('Placeholder {daftarProduk} berhasil disisipkan!');
-                                } else {
-                                  showToast('Placeholder {daftarProduk} sudah ada di dalam teks.');
-                                }
+                                syncConfigToServer({
+                                  listOutputText,
+                                  listFooterText,
+                                });
+                                showToast('Teks & footer command List berhasil disimpan ke database/command_list.json!');
                               }}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono font-semibold bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 transition cursor-pointer"
-                              title="Klik untuk menyisipkan placeholder otomatis"
+                              className="text-xs font-semibold text-sky-600 hover:text-sky-700 hover:underline flex items-center gap-1 cursor-pointer"
                             >
-                              <Plus className="w-3.5 h-3.5" />
-                              + Sisipkan {'{daftarProduk}'}
+                              <Check className="w-3.5 h-3.5" />
+                              Simpan Teks & Footer
                             </button>
                           </div>
+
+                          {/* Placeholder chips for List Output */}
+                          <div className="flex flex-wrap items-center gap-1.5 mb-2 p-2 rounded-lg bg-slate-100/80 border border-slate-200">
+                            <span className="text-[11px] font-semibold text-slate-500 mr-1">Sisipkan Placeholder:</span>
+                            {['{storeName}', '{daftarProduk}', '{ownerName}', '{webLink}', '{adminNumber}', '{waLink}'].map((ph) => (
+                              <button
+                                key={ph}
+                                type="button"
+                                onClick={() => {
+                                  const updated = `${listOutputText} ${ph}`;
+                                  setListOutputText(updated);
+                                  showToast(`Placeholder ${ph} disisipkan!`);
+                                }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-white hover:bg-sky-50 text-sky-700 border border-slate-200 hover:border-sky-300 transition cursor-pointer shadow-2xs"
+                              >
+                                <Plus className="w-3 h-3 text-sky-600" />
+                                <code>{ph}</code>
+                              </button>
+                            ))}
+                          </div>
+
                           <textarea
                             rows={4}
                             value={listOutputText}
@@ -1638,6 +2058,40 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
                             placeholder="Silakan pilih produk yang tersedia:\n\n{daftarProduk}\n\nKetik nama produk untuk memesan."
                             className="w-full bg-slate-50 border border-slate-300 rounded-lg p-3 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 transition shadow-2xs leading-relaxed font-sans"
                           />
+
+                          {/* Form Teks Footer Command List */}
+                          <div className="mt-3 pt-3 border-t border-slate-200/80">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                                <FileText className="w-3.5 h-3.5 text-sky-600" />
+                                Teks Footer Command List
+                              </label>
+                              <span className="text-[10px] text-slate-400 font-mono">Dukungan Placeholder</span>
+                            </div>
+                            <input
+                              type="text"
+                              value={listFooterText}
+                              onChange={(e) => setListFooterText(e.target.value)}
+                              placeholder="{webLink} • Pilih Produk"
+                              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:bg-white focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 font-mono shadow-2xs"
+                            />
+                            <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                              <span className="text-[10px] text-slate-500 font-medium">Sisipkan ke footer:</span>
+                              {['{webLink}', '{storeName}', '{ownerNumber}', '{adminNumber}', '{waLink}'].map((ph) => (
+                                <button
+                                  key={ph}
+                                  type="button"
+                                  onClick={() => {
+                                    setListFooterText((prev) => `${prev} ${ph}`);
+                                    showToast(`Placeholder ${ph} disisipkan ke footer!`);
+                                  }}
+                                  className="px-1.5 py-0.5 text-[10px] font-mono bg-white hover:bg-sky-50 text-sky-700 border border-slate-200 rounded cursor-pointer"
+                                >
+                                  {ph}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                         </div>
 
                         {/* Petunjuk & Dokumentasi Placeholder {daftarProduk} */}
@@ -1899,11 +2353,15 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
                               Sisipkan:
                             </span>
                             {[
+                              { tag: '{storeName}', label: 'Nama Store', desc: 'Wanzt Store' },
                               { tag: '{produkName}', label: 'Nama Produk', desc: 'YouTube, Disney+' },
                               { tag: '{category}', label: 'Kategori', desc: 'Streaming, Musik' },
                               { tag: '{varian}', label: 'Varian', desc: 'YouTube Famplan 1 Bulan' },
                               { tag: '{price}', label: 'Harga', desc: 'Rp22.000' },
                               { tag: '{stock}', label: 'Stok', desc: '21' },
+                              { tag: '{adminNumber}', label: 'No. Admin', desc: '08123456789' },
+                              { tag: '{ownerNumber}', label: 'No. Owner', desc: '082173515807' },
+                              { tag: '{webLink}', label: 'Website', desc: 'wanztstore.web.id' },
                             ].map((item) => (
                               <button
                                 key={item.tag}
@@ -1930,6 +2388,40 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
                             placeholder="Tulis template kartu carousel di sini..."
                             className="w-full bg-slate-50 border border-slate-300 rounded-lg p-3 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 transition shadow-2xs leading-relaxed font-mono"
                           />
+
+                          {/* Form Teks Footer Command Carousel */}
+                          <div className="mt-3 pt-3 border-t border-slate-200/80">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                                <FileText className="w-3.5 h-3.5 text-sky-600" />
+                                Teks Footer Kartu Carousel
+                              </label>
+                              <span className="text-[10px] text-slate-400 font-mono">Dukungan Placeholder</span>
+                            </div>
+                            <input
+                              type="text"
+                              value={carouselFooterText}
+                              onChange={(e) => setCarouselFooterText(e.target.value)}
+                              placeholder="{storeName} Official"
+                              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:bg-white focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 font-mono shadow-2xs"
+                            />
+                            <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                              <span className="text-[10px] text-slate-500 font-medium">Sisipkan ke footer:</span>
+                              {['{storeName}', '{webLink}', '{ownerNumber}', '{adminNumber}', '{category}'].map((ph) => (
+                                <button
+                                  key={ph}
+                                  type="button"
+                                  onClick={() => {
+                                    setCarouselFooterText((prev) => `${prev} ${ph}`);
+                                    showToast(`Placeholder ${ph} disisipkan ke footer Carousel!`);
+                                  }}
+                                  className="px-1.5 py-0.5 text-[10px] font-mono bg-white hover:bg-sky-50 text-sky-700 border border-slate-200 rounded cursor-pointer"
+                                >
+                                  {ph}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                         </div>
 
                         {/* 3. Panduan Placeholder & Penjelasan Fungsi */}
@@ -2052,11 +2544,28 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
                             <div className="p-4 space-y-3 text-xs leading-relaxed bg-[#f0f2f5]/40">
                               <div className="whitespace-pre-wrap font-sans text-slate-800 bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
                                 {carouselOutputText
+                                  .replace(/\{storeName\}|\{namaStore\}/gi, storeInfo.storeName || 'Wanzt Store')
+                                  .replace(/\{ownerName\}|\{namaOwner\}/gi, storeInfo.ownerName || 'Wanzt')
+                                  .replace(/\{webLink\}|\{linkWebsite\}/gi, storeInfo.webLink || 'wanztstore.web.id')
+                                  .replace(/\{adminNumber\}|\{nomerAdmin\}/gi, storeInfo.adminNumber || '08123456789')
+                                  .replace(/\{ownerNumber\}|\{nomerOwner\}/gi, storeInfo.ownerNumber || '082173515807')
                                   .replace(/\{produkName\}|\{productName\}/gi, 'YouTube')
                                   .replace(/\{category\}|\{kategori\}/gi, 'Streaming')
                                   .replace(/\{varian\}|\{variant\}/gi, 'YouTube Famplan Email Buyer 1 Bulan')
                                   .replace(/\{price\}|\{harga\}/gi, 'Rp22.000')
                                   .replace(/\{stock\}|\{stok\}/gi, '21')}
+                              </div>
+
+                              {/* Footer Kartu Carousel di WhatsApp */}
+                              <div className="text-[10px] text-slate-500 font-medium text-left px-1">
+                                {carouselFooterText
+                                  .replace(/\{storeName\}|\{namaStore\}/gi, storeInfo.storeName || 'Wanzt Store')
+                                  .replace(/\{ownerName\}|\{namaOwner\}/gi, storeInfo.ownerName || 'Wanzt')
+                                  .replace(/\{webLink\}|\{linkWebsite\}/gi, storeInfo.webLink || 'wanztstore.web.id')
+                                  .replace(/\{adminNumber\}|\{nomerAdmin\}/gi, storeInfo.adminNumber || '08123456789')
+                                  .replace(/\{ownerNumber\}|\{nomerOwner\}/gi, storeInfo.ownerNumber || '082173515807')
+                                  .replace(/\{produkName\}/gi, 'YouTube')
+                                  .replace(/\{category\}/gi, 'Streaming') || 'Wanzt Store Official'}
                               </div>
 
                               {/* Interactive Action Buttons */}
@@ -2078,18 +2587,12 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
                             type="button"
                             disabled={isSavingConfig}
                             onClick={() => {
-                              syncConfigToServer(
-                                menuOutputText,
-                                menuButtons,
-                                listOutputText,
-                                includeMedia,
-                                selectedPicture,
-                                xavieraApiKey,
-                                xavieraBaseUrl,
+                              syncConfigToServer({
                                 carouselOutputText,
-                                carouselPicture
-                              );
-                              showToast('Pengaturan Carousel berhasil disimpan!');
+                                carouselFooterText,
+                                carouselPicture,
+                              });
+                              showToast('Pengaturan Carousel & Footer berhasil disimpan ke database/command_carousel.json!');
                             }}
                             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-sm transition disabled:opacity-50 cursor-pointer"
                           >
@@ -2209,9 +2712,15 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
                                   <tr>
                                     <td colSpan={5} className="py-12 text-center text-slate-500 space-y-1">
                                       <Package className="w-8 h-8 mx-auto text-slate-400" />
-                                      <div className="font-medium text-slate-700">Tidak ada produk ditemukan</div>
-                                      <div className="text-[11px] text-slate-400">
-                                        Coba ubah kata kunci pencarian atau ganti filter kategori.
+                                      <div className="font-medium text-slate-700">
+                                        {productsList.length === 0
+                                          ? 'Katalog Produk Kosong'
+                                          : 'Tidak ada produk ditemukan'}
+                                      </div>
+                                      <div className="text-[11px] text-slate-400 max-w-sm mx-auto">
+                                        {productsList.length === 0
+                                          ? 'Data produk murni diambil dari API Xaviera. API Key belum diisi atau tidak valid di tab Connection.'
+                                          : 'Coba ubah kata kunci pencarian atau ganti filter kategori.'}
                                       </div>
                                     </td>
                                   </tr>
@@ -2475,9 +2984,15 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
                                   <tr>
                                     <td colSpan={5} className="py-12 text-center text-slate-500 space-y-1">
                                       <Share2 className="w-8 h-8 mx-auto text-slate-400" />
-                                      <div className="font-medium text-slate-700">Tidak ada layanan SSM ditemukan</div>
-                                      <div className="text-[11px] text-slate-400">
-                                        Coba ubah kata kunci pencarian atau ganti filter kategori SSM.
+                                      <div className="font-medium text-slate-700">
+                                        {smmList.length === 0
+                                          ? 'Layanan SSM Kosong'
+                                          : 'Tidak ada layanan SSM ditemukan'}
+                                      </div>
+                                      <div className="text-[11px] text-slate-400 max-w-sm mx-auto">
+                                        {smmList.length === 0
+                                          ? 'Data layanan SSM murni diambil dari API Xaviera. API Key belum diisi atau tidak valid di tab Connection.'
+                                          : 'Coba ubah kata kunci pencarian atau ganti filter kategori SSM.'}
                                       </div>
                                     </td>
                                   </tr>
@@ -2806,9 +3321,15 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
                                   <tr>
                                     <td colSpan={5} className="py-12 text-center text-slate-500 space-y-1">
                                       <Gamepad2 className="w-8 h-8 mx-auto text-slate-400" />
-                                      <div className="font-medium text-slate-700">Tidak ada paket Top Up ditemukan</div>
-                                      <div className="text-[11px] text-slate-400">
-                                        Coba ubah kata kunci pencarian atau ganti filter kategori game.
+                                      <div className="font-medium text-slate-700">
+                                        {topUpList.length === 0
+                                          ? 'Daftar Top Up Game Kosong'
+                                          : 'Tidak ada paket Top Up ditemukan'}
+                                      </div>
+                                      <div className="text-[11px] text-slate-400 max-w-sm mx-auto">
+                                        {topUpList.length === 0
+                                          ? 'Data game dan voucher murni diambil dari API Xaviera. API Key belum diisi atau tidak valid di tab Connection.'
+                                          : 'Coba ubah kata kunci pencarian atau ganti filter kategori game.'}
                                       </div>
                                     </td>
                                   </tr>
@@ -3187,6 +3708,302 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
                       </div>
                     </div>
                   </div>
+                ) : selectedTab === 'Grup' || selectedTab === 'tab04' ? (
+                  <div className="space-y-5">
+                    {/* Header Tab Grup */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-sky-50 border border-sky-200 text-sky-600 flex items-center justify-center">
+                            <Users className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                              Daftar Grup WhatsApp (Whitelist)
+                              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">
+                                Whitelist System
+                              </span>
+                            </h3>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              Kelola whitelist grup: Aktifkan toggle agar bot merespon di grup tersebut. Jika toggle nonaktif, bot tidak akan merespon command apapun di grup tersebut.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Header Actions */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={fetchGroups}
+                          disabled={isLoadingGroups}
+                          className="px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg shadow-2xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-60"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 text-slate-500 ${isLoadingGroups ? 'animate-spin text-sky-600' : ''}`} />
+                          <span>{isLoadingGroups ? 'Memuat...' : 'Muat Ulang'}</span>
+                        </button>
+
+                        <div className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border bg-slate-50 text-slate-600 border-slate-200">
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              botData.status === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                            }`}
+                          ></span>
+                          <span className="text-[11px] font-mono">
+                            {botData.status === 'connected' ? 'Bot Terhubung' : 'Bot Offline'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Warning jika bot belum terhubung */}
+                    {botData.status !== 'connected' && (
+                      <div className="bg-amber-50 border border-amber-200/80 rounded-xl p-3.5 flex items-start gap-3">
+                        <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                        <div className="flex-1 text-xs text-amber-800">
+                          <span className="font-semibold block mb-0.5">Bot WhatsApp Belum Terhubung</span>
+                          Untuk mengambil daftar grup secara langsung, pastikan nomor bot telah terhubung ke WhatsApp menggunakan kode pairing di panel atas.
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Toolbar Pencarian & Ringkasan */}
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-50/70 p-3 rounded-xl border border-slate-200">
+                      {/* Input Search */}
+                      <div className="relative flex-1 max-w-md">
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={groupSearchQuery}
+                          onChange={(e) => setGroupSearchQuery(e.target.value)}
+                          placeholder="Cari berdasarkan nama grup atau ID grup..."
+                          className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 transition shadow-2xs"
+                        />
+                        {groupSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setGroupSearchQuery('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Stat Badges */}
+                      <div className="flex items-center gap-2 text-[11px] font-mono flex-wrap">
+                        <span className="px-2.5 py-1 rounded-md bg-white border border-slate-200 text-slate-600 font-semibold shadow-2xs">
+                          Total: <strong className="text-slate-900 font-bold">{groups.length}</strong> Grup
+                        </span>
+                        <span className="px-2.5 py-1 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-700 font-semibold">
+                          Aktif: <strong className="font-bold">{groups.filter((g) => g.enabled).length}</strong>
+                        </span>
+                        <span className="px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200 text-slate-600">
+                          Nonaktif: <strong className="font-bold">{groups.filter((g) => !g.enabled).length}</strong>
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Error Banner jika gagal fetch */}
+                    {groupsError && (
+                      <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 flex items-start gap-3">
+                        <AlertCircle className="w-4 h-4 text-rose-600 mt-0.5 shrink-0" />
+                        <div className="flex-1 text-xs text-rose-800">
+                          <span className="font-semibold block mb-0.5">Gagal Memuat Grup</span>
+                          {groupsError}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={fetchGroups}
+                          className="text-xs font-semibold text-rose-700 hover:text-rose-900 underline cursor-pointer"
+                        >
+                          Coba Lagi
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Loading State */}
+                    {isLoadingGroups ? (
+                      <div className="py-12 text-center space-y-3 bg-white border border-slate-200 rounded-xl">
+                        <RefreshCw className="w-7 h-7 text-sky-600 animate-spin mx-auto" />
+                        <div className="space-y-1">
+                          <h4 className="text-sm font-semibold text-slate-800">
+                            Mengambil Seluruh Grup WhatsApp...
+                          </h4>
+                          <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                            Menghubungkan ke soket WhatsApp untuk mendata nama, jumlah anggota, dan ID grup.
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Tabel Grup */
+                      <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
+                                <th className="px-4 py-3 text-center w-28">Toggle Status</th>
+                                <th className="px-4 py-3 min-w-[200px]">Nama Grup</th>
+                                <th className="px-4 py-3 w-36">Jumlah Anggota</th>
+                                <th className="px-4 py-3 min-w-[240px]">ID Grup (JID)</th>
+                                <th className="px-4 py-3 w-32 text-right">Aksi</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {(() => {
+                                const q = groupSearchQuery.trim().toLowerCase();
+                                const filtered = groups.filter(
+                                  (g) =>
+                                    !q ||
+                                    g.subject.toLowerCase().includes(q) ||
+                                    g.id.toLowerCase().includes(q)
+                                );
+
+                                if (filtered.length === 0) {
+                                  return (
+                                    <tr>
+                                      <td colSpan={5} className="py-10 text-center text-slate-500">
+                                        <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center mb-2">
+                                          <Users className="w-5 h-5" />
+                                        </div>
+                                        <p className="font-semibold text-slate-700 text-xs">
+                                          {groupSearchQuery
+                                            ? 'Tidak ada grup yang sesuai dengan pencarian.'
+                                            : 'Belum ada grup yang diikuti oleh nomor bot.'}
+                                        </p>
+                                        <p className="text-[11px] text-slate-400 mt-0.5">
+                                          {groupSearchQuery
+                                            ? 'Coba gunakan kata kunci pencarian yang lain.'
+                                            : 'Gabungkan bot ke grup WhatsApp, lalu klik tombol "Muat Ulang".'}
+                                        </p>
+                                      </td>
+                                    </tr>
+                                  );
+                                }
+
+                                return filtered.map((grp) => {
+                                  const isToggling = togglingGroupId === grp.id;
+                                  const isCopied = copiedGroupId === grp.id;
+
+                                  return (
+                                    <tr
+                                      key={grp.id}
+                                      className={`transition-colors hover:bg-slate-50/70 ${
+                                        grp.enabled ? 'bg-sky-50/20' : ''
+                                      }`}
+                                    >
+                                      {/* Kolom 1: Toggle Switch */}
+                                      <td className="px-4 py-3 text-center align-middle">
+                                        <div className="flex flex-col items-center justify-center gap-1">
+                                          <button
+                                            type="button"
+                                            role="switch"
+                                            aria-checked={grp.enabled}
+                                            disabled={isToggling}
+                                            onClick={() => handleToggleGroup(grp.id, grp.enabled)}
+                                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-sky-600/30 ${
+                                              grp.enabled ? 'bg-emerald-500' : 'bg-slate-300'
+                                            } ${isToggling ? 'opacity-60 cursor-wait' : ''}`}
+                                          >
+                                            <span
+                                              aria-hidden="true"
+                                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                                                grp.enabled ? 'translate-x-5' : 'translate-x-0'
+                                              }`}
+                                            />
+                                          </button>
+                                          <span
+                                            className={`text-[10px] font-mono font-semibold ${
+                                              grp.enabled ? 'text-emerald-700' : 'text-slate-400'
+                                            }`}
+                                          >
+                                            {grp.enabled ? 'Aktif' : 'Nonaktif'}
+                                          </span>
+                                        </div>
+                                      </td>
+
+                                      {/* Kolom 2: Nama Grup */}
+                                      <td className="px-4 py-3 align-middle">
+                                        <div className="flex items-center gap-3">
+                                          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-sky-500 to-indigo-600 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                                            {grp.subject ? grp.subject.substring(0, 2).toUpperCase() : 'GP'}
+                                          </div>
+                                          <div className="min-w-0">
+                                            <span className="font-semibold text-slate-900 block truncate text-xs">
+                                              {grp.subject || 'Tanpa Nama Grup'}
+                                            </span>
+                                            {grp.desc ? (
+                                              <span className="text-[11px] text-slate-500 truncate block max-w-xs mt-0.5">
+                                                {grp.desc}
+                                              </span>
+                                            ) : (
+                                              <span className="text-[11px] text-slate-400 italic block mt-0.5">
+                                                Grup WhatsApp Aktif
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </td>
+
+                                      {/* Kolom 3: Jumlah Anggota */}
+                                      <td className="px-4 py-3 align-middle">
+                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md font-mono font-semibold text-xs bg-slate-100 text-slate-700 border border-slate-200">
+                                          <Users className="w-3.5 h-3.5 text-slate-500" />
+                                          <span>{grp.memberCount} Anggota</span>
+                                        </span>
+                                      </td>
+
+                                      {/* Kolom 4: ID Grup (JID) */}
+                                      <td className="px-4 py-3 align-middle">
+                                        <div className="flex items-center gap-1.5">
+                                          <code className="text-[11px] font-mono text-slate-700 bg-slate-50 px-2 py-1 rounded border border-slate-200 select-all truncate max-w-xs block">
+                                            {grp.id}
+                                          </code>
+                                          <button
+                                            type="button"
+                                            title="Salin ID Grup"
+                                            onClick={() => copyGroupIdToClipboard(grp.id)}
+                                            className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                                          >
+                                            {isCopied ? (
+                                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                            ) : (
+                                              <Copy className="w-3.5 h-3.5" />
+                                            )}
+                                          </button>
+                                        </div>
+                                      </td>
+
+                                      {/* Kolom 5: Aksi / Salin */}
+                                      <td className="px-4 py-3 text-right align-middle">
+                                        <button
+                                          type="button"
+                                          onClick={() => copyGroupIdToClipboard(grp.id)}
+                                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition cursor-pointer"
+                                        >
+                                          {isCopied ? (
+                                            <>
+                                              <Check className="w-3 h-3 text-emerald-600" />
+                                              <span className="text-emerald-700">Tersalin</span>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <Copy className="w-3 h-3 text-slate-500" />
+                                              <span>Salin ID</span>
+                                            </>
+                                          )}
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  );
+                                });
+                              })()}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <div className="py-8 px-4 text-center space-y-2">
                     <div className="w-10 h-10 rounded-lg bg-slate-100 border border-slate-200 text-slate-500 mx-auto flex items-center justify-center font-mono font-bold text-xs">
@@ -3282,6 +4099,7 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
 
               {/* Field 3: Output Dinamis Berdasarkan Tipe */}
               <div className="space-y-3 pt-1 border-t border-slate-100">
+
                 {modalBtnType === 'quick_reply' && (
                   <div className="space-y-3">
                     {/* Dropdown Pemicu Command / Unknown */}
@@ -3316,14 +4134,28 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
 
                     {/* Output Pesan Balasan */}
                     <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                        Output Pesan Balasan
-                      </label>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-xs font-semibold text-slate-700">
+                          Output Pesan Balasan
+                        </label>
+                        <div className="flex items-center gap-1">
+                          {['{storeName}', '{ownerName}'].map((ph) => (
+                            <button
+                              key={ph}
+                              type="button"
+                              onClick={() => setQuickReplyOutput((prev) => `${prev} ${ph}`.trim())}
+                              className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 cursor-pointer"
+                            >
+                              + {ph}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                       <input
                         type="text"
                         value={quickReplyOutput}
                         onChange={(e) => setQuickReplyOutput(e.target.value)}
-                        placeholder={quickReplyAction === 'list' ? '.list' : 'Contoh: .katalog atau Saya ingin memesan'}
+                        placeholder={quickReplyAction === 'list' ? '.list' : 'Contoh: .katalog atau Saya ingin memesan di {storeName}'}
                         className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 transition shadow-2xs"
                       />
                       <p className="text-[11px] text-slate-500 mt-1">
@@ -3335,32 +4167,60 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
 
                 {modalBtnType === 'cta_url' && (
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                      Output Tautan URL (Wajib diawali https://)
-                    </label>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-semibold text-slate-700">
+                        Output Tautan URL (Dapat berupa https:// atau placeholder)
+                      </label>
+                      <div className="flex items-center gap-1">
+                        {['{webLink}', '{waLink}'].map((ph) => (
+                          <button
+                            key={ph}
+                            type="button"
+                            onClick={() => setUrlOutput(ph)}
+                            className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 cursor-pointer"
+                          >
+                            Set {ph}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <input
-                      type="url"
+                      type="text"
                       value={urlOutput}
                       onChange={(e) => setUrlOutput(e.target.value)}
-                      placeholder="https://wanztstore.web.id"
+                      placeholder="{webLink} atau https://wanztstore.web.id"
                       className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 transition shadow-2xs"
                     />
                     <p className="text-[11px] text-slate-500 mt-1">
-                      URL website yang akan terbuka di browser saat tombol ditekan (harus diawali https://).
+                      URL website yang akan terbuka di browser. Gunakan <code className="text-sky-700 bg-sky-50 px-1 rounded">{'{webLink}'}</code> atau URL lengkap diawali https://.
                     </p>
                   </div>
                 )}
 
                 {modalBtnType === 'cta_copy' && (
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                      Output Teks yang Disalin
-                    </label>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-semibold text-slate-700">
+                        Output Teks yang Disalin
+                      </label>
+                      <div className="flex items-center gap-1">
+                        {['{adminNumber}', '{ownerNumber}', '{webLink}'].map((ph) => (
+                          <button
+                            key={ph}
+                            type="button"
+                            onClick={() => setCopyOutput((prev) => (prev ? `${prev} ${ph}` : ph))}
+                            className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 cursor-pointer"
+                          >
+                            + {ph}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <input
                       type="text"
                       value={copyOutput}
                       onChange={(e) => setCopyOutput(e.target.value)}
-                      placeholder="Contoh: 085712439395 atau KODE-PROMO-123"
+                      placeholder="Contoh: {adminNumber} atau 085712439395"
                       className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 transition shadow-2xs"
                     />
                     <p className="text-[11px] text-slate-500 mt-1">
@@ -3372,30 +4232,58 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
                 {(modalBtnType === 'vcard' || modalBtnType === 'cta_call') && (
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                        1. Nama Kontak (Misal: Admin Store atau Owner)
-                      </label>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-xs font-semibold text-slate-700">
+                          1. Nama Kontak (Misal: Admin Store, Owner, atau {'{adminName}'})
+                        </label>
+                        <div className="flex items-center gap-1">
+                          {['{adminName}', '{ownerName}', '{storeName}'].map((ph) => (
+                            <button
+                              key={ph}
+                              type="button"
+                              onClick={() => setCallTarget(ph)}
+                              className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 cursor-pointer"
+                            >
+                              Set {ph}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                       <input
                         type="text"
                         value={callTarget}
                         onChange={(e) => setCallTarget(e.target.value)}
-                        placeholder="Contoh: Admin Toko atau Owner"
+                        placeholder="Contoh: {adminName} atau Admin Toko"
                         className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 transition shadow-2xs"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                        2. Nomor WhatsApp Kontak
-                      </label>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-xs font-semibold text-slate-700">
+                          2. Nomor WhatsApp Kontak (Misal: 628... atau {'{ownerNumber}'})
+                        </label>
+                        <div className="flex items-center gap-1">
+                          {['{ownerNumber}', '{adminNumber}'].map((ph) => (
+                            <button
+                              key={ph}
+                              type="button"
+                              onClick={() => setCallPhone(ph)}
+                              className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 cursor-pointer"
+                            >
+                              Set {ph}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                       <input
-                        type="tel"
+                        type="text"
                         value={callPhone}
                         onChange={(e) => setCallPhone(e.target.value)}
-                        placeholder="Contoh: 6285712439395"
+                        placeholder="Contoh: {ownerNumber} atau 6282173515807"
                         className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 transition shadow-2xs"
                       />
                       <p className="text-[11px] text-slate-500 mt-1">
-                        Saat tombol ini ditekan di WhatsApp, bot akan otomatis mengirimkan kartu kontak (vCard) nomor ini ke chat.
+                        Saat tombol ini ditekan di WhatsApp, bot akan otomatis mengirimkan kartu kontak (vCard) nomor ini. Anda dapat memasukkan placeholder <code className="text-sky-700 font-mono">{'{ownerNumber}'}</code> atau <code className="text-sky-700 font-mono">{'{adminNumber}'}</code>.
                       </p>
                     </div>
                   </div>

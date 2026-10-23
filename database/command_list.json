@@ -1,0 +1,4 @@
+{
+  "listOutputText": "Halo kak! Berikut daftar produk aplikasi yang tersedia di {storeName}:\n\n{daftarProduk}\n\nKetik nama produk yang ingin Anda pesan.",
+  "listFooterText": "{webLink} • Pilih Produk"
+}

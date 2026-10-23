@@ -49,13 +49,52 @@ export interface ProductVariantItem {
   category: string;
 }
 
-export interface CommandsConfig {
+export interface StoreInfoConfig {
+  storeName: string;
+  ownerName: string;
+  ownerNumber: string;
+  adminName?: string;
+  adminNumber?: string;
+  webLink?: string;
+  telegramBot?: string;
+  waLink?: string;
+}
+
+export interface MenuCommandConfig {
   menuOutputText: string;
+  menuFooterText: string;
+  menuButtons: WhatsAppButton[];
+  includeMedia: boolean;
+  selectedPicture: string;
+}
+
+export interface ListCommandConfig {
+  listOutputText: string;
+  listFooterText: string;
+}
+
+export interface CarouselCommandConfig {
+  carouselOutputText: string;
+  carouselFooterText: string;
+  carouselPicture: string;
+}
+
+export interface ApiConfig {
+  xavieraApiKey: string;
+  xavieraBaseUrl: string;
+}
+
+export interface CommandsConfig {
+  storeInfo: StoreInfoConfig;
+  menuOutputText: string;
+  menuFooterText?: string;
   menuButtons: WhatsAppButton[];
   includeMedia?: boolean;
   selectedPicture?: string;
   listOutputText: string;
+  listFooterText?: string;
   carouselOutputText?: string;
+  carouselFooterText?: string;
   carouselPicture?: string;
   xavieraApiKey?: string;
   xavieraBaseUrl?: string;

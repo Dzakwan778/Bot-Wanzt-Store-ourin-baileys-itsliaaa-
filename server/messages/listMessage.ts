@@ -1,5 +1,6 @@
 import { CommandsConfig } from '../types/bot.types.js';
 import { generateDaftarProdukText, getSingleSelectSections } from '../services/xavieraService.js';
+import { resolvePlaceholders } from '../services/placeholderHelper.js';
 
 export async function sendListInteractiveMessage(
   sock: any,
@@ -15,24 +16,34 @@ export async function sendListInteractiveMessage(
 
   // Siapkan teks respon lengkap dengan seluruh daftar produk
   const daftarProdukText = await generateDaftarProdukText(config);
-  let responseText = config.listOutputText?.trim() || '';
 
-  if (responseText.includes('{daftarProduk}')) {
-    responseText = responseText.replace(/\{daftarProduk\}/g, daftarProdukText);
-  } else if (responseText) {
-    responseText = `${responseText}\n\n${daftarProdukText}\n\nKetik nama produk yang ingin Anda pesan.`;
-  } else {
-    responseText = `Halo kak! Berikut daftar produk aplikasi yang tersedia di wanztstore.web.id:\n\n${daftarProdukText}\n\nKetik nama produk yang ingin Anda pesan.`;
+  // Jika daftar produk kosong dari API, kirim pesan informasi jujur dan jangan kirim katalog palsu
+  if (!daftarProdukText && sectionsData.length === 0) {
+    const emptyMsg = `Halo kak! Saat ini katalog produk belum tersedia atau sedang dalam pembaruan dari server pusat. Silakan hubungi admin kami untuk informasi produk dan stok.`;
+    await sock.sendMessage(remoteJid, { text: emptyMsg }, quotedMsg ? { quoted: quotedMsg } : undefined);
+    if (addLog) {
+      addLog('warning', `⚠️ Daftar produk kosong dari API Xaviera (API Key tidak valid / belum ada produk). Pesan pemberitahuan terkirim ke ${remoteJid}.`);
+    }
+    return;
   }
 
+  let rawResponseText = config.listOutputText?.trim() || '';
+
+  if (rawResponseText.includes('{daftarProduk}')) {
+    rawResponseText = rawResponseText.replace(/\{daftarProduk\}/g, daftarProdukText);
+  } else if (rawResponseText) {
+    rawResponseText = `${rawResponseText}\n\n${daftarProdukText}\n\nKetik nama produk yang ingin Anda pesan.`;
+  } else {
+    rawResponseText = `Halo kak! Berikut daftar produk aplikasi yang tersedia di {storeName}:\n\n${daftarProdukText}\n\nKetik nama produk yang ingin Anda pesan.`;
+  }
+
+  // Terapkan seluruh placeholder dinamis ({storeName}, {ownerName}, {webLink}, dll.)
+  const responseText = resolvePlaceholders(rawResponseText, config);
+  const rawFooter = config.listFooterText || '{webLink} • Pilih Produk';
+  const footerText = resolvePlaceholders(rawFooter, config);
+  const titleText = resolvePlaceholders('{storeName} - Katalog Produk', config);
+
   try {
-    // Gunakan protokol resmi ListMessage bawaan WhatsApp untuk SEMUA jenis obrolan (Private Chat maupun Group Chat).
-    // Protokol ini memastikan bahwa saat pengguna memilih opsi produk (seperti 'YouTube'),
-    // balasan otomatis dikirim oleh WhatsApp sebagai 'listResponseMessage' resmi:
-    // YouTube
-    // Tampilkan varian YouTube
-    // sehingga dapat dirender secara normal dan sempurna dari SEMUA POV (pengirim, penerima, dan seluruh anggota grup)
-    // tanpa ada pesan "unsupported" sama sekali!
     const mappedSections = sectionsData.map((sec) => ({
       title: sec.title,
       rows: sec.rows.map((row) => ({
@@ -46,8 +57,8 @@ export async function sendListInteractiveMessage(
       remoteJid,
       {
         text: responseText,
-        title: 'Wanzt Store - Katalog Produk',
-        footer: 'wanztstore.web.id • Pilih Produk',
+        title: titleText,
+        footer: footerText,
         buttonText: '📋 Pilih Produk',
         sections: mappedSections,
       },

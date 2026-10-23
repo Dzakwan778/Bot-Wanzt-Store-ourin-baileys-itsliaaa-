@@ -6,6 +6,8 @@ import { sendListInteractiveMessage } from '../messages/listMessage.js';
 import { sendProductVariantsCarousel } from '../messages/carouselMessage.js';
 import { sendAdminContactMessage } from '../messages/adminContactMessage.js';
 import { isKnownProduct } from '../services/xavieraService.js';
+import { resolvePlaceholders } from '../services/placeholderHelper.js';
+import { loadGroupsConfig } from '../services/groupService.js';
 
 export interface DispatcherDeps {
   addLog: (type: 'info' | 'success' | 'warning' | 'error' | 'code', msg: string) => void;
@@ -79,6 +81,17 @@ export async function dispatchIncomingMessages(
     }
     remoteJid = deps.resolveTargetJid(remoteJid);
 
+    // Sistem Whitelist Grup: Jika pesan berasal dari grup WhatsApp (@g.us),
+    // periksa apakah grup ini aktif di toggle whitelist database/groups_config.json
+    const isGroup = remoteJid.endsWith('@g.us');
+    if (isGroup) {
+      const toggledGroups = loadGroupsConfig();
+      const isWhitelisted = Boolean(toggledGroups[remoteJid]);
+      if (!isWhitelisted) {
+        // Grup tidak di-whitelist / toggle nonaktif: abaikan seluruh command/pesan tanpa respon
+        continue;
+      }
+    }
 
     // Deteksi apakah pesan berasal dari klik tombol interaktif (Quick Reply / Native Flow / Template / List)
     let isInteractiveButtonResponse = false;
@@ -299,14 +312,19 @@ export async function dispatchIncomingMessages(
       if (matchedButton) {
         // A. Tombol bertipe vcard / cta_call: Kirim vCard Kontak
         if (matchedButton.type === 'vcard' || matchedButton.type === 'cta_call') {
-          const targetName = matchedButton.callTargetName || 'Admin Wanzt Store';
-          const cleanNum = (matchedButton.callPhoneNumber || matchedButton.output || '6283861276608').replace(/[^0-9]/g, '');
-          deps.addLog('info', `📇 Tombol "${matchedButton.name}" (vCard) ditekan oleh ${senderName}. Mengirim kartu kontak...`);
+          const rawTargetName = matchedButton.callTargetName || '{adminName}';
+          const targetName = resolvePlaceholders(rawTargetName, config) || config.storeInfo?.adminName || 'Admin Store';
+          const rawPhone = matchedButton.callPhoneNumber || matchedButton.output || '{adminNumber}';
+          const resolvedPhone = resolvePlaceholders(rawPhone, config);
+          const cleanNum = resolvedPhone.replace(/[^0-9]/g, '') || (config.storeInfo?.adminNumber || config.storeInfo?.ownerNumber || '6282173515807').replace(/[^0-9]/g, '');
+          const orgName = resolvePlaceholders('{storeName}', config) || 'Wanzt Store';
+
+          deps.addLog('info', `📇 Tombol "${matchedButton.name}" (vCard) ditekan oleh ${senderName}. Mengirim kartu kontak ${targetName} (${cleanNum})...`);
           const vcard =
             'BEGIN:VCARD\n' +
             'VERSION:3.0\n' +
             `FN:${targetName}\n` +
-            `ORG:Wanzt Store;\n` +
+            `ORG:${orgName};\n` +
             `TEL;type=CELL;type=VOICE;waid=${cleanNum}:+${cleanNum}\n` +
             'END:VCARD';
 
@@ -376,7 +394,7 @@ export async function dispatchIncomingMessages(
       }
       if (['contact', 'admin', 'kontak', 'owner'].includes(cleanCmd)) {
         deps.addLog('info', `🔘 Tombol Quick Reply "${cleanBtn}" ditekan oleh ${senderName}. Mengirim Kontak Admin!`);
-        await sendAdminContactMessage(sock, remoteJid, m, deps.addLog);
+        await sendAdminContactMessage(sock, config, remoteJid, m, deps.addLog);
         continue;
       }
 
@@ -427,22 +445,23 @@ export async function dispatchIncomingMessages(
     // C. Command 'admin' / 'contact'
     if (['admin', 'contact', 'kontak', 'owner'].includes(commandName)) {
       deps.addLog('info', `📞 Menerima command ${usedPrefix}${commandName} dari ${senderName}`);
-      await sendAdminContactMessage(sock, remoteJid, m, deps.addLog);
+      await sendAdminContactMessage(sock, config, remoteJid, m, deps.addLog);
       continue;
     }
 
     // D. Command 'order'
     if (commandName.startsWith('order')) {
       const variantChoice = commandArg || 'Produk Pilihan';
+      const storeTitle = resolvePlaceholders('{storeName}', config) || 'Wanzt Store';
       deps.addLog('info', `🛒 Pelanggan ${senderName} mengetik command ORDER: "${variantChoice}"`);
       await sock.sendMessage(
         remoteJid,
         {
-          text: `Halo kak *${senderName}*! 👋\n\nPilihan pesanan kamu untuk *${variantChoice}* telah kami terima.\n\nSilakan konfirmasi ke Admin Wanzt Store melalui kontak di bawah ini:`,
+          text: `Halo kak *${senderName}*! 👋\n\nPilihan pesanan kamu untuk *${variantChoice}* telah kami terima.\n\nSilakan konfirmasi ke Admin ${storeTitle} melalui kontak di bawah ini:`,
         },
         { quoted: m }
       );
-      await sendAdminContactMessage(sock, remoteJid, m, deps.addLog);
+      await sendAdminContactMessage(sock, config, remoteJid, m, deps.addLog);
       continue;
     }
 

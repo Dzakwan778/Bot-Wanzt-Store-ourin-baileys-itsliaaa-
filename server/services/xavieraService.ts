@@ -382,16 +382,9 @@ export async function generateDaftarProdukText(config: CommandsConfig): Promise<
   const apiKey = config.xavieraApiKey?.trim();
   const baseUrl = (config.xavieraBaseUrl?.trim() || 'https://xavierastore.com/api/v1').replace(/\/+$/, '');
 
-  const formatDefault = () => {
-    let globalCounter = 1;
-    return DEFAULT_CATALOG.map((group) => {
-      const list = group.items.map((item) => `• ${globalCounter++}. ${item}`).join('\n');
-      return `*${group.kategori}:*\n${list}`;
-    }).join('\n\n');
-  };
-
+  // Jika API Key kosong / tidak ada, kosongkan daftar produk (tidak menggunakan data cadangan lokal)
   if (!apiKey) {
-    return formatDefault();
+    return '';
   }
 
   try {
@@ -404,14 +397,14 @@ export async function generateDaftarProdukText(config: CommandsConfig): Promise<
     });
 
     if (!response.ok) {
-      return formatDefault();
+      return '';
     }
 
     const json = await response.json();
     const rawProducts = json.products || json.data || [];
 
     if (!Array.isArray(rawProducts) || rawProducts.length === 0) {
-      return formatDefault();
+      return '';
     }
 
     const groups: Record<string, string[]> = {};
@@ -456,9 +449,9 @@ export async function generateDaftarProdukText(config: CommandsConfig): Promise<
       sections.push(`*${cat}:*\n${listText}`);
     }
 
-    return sections.length > 0 ? sections.join('\n\n') : formatDefault();
+    return sections.length > 0 ? sections.join('\n\n') : '';
   } catch {
-    return formatDefault();
+    return '';
   }
 }
 
@@ -480,20 +473,8 @@ export async function getSingleSelectSections(config: CommandsConfig): Promise<S
   const apiKey = config.xavieraApiKey?.trim();
   const baseUrl = (config.xavieraBaseUrl?.trim() || 'https://xavierastore.com/api/v1').replace(/\/+$/, '');
 
-  const formatDefaultSections = (): SingleSelectSection[] => {
-    return DEFAULT_CATALOG.map((group) => ({
-      title: group.kategori,
-      rows: group.items.map((item) => ({
-        title: item,
-        description: `Tampilkan varian *${item}*`,
-        id: `prod_select:${item}`,
-        rowId: `prod_select:${item}`,
-      })),
-    }));
-  };
-
   if (!apiKey) {
-    return formatDefaultSections();
+    return [];
   }
 
   try {
@@ -506,14 +487,14 @@ export async function getSingleSelectSections(config: CommandsConfig): Promise<S
     });
 
     if (!response.ok) {
-      return formatDefaultSections();
+      return [];
     }
 
     const json = await response.json();
     const rawProducts = json.products || json.data || [];
 
     if (!Array.isArray(rawProducts) || rawProducts.length === 0) {
-      return formatDefaultSections();
+      return [];
     }
 
     const groups: Record<string, Array<{ name: string; desc: string }>> = {};
@@ -566,9 +547,9 @@ export async function getSingleSelectSections(config: CommandsConfig): Promise<S
       });
     }
 
-    return sections.length > 0 ? sections : formatDefaultSections();
+    return sections;
   } catch {
-    return formatDefaultSections();
+    return [];
   }
 }
 
@@ -720,17 +701,7 @@ export async function getProductVariants(
     }
   }
 
-  // Cari di DEFAULT_VARIANTS_MAP
-  for (const [key, vars] of Object.entries(DEFAULT_VARIANTS_MAP)) {
-    if (resolvedSearch.includes(key) || key.includes(resolvedSearch)) {
-      return vars;
-    }
-  }
-
-  const titleCase = productName.charAt(0).toUpperCase() + productName.slice(1);
-  return [
-    { id: `${resolvedSearch}-1`, name: titleCase, variant: `${titleCase} Paket 1 Bulan`, stock: 10, price: 15000, category: 'Layanan' },
-    { id: `${resolvedSearch}-2`, name: titleCase, variant: `${titleCase} Paket 3 Bulan`, stock: 5, price: 35000, category: 'Layanan' },
-  ];
+  // Jika produk tidak ditemukan di API Xaviera atau API Key tidak valid, kosongkan varian (tidak menggunakan cadangan lokal)
+  return [];
 }
 

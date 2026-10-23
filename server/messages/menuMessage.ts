@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { CommandsConfig } from '../types/bot.types.js';
+import { resolvePlaceholders } from '../services/placeholderHelper.js';
 
 export async function sendMenuInteractiveMessage(
   sock: any,
@@ -11,37 +12,59 @@ export async function sendMenuInteractiveMessage(
 ): Promise<void> {
   if (!sock) return;
 
-  const buttons: any[] = (config.menuButtons || []).map((btn) => {
+  const rawTitle = config.menuOutputText || 'Halo kak! Selamat datang di {storeName} ✨\n\nSilakan pilih layanan yang ingin Anda pesan melalui tombol interaktif di bawah ini:';
+  const rawFooter = config.menuFooterText || '{webLink} • Otomatis';
+
+  const titleText = resolvePlaceholders(rawTitle, config);
+  const footerText = resolvePlaceholders(rawFooter, config);
+
+  const nativeFlowButtons: any[] = (config.menuButtons || []).map((btn) => {
+    const btnDisplayName = resolvePlaceholders(btn.name, config);
+
     switch (btn.type) {
-      case 'cta_url':
+      case 'cta_url': {
+        const rawUrl = resolvePlaceholders(btn.output || '', config).trim();
+        const validUrl = rawUrl.startsWith('http') ? rawUrl : (rawUrl ? `https://${rawUrl}` : 'https://wanztstore.web.id');
         return {
-          name: 'cta_url',
-          paramsJson: JSON.stringify({
-            display_text: btn.name,
-            url: btn.output.startsWith('http') ? btn.output : `https://${btn.output}`,
-          }),
+          text: btnDisplayName || '🌐 Kunjungi Website',
+          url: validUrl,
         };
-      case 'cta_call':
+      }
+      case 'cta_call': {
+        const rawPhone = resolvePlaceholders(btn.callPhoneNumber || btn.output || '', config);
+        const cleanPhone = rawPhone.replace(/[^0-9]/g, '');
         return {
-          name: 'cta_call',
-          paramsJson: JSON.stringify({
-            display_text: btn.name,
-            phone_number: (btn.callPhoneNumber || btn.output || '').replace(/[^0-9]/g, ''),
-          }),
+          text: btnDisplayName || '📞 Telepon',
+          call: cleanPhone || '6282173515807',
         };
-      case 'vcard':
+      }
+      case 'cta_copy': {
+        const rawCopy = resolvePlaceholders(btn.output || '', config);
         return {
-          text: btn.name,
-          id: `vcard_${(btn.callPhoneNumber || btn.output || '').replace(/[^0-9]/g, '') || btn.id}`,
+          text: btnDisplayName || '📋 Salin',
+          copy: rawCopy || btnDisplayName,
         };
+      }
+      case 'vcard': {
+        const rawPhone = resolvePlaceholders(btn.callPhoneNumber || btn.output || '', config);
+        const cleanPhone = rawPhone.replace(/[^0-9]/g, '');
+        return {
+          text: btnDisplayName || '👤 Kontak Admin',
+          id: `vcard_${cleanPhone || btn.id}`,
+        };
+      }
       case 'quick_reply':
-      default:
+      default: {
+        const actionId = resolvePlaceholders(btn.output || btn.name || 'menu_item', config);
         return {
-          text: btn.name,
-          id: btn.output || btn.name || 'menu_item',
+          text: btnDisplayName || '👉 Klik Di Sini',
+          id: actionId,
         };
+      }
     }
   });
+
+  const buttons = nativeFlowButtons.length > 0 ? nativeFlowButtons : [{ text: '📑 List Produk', id: '.list' }];
 
   let imageInput: Buffer | undefined = undefined;
   if (config.includeMedia && config.selectedPicture) {
@@ -65,14 +88,11 @@ export async function sendMenuInteractiveMessage(
     }
   }
 
-  const titleText = config.menuOutputText || 'Halo! Berikut menu kami:';
-  const footerText = 'wanztstore.web.id • Otomatis';
-
   try {
     const payload: any = {
       text: titleText,
       footer: footerText,
-      buttons: buttons.length > 0 ? buttons : [{ text: '📑 List Produk', id: '.list' }],
+      nativeFlow: buttons,
     };
 
     if (imageInput) {

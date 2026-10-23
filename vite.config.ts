@@ -262,6 +262,12 @@ export default defineConfig(() => {
               return;
             }
 
+            if (req.method === 'GET' && req.url === '/api/bot/groups') {
+              const result = await botManager.getParticipatingGroups();
+              res.end(JSON.stringify(result));
+              return;
+            }
+
             if (req.method === 'POST') {
               let body = '';
               req.on('data', (chunk) => { body += chunk; });
@@ -290,6 +296,18 @@ export default defineConfig(() => {
                   if (req.url === '/api/bot/save-config') {
                     botManager.saveConfig(data);
                     res.end(JSON.stringify({ success: true, config: botManager.config }));
+                    return;
+                  }
+
+                  if (req.url === '/api/bot/groups/toggle') {
+                    const { groupId, enabled } = data;
+                    if (!groupId) {
+                      res.statusCode = 400;
+                      res.end(JSON.stringify({ error: 'groupId diperlukan' }));
+                      return;
+                    }
+                    const updatedToggles = botManager.setGroupToggle(groupId, Boolean(enabled));
+                    res.end(JSON.stringify({ success: true, groupId, enabled: Boolean(enabled), toggles: updatedToggles }));
                     return;
                   }
 
