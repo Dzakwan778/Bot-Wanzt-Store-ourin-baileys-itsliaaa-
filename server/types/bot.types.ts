@@ -1,4 +1,4 @@
-export const DEFAULT_CUSTOM_CODE = 'WANZTSTR';
+export const DEFAULT_CUSTOM_CODE = '';
 export const SESSION_DIR = 'session_ourin';
 export const CONFIG_FILE = 'commands_config.json';
 
@@ -30,12 +30,14 @@ export type WhatsAppButtonType =
   | 'cta_reminder'
   | 'cta_cancel_reminder';
 
+export type QuickReplyTriggerAction = 'list' | 'menu' | 'owner' | 'admin' | 'unknown';
+
 export interface WhatsAppButton {
   id: string;
   type: WhatsAppButtonType;
   name: string;
   output: string;
-  triggerAction?: 'list' | 'menu' | 'unknown';
+  triggerAction?: QuickReplyTriggerAction;
   callTargetName?: string;
   callPhoneNumber?: string;
 }
@@ -82,6 +84,9 @@ export interface CarouselCommandConfig {
 export interface ApiConfig {
   xavieraApiKey: string;
   xavieraBaseUrl: string;
+  lunasQrisApiKey?: string;
+  lunasQrisSecretKey?: string;
+  lunasQrisBaseUrl?: string;
 }
 
 export interface CommandsConfig {
@@ -98,4 +103,8 @@ export interface CommandsConfig {
   carouselPicture?: string;
   xavieraApiKey?: string;
   xavieraBaseUrl?: string;
+  lunasQrisApiKey?: string;
+  lunasQrisSecretKey?: string;
+  lunasQrisBaseUrl?: string;
 }
+

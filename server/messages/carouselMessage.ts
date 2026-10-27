@@ -92,12 +92,17 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
     const cat = (v.category || 'Streaming').trim();
     const pName = v.name || productName;
 
+    // Tambahkan keuntungan 10% dari harga asli supplier Xaviera
+    const rawPrice = Number(v.price) || 0;
+    const margin = Math.round(rawPrice * 0.1);
+    const sellingPrice = rawPrice + margin;
+
     const captionText = resolvePlaceholders(template, config, {
       name: pName,
       category: cat,
       variant: v.variant,
       stock: v.stock,
-      price: v.price,
+      price: sellingPrice,
     });
 
     const cardFooterText = resolvePlaceholders(
@@ -134,7 +139,7 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
             name: 'quick_reply',
             buttonParamsJson: JSON.stringify({
               display_text: '🛒 Order',
-              id: `order_${v.variant}`,
+              id: `order_var:${encodeURIComponent(pName)}|${encodeURIComponent(v.variant)}|${sellingPrice}`,
             }),
           },
           {

@@ -705,3 +705,43 @@ export async function getProductVariants(
   return [];
 }
 
+/**
+ * Cek apakah saldo akun utama di API Xaviera mencukupi sebelum memproses transaksi
+ */
+export async function checkXavieraBalance(
+  amountNeeded: number,
+  config: CommandsConfig
+): Promise<{ sufficient: boolean; currentBalance: number; error?: string }> {
+  const apiKey = config.xavieraApiKey?.trim();
+  const baseUrl = (config.xavieraBaseUrl?.trim() || 'https://xavierastore.com/api/v1').replace(/\/+$/, '');
+
+  if (!apiKey) {
+    return { sufficient: true, currentBalance: 0 };
+  }
+
+  try {
+    const res = await fetch(`${baseUrl}/me`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Accept': 'application/json',
+      },
+    });
+
+    if (res.ok) {
+      const json = await res.json();
+      const raw = json.data || json.user || json;
+      const bal = Number(raw.balance ?? raw.saldo ?? 0);
+      return {
+        sufficient: bal >= amountNeeded,
+        currentBalance: bal,
+      };
+    } else {
+      return { sufficient: true, currentBalance: 0, error: 'Gagal cek saldo Xaviera' };
+    }
+  } catch (err: any) {
+    return { sufficient: true, currentBalance: 0, error: err?.message };
+  }
+}
+
+

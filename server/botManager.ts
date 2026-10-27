@@ -157,9 +157,15 @@ class BotManager {
       throw new Error('Nomor telepon tidak valid (minimal 9 digit)');
     }
 
-    const codeToUse = (customCode || DEFAULT_CUSTOM_CODE).toUpperCase().trim();
+    const codeToUse = (customCode || '').toUpperCase().trim();
+    if (!codeToUse) {
+      throw new Error('Form pairing code belum diisi! Harap isi kolom kode pairing untuk melakukan koneksi.');
+    }
+    if (/[^A-Z0-9]/.test(codeToUse)) {
+      throw new Error('Custom pairing code tidak sesuai: dilarang menggunakan simbol atau spasi (hanya angka dan huruf saja).');
+    }
     if (codeToUse.length !== 8) {
-      throw new Error('Custom pairing code wajib tepat 8 karakter (contoh: WANZTSTR)');
+      throw new Error(`Custom pairing code tidak sesuai: wajib tepat 8 karakter (saat ini ${codeToUse.length} karakter).`);
     }
 
     this.phoneNumber = cleanPhone;

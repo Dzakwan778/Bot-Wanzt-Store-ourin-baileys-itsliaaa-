@@ -64,8 +64,6 @@ export async function sendMenuInteractiveMessage(
     }
   });
 
-  const buttons = nativeFlowButtons.length > 0 ? nativeFlowButtons : [{ text: '📑 List Produk', id: '.list' }];
-
   let imageInput: Buffer | undefined = undefined;
   if (config.includeMedia && config.selectedPicture) {
     try {
@@ -88,11 +86,43 @@ export async function sendMenuInteractiveMessage(
     }
   }
 
+  // Jika TIDAK ADA tombol interaktif yang dikonfigurasi (0 tombol):
+  // Kirim murni gambar dengan caption titleText atau pesan teks titleText biasa tanpa footer sama sekali
+  if (nativeFlowButtons.length === 0) {
+    try {
+      if (imageInput) {
+        await sock.sendMessage(
+          remoteJid,
+          { image: imageInput, caption: titleText },
+          quotedMsg ? { quoted: quotedMsg } : undefined
+        );
+        if (addLog) {
+          addLog('success', `✅ Berhasil membalas command MENU (gambar & caption murni tanpa tombol & tanpa footer) ke ${remoteJid}`);
+        }
+      } else {
+        await sock.sendMessage(
+          remoteJid,
+          { text: titleText },
+          quotedMsg ? { quoted: quotedMsg } : undefined
+        );
+        if (addLog) {
+          addLog('success', `✅ Berhasil membalas command MENU (teks murni tanpa tombol & tanpa footer) ke ${remoteJid}`);
+        }
+      }
+    } catch (err: any) {
+      if (addLog) {
+        addLog('error', `Gagal mengirim menu tanpa tombol: ${err?.message || err}`);
+      }
+    }
+    return;
+  }
+
+  // Jika ADA tombol interaktif yang dikonfigurasi:
   try {
     const payload: any = {
       text: titleText,
       footer: footerText,
-      nativeFlow: buttons,
+      nativeFlow: nativeFlowButtons,
     };
 
     if (imageInput) {
@@ -103,20 +133,25 @@ export async function sendMenuInteractiveMessage(
 
     await sock.sendMessage(remoteJid, payload, quotedMsg ? { quoted: quotedMsg } : undefined);
     if (addLog) {
-      addLog('success', `✅ Berhasil mengirim command MENU dengan tombol interaktif ke ${remoteJid}${imageInput ? ' (dengan gambar)' : ''}`);
+      addLog('success', `✅ Berhasil mengirim command MENU dengan ${nativeFlowButtons.length} tombol interaktif ke ${remoteJid}${imageInput ? ' (dengan gambar)' : ''}`);
     }
   } catch (err: any) {
     if (addLog) {
-      addLog('warning', `Pengiriman menu interaktif gagal: ${err?.message || err}. Mencoba fallback teks...`);
+      addLog('warning', `Pengiriman menu interaktif gagal: ${err?.message || err}. Mencoba fallback teks/gambar...`);
     }
     try {
-      await sock.sendMessage(remoteJid, { text: titleText }, quotedMsg ? { quoted: quotedMsg } : undefined);
+      const fullFallbackText = footerText ? `${titleText}\n\n_${footerText}_` : titleText;
+      if (imageInput) {
+        await sock.sendMessage(remoteJid, { image: imageInput, caption: fullFallbackText }, quotedMsg ? { quoted: quotedMsg } : undefined);
+      } else {
+        await sock.sendMessage(remoteJid, { text: fullFallbackText }, quotedMsg ? { quoted: quotedMsg } : undefined);
+      }
       if (addLog) {
-        addLog('success', `✅ Berhasil membalas command MENU (fallback text) ke ${remoteJid}`);
+        addLog('success', `✅ Berhasil membalas command MENU (fallback) ke ${remoteJid}`);
       }
     } catch (fallbackErr: any) {
       if (addLog) {
-        addLog('error', `Gagal mengirim menu interaktif: ${fallbackErr?.message || fallbackErr}`);
+        addLog('error', `Gagal mengirim menu: ${fallbackErr?.message || fallbackErr}`);
       }
     }
   }

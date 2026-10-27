@@ -83,20 +83,32 @@ Wanzt Store menyediakan sistem klaim otomatis untuk refund maupun klaim garansi 
 
 ## ⚡ Fitur Utama Bot & Dashboard
 
-- **Custom Pairing Code (8 Karakter)**: Penautan bot langsung ke nomor WhatsApp menggunakan kode alfanumerik kustom (default: `WANZTSTR` / `WANZT888`) tanpa perlu scan QR.
+- **Custom Pairing Code (8 Karakter)**: Penautan bot langsung ke nomor WhatsApp menggunakan kode alfanumerik kustom 8 karakter pilihan Anda tanpa perlu scan QR.
 - **Auto Reconnect Handshake**: Menangani siklus status `restartRequired (515)` WhatsApp secara otomatis saat verifikasi kode di smartphone selesai.
-- **Pesan Interaktif Native Flow**: Menu utama interaktif dengan dukungan beragam tipe tombol:
-  - `quick_reply` (Balas cepat pemicu aksi)
-  - `cta_url` (Membuka link website toko)
-  - `cta_call` (Panggilan langsung ke Admin)
-  - `cta_copy` (Salin nomor rekening/kode promo)
+- **Pesan Interaktif Native Flow & Non-Tombol Fleksibel**: Menu utama dapat berjalan dengan atau tanpa tombol:
+  - Jika tidak ada tombol yang ditambahkan (0 tombol): bot merespon murni dengan gambar header + caption (atau teks pesan murni) tanpa tombol quick reply dan tanpa menyertakan teks footer (footer ditiadakan karena hanya relevan untuk pesan interaktif bertombol).
+  - Jika tombol ditambahkan: bot menyertakan footer dan mendukung beragam tipe tombol WhatsApp native flow:
+    - `quick_reply` (Balas cepat dengan dukungan Aksi Pemicu Command dropdown: `List`, `Owner` [vCard owner], `Admin` [vCard admin], `Menu`, atau `Unknown`)
+    - `cta_url` (Membuka link website toko)
+    - `cta_call` / `vcard` (Pengiriman kartu kontak vCard Owner/Admin resmi)
+    - `cta_copy` (Salin nomor rekening/kode promo)
+    - `cta_reminder` / `cta_cancel_reminder` (Pengingat interaktif WhatsApp)
 - **Single-Select Dropdown List**: Menampilkan daftar kategori produk yang rapi dengan generator penomoran otomatis melalui tag `{daftarProduk}`.
 - **Horizontal Carousel Cards**: Menampilkan kartu varian produk interaktif lengkap dengan media thumbnail, rincian paket, harga, stok, tombol order instan, dan kartu kontak admin vCard.
 - **LID Auto-Resolving**: Otomatis mendeteksi dan mengonversi identitas pengguna WhatsApp berbasis `@lid` ke format nomor telepon resmi `@s.whatsapp.net` agar seluruh pesan interaktif dan carousel selalu terkirim dan dirender sempurna.
 - **Prefix Multi-Symbol & Smart Exception**: Mendukung awalan perintah fleksibel (`/`, `.`, `!`, `?`, `#`, `$`, `%`, `&`), dengan pengecualian otomatis untuk respon tombol klik pengguna.
 - **Reply / Quoting Otomatis**: Setiap respon bot (Menu, List dropdown, Carousel kartu, Kontak Admin, Order) otomatis mengutip (*quote reply*) pesan pemicu sehingga saat digunakan di grup WhatsApp, seluruh anggota grup langsung mengetahui kepada siapa bot merespon.
+- **Payment Gateway SairiPedia (QRIS Dinamis Otomatis)**: Integrasi payment gateway otomatis menggunakan SairiPedia API (`api.sairibot.my.id`). Mendukung seluruh e-Wallet (GoPay, OVO, DANA, ShopeePay, LinkAja) dan Mobile Banking (BCA, Mandiri, BRI, BNI, dll.) dengan penerbitan QRIS instan dan pengecekan lunas otomatis (*auto-polling status*).
+- **Alur Transaksi Privacy-First (Grup ke DM)**: Menjaga kerahasiaan kredensial produk digital pembeli secara ketat:
+  1. Pembeli memilih varian produk di grup via carousel kartu dan menekan tombol *Order*.
+  2. Bot memeriksa saldo akun utama supplier Xaviera terlebih dahulu.
+  3. Bot membuat invoice QRIS dinamis via Sairi API.
+  4. Di grup, bot membalas singkat memberi tahu bahwa invoice dikirimkan ke DM.
+  5. Bot mengirimkan gambar QRIS dinamis dan detail tagihan langsung ke **chat pribadi (DM) pembeli**.
+  6. Saat pembayaran lunas terverifikasi, bot mengirimkan detail akun (email, password APK premium) **langsung ke chat pribadi pembeli** sehingga data sensitif tidak pernah bocor ke grup.
+- **Dual Balance Monitoring Header**: Komponen `StoreProfileHeader` menyajikan pemantauan saldo ganda secara real-time: **Saldo Anda (Xaviera Store)** untuk stok supplier/layanan produk dan **Saldo Payment Gateway (SairiPedia QRIS)** untuk pemasukan transaksi pembeli, lengkap dengan tombol refresh mandiri dan navigasi instan ke Tab Connection jika API Key belum diatur.
 - **Arsitektur Modular Terpisah**: Kode backend tidak lagi menumpuk dalam 1 file raksasa, melainkan dipecah ke dalam modul-modul independen (types, config, services, messages, handlers, controller) agar proses maintenance dan penambahan fitur mudah dan cepat.
-- **Minimalist Control Dashboard**: Panel admin berbasis web berkecepatan tinggi dengan metrik status live, log socket stream, manajemen tombol dinamis, dan katalog produk.
+- **Minimalist Control Dashboard**: Panel admin berbasis web berkecepatan tinggi dengan metrik status live, log socket stream, manajemen tombol dinamis, katalog produk, dan pengaturan API (Xaviera & Sairi).
 
 ---
 
@@ -109,22 +121,29 @@ Untuk mempermudah pemeliharaan (*maintenance*) dan mencegah penumpukan ribuan ba
 │   ├── types/
 │   │   └── bot.types.ts           # Definisi tipe TypeScript, interface data, konstanta prefix & status
 │   ├── config/
-│   │   └── configManager.ts       # Logika pembacaan & penyimpanan berkas konfigurasi commands_config.json
+│   │   └── configManager.ts       # Logika pembacaan & penyimpanan berkas konfigurasi database
 │   ├── services/
 │   │   ├── quoteHelper.ts         # Pembangun contextInfo untuk reply / quote pesan pemicu di grup & private
-│   │   └── xavieraService.ts      # Integrasi API Xaviera Store, katalog produk, dan mapper varian
+│   │   ├── xavieraService.ts      # Integrasi API Xaviera Store, katalog produk, dan mapper varian
+│   │   ├── sairiService.ts        # Integrasi API SairiPedia, pembuatan QRIS, cek status, dan auto-polling
+│   │   ├── groupService.ts        # Layanan whitelist grup WhatsApp
+│   │   └── placeholderHelper.ts   # Resolver placeholder variabel teks dinamis ({storeName}, dll.)
 │   ├── messages/
 │   │   ├── menuMessage.ts         # Builder pesan Menu interaktif (tombol quick_reply, URL, Call, Copy, Media)
 │   │   ├── listMessage.ts         # Builder pesan List interaktif (single-select dropdown kategori)
-│   │   ├── carouselMessage.ts     # Builder pesan Carousel kartu horizontal varian (@itsliaaa/baileys + ourin)
-│   │   └── adminContactMessage.ts # Builder pesan kontak tunggal vCard Admin Wanzt Store
+│   │   ├── carouselMessage.ts     # Builder pesan Carousel kartu horizontal varian (@itsliaaa/baileys)
+│   │   └── adminContactMessage.ts # Builder pesan kontak tunggal vCard Owner & Admin Wanzt Store
 │   ├── handlers/
-│   │   └── messageDispatcher.ts   # Pengurai pesan masuk (messages.upsert), tombol, prefix, dan routing perintah
+│   │   └── messageDispatcher.ts   # Pengurai pesan masuk, routing order QRIS, tombol, dan command
 │   └── botManager.ts              # Core controller / fasad soket (koneksi, auth, auto-reconnect, log)
 ├── src/
+│   ├── components/tabs/
+│   │   ├── TabProduk.tsx          # Tampilan katalog produk premium presisi tabel (nama, varian —— -, stok, harga asli, harga jual)
+│   │   └── TabConnection.tsx      # Form konfigurasi API Xaviera Store & Sairi Payment Gateway (QRIS)
 │   ├── App.tsx                    # Dashboard antarmuka web admin (React + Tailwind CSS)
 │   ├── main.tsx                   # Entry point aplikasi frontend
 │   └── media/
+
 │       └── picture/               # Direktori asset gambar thumbnail & menu
 ├── commands_config.json           # Konfigurasi pesan, tombol, dan asset media
 ├── vite.config.ts                 # Konfigurasi bundler Vite & API middleware server
@@ -136,7 +155,7 @@ Untuk mempermudah pemeliharaan (*maintenance*) dan mencegah penumpukan ribuan ba
 
 1. **`server/types/bot.types.ts`**
    - Berisi semua deklarasi `interface` (`CommandsConfig`, `WhatsAppButton`, `ProductVariantItem`, `LogEntry`) dan `type` (`BotStatus`, `WhatsAppButtonType`).
-   - Menyimpan konstanta global seperti `ALLOWED_PREFIXES` (`/`, `.`, `!`, `?`, `#`, `$`, `%`, `&`), `DEFAULT_CUSTOM_CODE` (`WANZTSTR`), dan nama direktori sesi.
+   - Menyimpan konstanta global seperti `ALLOWED_PREFIXES` (`/`, `.`, `!`, `?`, `#`, `$`, `%`, `&`), `DEFAULT_CUSTOM_CODE` (string kosong), dan nama direktori sesi.
 
 2. **`server/config/configManager.ts`**
    - Menangani pembacaan dan penulisan konfigurasi bot ke `commands_config.json`.
@@ -152,8 +171,9 @@ Untuk mempermudah pemeliharaan (*maintenance*) dan mencegah penumpukan ribuan ba
    - Mengonversi teks `{daftarProduk}` menjadi daftar kategori berpenomoran rapi.
 
 5. **`server/messages/menuMessage.ts`**
-   - Khusus memproses dan mengirimkan pesan `.menu` interaktif.
-   - Memetakan berbagai tipe tombol (`quick_reply`, `cta_url`, `cta_call`, `cta_copy`).
+   - Khusus memproses dan mengirimkan pesan `.menu`.
+   - Mendukung pengiriman pesan murni (gambar + teks atau teks saja) tanpa tombol jika daftar tombol kosong (0 tombol).
+   - Memetakan berbagai tipe tombol native flow (`quick_reply`, `cta_url`, `cta_call`, `cta_copy`) jika tombol dikonfigurasi.
    - Melampirkan media gambar header jika fitur media diaktifkan.
 
 6. **`server/messages/listMessage.ts`**
@@ -164,7 +184,8 @@ Untuk mempermudah pemeliharaan (*maintenance*) dan mencegah penumpukan ribuan ba
    - Menghasilkan thumbnail SVG jika produk belum memiliki gambar spesifik.
 
 8. **`server/messages/adminContactMessage.ts`**
-   - Mengirimkan kontak vCard resmi Admin Wanzt Store (`+62 838-6127-6608`) lengkap dengan quote reply.
+   - Mengirimkan kontak vCard resmi Owner toko (`sendOwnerContactMessage`) berdasarkan data nama dan nomor di tab Store Info.
+   - Mengirimkan kontak vCard resmi Admin toko (`sendAdminContactMessage`). Dilengkapi validasi form opsional: jika nomor admin belum diisi di Store Info, bot secara otomatis membalas dengan pesan informatif `"Informasi tentang admin belum di set pada toko ini"`.
 
 9. **`server/handlers/messageDispatcher.ts`**
    - Titik masuk penanganan event `messages.upsert`.
@@ -205,10 +226,12 @@ Buka browser dan akses dashboard di:
 
 ## 📲 Cara Menautkan Bot ke WhatsApp
 
-1. Buka dashboard di browser.
-2. Pada panel **WhatsApp Connection**, masukkan nomor WhatsApp target Anda (contoh: `85712439395`).
-3. Tentukan 8 karakter alfanumerik custom pairing code (contoh: `WANZTSTR`).
-4. Klik tombol **[Minta Kode Pairing]**.
+1. Buka dashboard di browser (`http://localhost:3000`).
+2. Pada panel **WhatsApp Connection**, masukkan nomor WhatsApp target Anda (contoh: `81234567890`).
+3. Masukkan **8 karakter alfanumerik** custom pairing code (hanya huruf & angka tanpa simbol/spasi).
+   - Kolom ini defaultnya kosong dan wajib diisi.
+   - Tombol **[Minta Kode Pairing]** akan berwarna abu-abu dan dinonaktifkan sampai Anda menginput tepat 8 karakter valid.
+4. Klik tombol **[Minta Kode Pairing]** (berubah menjadi biru saat valid).
 5. Buka aplikasi WhatsApp di HP Anda:
    - Masuk ke menu **Titik Tiga** (Android) atau **Pengaturan** (iOS).
    - Pilih **Perangkat Tertaut** > **Tautkan Perangkat**.
@@ -218,15 +241,36 @@ Buka browser dan akses dashboard di:
 
 ---
 
+## 🧠 Struktur Dokumentasi & Manajemen Pengetahuan (`brain/`)
+
+Proyek ini menerapkan protokol pencatatan ketat berbasis 4 pilar di dalam folder `/brain/`:
+
+1. **`brain/idea.md`**  
+   Mencatat segala pengetahuan baru, hasil riset, referensi arsitektur, dan spesifikasi API eksternal (contoh: dokumentasi lengkap SairiPedia API QRIS Payment Gateway).
+2. **`brain/progress.md`**  
+   Mencatat seluruh riwayat perubahan, fitur yang telah diimplementasikan, dan changelog rilis.
+3. **`brain/langkah_implementasi.md`**  
+   Mencatat rencana teknis yang **akan dilakukan (belum dieksekusi)**, menjelaskan secara mendalam apa yang akan dilakukan dan bagaimana cara mengimplementasikannya secara rinci sebelum menyentuh kode.
+4. **`brain/schedule.md`**  
+   Mencatat perancangan, roadmap pengembangan, target milestone, dan log jadwal perencanaan.
+5. **`README.md`**  
+   Dokumentasi publik yang selalu disesuaikan dan diperbarui pada setiap perubahan sistem.
+
+
+---
+
 ## 🛠️ Perintah (Commands) Bot
+
+Bot mendukung berbagai pilihan awalan (*prefix*) fleksibel: `/`, `.`, `!`, `?`, `#`, `$`, `%`, `&`.
 
 | Perintah | Deskripsi |
 |---|---|
-| `.menu` | Menampilkan menu utama interaktif beserta media foto dan tombol pilihan cepat. |
-| `.list` | Mengirimkan daftar kategori produk dalam format dropdown single-select. |
-| `[Nama Produk]` | Membuka kartu carousel varian produk (misal: ketik `.youtube` atau pilih dari list). |
-| `.admin` / `.contact` | Mengirimkan kartu kontak vCard resmi Admin Toko secara langsung. |
-| `.order [varian]` | Merekam pesanan pelanggan dan mengarahkan langsung ke kontak pembayaran admin. |
+| `/menu` / `.menu` | Menampilkan menu utama interaktif beserta media foto dan tombol pilihan cepat. |
+| `/list` / `.list` | Mengirimkan daftar kategori produk dalam format dropdown single-select. |
+| `/owner` / `.owner` | Mengirimkan kartu kontak WhatsApp (vCard v3.0) Owner Toko (data nama & nomor dari tab Store Info). |
+| `/admin` / `.admin` | Mengirimkan kartu kontak WhatsApp (vCard v3.0) Admin Toko jika telah diatur di tab Store Info. Jika form admin kosong, bot otomatis membalas dengan teks: *"Informasi tentang admin belum di set pada toko ini"*. |
+| `[Nama Produk]` | Membuka kartu carousel varian produk (misal: ketik `/netflix`, `.youtube`, atau pilih dari list). |
+| `🛒 Order [Varian]` / `/order` | Menangani pesanan: Dalam mode uji coba privasi, jika dipicu di grup akan merespon `"testing respon in grup"` di grup dan mengirimkan `"testing respon in private chat"` langsung ke DM pemicu. |
 
 ---
 

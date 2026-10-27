@@ -21,12 +21,12 @@ export const DB_FILES = {
 };
 
 export const DEFAULT_STORE_INFO: StoreInfoConfig = {
-  storeName: 'Wanzt Store',
-  ownerName: 'Wanzt',
-  ownerNumber: '6282173515807',
-  adminName: 'Admin Store',
-  adminNumber: '6285712439395',
-  webLink: 'https://wanztstore.web.id',
+  storeName: '',
+  ownerName: '',
+  ownerNumber: '',
+  adminName: '',
+  adminNumber: '',
+  webLink: '',
   telegramBot: '',
   waLink: '',
 };
@@ -35,35 +35,7 @@ export const DEFAULT_MENU_CONFIG: MenuCommandConfig = {
   menuOutputText:
     'Halo kak! Selamat datang di {storeName} ✨\n\nSilakan pilih layanan yang ingin Anda pesan melalui tombol interaktif di bawah ini:',
   menuFooterText: '{webLink} • Otomatis',
-  menuButtons: [
-    {
-      id: 'btn-1',
-      type: 'quick_reply',
-      name: '🛍️ Katalog Produk',
-      output: '.katalog',
-    },
-    {
-      id: 'btn-2',
-      type: 'cta_url',
-      name: '🌐 Buka Website',
-      output: '{webLink}',
-    },
-    {
-      id: 'btn-3',
-      type: 'vcard',
-      name: '📞 Hubungi Admin',
-      output: '{adminName} ({adminNumber})',
-      callTargetName: '{adminName}',
-      callPhoneNumber: '{adminNumber}',
-    },
-    {
-      id: 'btn-1791764084648',
-      type: 'quick_reply',
-      name: '📑 List Produk',
-      output: '📑 List Produk',
-      triggerAction: 'list',
-    },
-  ],
+  menuButtons: [],
   includeMedia: true,
   selectedPicture: 'snaptik-app-7690985506468908308-slide-2.jpg',
 };
@@ -96,6 +68,9 @@ export const DEFAULT_CAROUSEL_CONFIG: CarouselCommandConfig = {
 export const DEFAULT_API_CONFIG: ApiConfig = {
   xavieraApiKey: 'xvs_0726effe853aadea27bd6608ef98468cc3121b82e036e5f7',
   xavieraBaseUrl: 'https://xavierastore.com/api/v1',
+  lunasQrisApiKey: '',
+  lunasQrisSecretKey: '',
+  lunasQrisBaseUrl: 'https://lunasqris.com',
 };
 
 export const DEFAULT_CONFIG: CommandsConfig = {
@@ -112,6 +87,9 @@ export const DEFAULT_CONFIG: CommandsConfig = {
   carouselPicture: DEFAULT_CAROUSEL_CONFIG.carouselPicture,
   xavieraApiKey: DEFAULT_API_CONFIG.xavieraApiKey,
   xavieraBaseUrl: DEFAULT_API_CONFIG.xavieraBaseUrl,
+  lunasQrisApiKey: DEFAULT_API_CONFIG.lunasQrisApiKey,
+  lunasQrisSecretKey: DEFAULT_API_CONFIG.lunasQrisSecretKey,
+  lunasQrisBaseUrl: DEFAULT_API_CONFIG.lunasQrisBaseUrl,
 };
 
 function ensureDbDir() {
@@ -205,6 +183,9 @@ function migrateLegacyConfigIfNeeded() {
     const apiConfig: ApiConfig = {
       xavieraApiKey: legacyData.xavieraApiKey !== undefined ? legacyData.xavieraApiKey : DEFAULT_API_CONFIG.xavieraApiKey,
       xavieraBaseUrl: legacyData.xavieraBaseUrl || DEFAULT_API_CONFIG.xavieraBaseUrl,
+      lunasQrisApiKey: legacyData.lunasQrisApiKey !== undefined ? legacyData.lunasQrisApiKey : (legacyData.sairiApiKey || DEFAULT_API_CONFIG.lunasQrisApiKey),
+      lunasQrisSecretKey: legacyData.lunasQrisSecretKey !== undefined ? legacyData.lunasQrisSecretKey : DEFAULT_API_CONFIG.lunasQrisSecretKey,
+      lunasQrisBaseUrl: legacyData.lunasQrisBaseUrl || DEFAULT_API_CONFIG.lunasQrisBaseUrl,
     };
     writeJsonFile(DB_FILES.api, apiConfig);
   }
@@ -298,6 +279,9 @@ export function loadCommandsConfig(): CommandsConfig {
     carouselPicture: carousel.carouselPicture,
     xavieraApiKey: api.xavieraApiKey,
     xavieraBaseUrl: api.xavieraBaseUrl,
+    lunasQrisApiKey: api.lunasQrisApiKey !== undefined ? api.lunasQrisApiKey : DEFAULT_API_CONFIG.lunasQrisApiKey,
+    lunasQrisSecretKey: api.lunasQrisSecretKey !== undefined ? api.lunasQrisSecretKey : DEFAULT_API_CONFIG.lunasQrisSecretKey,
+    lunasQrisBaseUrl: api.lunasQrisBaseUrl || DEFAULT_API_CONFIG.lunasQrisBaseUrl,
   };
 }
 
@@ -354,10 +338,19 @@ export function saveCommandsConfig(
   }
 
   // 5. Simpan ke database/api_config.json jika ada data API
-  if (newConfig.xavieraApiKey !== undefined || newConfig.xavieraBaseUrl !== undefined) {
+  if (
+    newConfig.xavieraApiKey !== undefined ||
+    newConfig.xavieraBaseUrl !== undefined ||
+    newConfig.lunasQrisApiKey !== undefined ||
+    newConfig.lunasQrisSecretKey !== undefined ||
+    newConfig.lunasQrisBaseUrl !== undefined
+  ) {
     saveApiConfig({
       ...(newConfig.xavieraApiKey !== undefined && { xavieraApiKey: newConfig.xavieraApiKey }),
       ...(newConfig.xavieraBaseUrl !== undefined && { xavieraBaseUrl: newConfig.xavieraBaseUrl }),
+      ...(newConfig.lunasQrisApiKey !== undefined && { lunasQrisApiKey: newConfig.lunasQrisApiKey }),
+      ...(newConfig.lunasQrisSecretKey !== undefined && { lunasQrisSecretKey: newConfig.lunasQrisSecretKey }),
+      ...(newConfig.lunasQrisBaseUrl !== undefined && { lunasQrisBaseUrl: newConfig.lunasQrisBaseUrl }),
     });
   }
 

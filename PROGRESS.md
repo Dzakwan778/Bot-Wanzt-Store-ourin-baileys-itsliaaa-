@@ -10,54 +10,52 @@ Aplikasi ini mengatur bot WhatsApp toko otomatis dengan fitur:
 - Tombol Interaktif Native Flow (`cta_url`, `quick_reply`, `cta_call`, `cta_copy`, `vcard`).
 - Command Menu, Command List (Katalog Layanan), dan Command Carousel Produk.
 - Integrasi Xaviera API untuk profil, produk digital/SMM/game otomatis murni tanpa data cadangan lokal palsu.
-- Sistem modular JSON database di folder `/database/`.
+- Integrasi Payment Gateway LunasQRIS API (DANA Bisnis QRIS Dinamis + Kode Unik Otomatis).
+- Arsitektur Modular: Komponen dipecah ke folder `src/components/`, `src/hooks/`, `src/types/`.
 - Manajemen Whitelist Grup WhatsApp (toggle aktif/nonaktif fungsi bot per grup).
 
 ---
 
 ## ✅ Fitur yang Telah Selesai (Completed)
-1. **Penghapusan Teks Mesin Baileys di Terminal Log**:
-   - Teks footer `"Mesin: @itsliaaa/baileys (Carousel & Native Flow)"` pada terminal log dashboard telah berhasil dihapus.
-2. **Penyesuaian Label Profil & Saldo**:
-   - Label profil ("Xaviera Developer API" $\rightarrow$ "INFO PROFIL ANDA") dan saldo ("Saldo Xaviera" $\rightarrow$ "Saldo Anda") telah disesuaikan oleh pengguna.
-3. **Penggantian Nomor Default Menjadi `81234567890`**:
-   - Nomor telepon default pairing bot di `src/App.tsx` serta `database/store_info.json` (`ownerNumber`) telah diganti menjadi `81234567890`.
-4. **Penggantian Logo "WS" di Header Top Bar Menjadi Avatar Profil (`User` Icon)**:
-   - Kotak teks "WS" di pojok kiri atas header top bar telah diganti dengan ikon avatar profil kosong (`User` dari `lucide-react`).
-5. **Penghapusan Span Username Xaviera di Header**:
-   - Elemen `span` kedua (`@{xavieraProfile.data?.username}`) pada header informasi toko telah berhasil dihapus.
-6. **Perubahan Teks Header Top Bar Menjadi "Dashboard Bot WhatsApp"**:
-   - Teks branding pada bilah navigasi atas (*top bar header*) telah diubah menjadi **"Dashboard Bot WhatsApp"**.
-7. **Sinkronisasi Nama Toko Dinamis pada Judul Header (`<h1>`)**:
-   - Judul utama dashboard pada header atas (`<h1>`) telah disinkronkan langsung dengan `storeInfo.storeName` dari tab Store Info (`database/store_info.json`).
-8. **Implementasi Sistem Whitelist Grup WhatsApp**:
-   - Status toggle grup di tab "Grup" mengontrol whitelist izin bot di grup WhatsApp. Jika toggle nonaktif, bot tidak merespon apapun di grup tersebut.
-9. **Penghapusan Seluruh Data Cadangan Lokal (Pure Live API Mode)**:
-   - Data produk, SMM, dan Top Up murni berasal dari API Xaviera.
-10. **Implementasi Tab "Grup" (Sebelumnya `tab04`)**:
-    - Tab navigation diperbarui dari `tab04` menjadi **`Grup`** dengan ikon `Users`.
-11. **Perbaikan Tombol WhatsApp `cta_url` (Native Flow)**:
-    - Format `nativeFlow` resmi `@itsliaaa/baileys` dengan `buttonParamsJson`.
-12. **Pembersihan Form Duplikat `quick_reply`**:
-    - Form ganda pada modal Tambah/Edit Tombol WhatsApp telah dibersihkan.
-13. **Penyimpanan Modular Database**:
-    - `database/store_info.json`, `database/command_menu.json`, `database/command_list.json`, `database/command_carousel.json`, `database/api_config.json`, `database/groups_config.json`.
+1. **Perbaikan Bug Tab SMM Tidak Muncul (Fix Typo SMM vs SSM)**:
+   - **Penyebab**: Tab navigasi di `App.tsx` bernilai `'SMM'`, namun percabangan di `TabContentRenderer.tsx` sebelumnya hanya memeriksa `'SSM'` (double S), sehingga pengguna diarahkan ke fallback slot kosong dan tabel SMM tidak pernah muncul.
+   - **Solusi**: Di `TabContentRenderer.tsx`, kondisi telah diperluas untuk mengenali `selectedTab === 'SMM' || selectedTab === 'SSM' || selectedTab === 'tab02'`.
+   - **Kategori Musik**: Fungsi `detectSmmPlatform` di `src/types/dashboard.types.ts` kini memetakan Spotify/SoundCloud/Musik ke `'Layanan Musik'` agar cocok dengan tombol filter kategori di `TabSsm.tsx`.
+   - **Hasil**: Seluruh 3000+ katalog layanan SMM dari Xaviera Store kini langsung muncul dengan rapi lengkap dengan fitur pencarian, filter kategori, pagination, dan harga jual (+10%).
+
+2. **Refactoring & Modularisasi Komponen**:
+   - `src/App.tsx` dipecah menjadi komponen modular di `src/components/` dan kustom hook di `src/hooks/`.
+
+3. **Sinkronisasi Kode dengan Repositori GitHub**:
+   - Kode 100% tersinkronisasi dengan repositori resmi `Dzakwan778/Bot-Wanzt-Store-ourin-baileys-itsliaaa-remix`.
+
+4. **Penghapusan Seluruh Data Cadangan Lokal (Pure Live API Mode)**:
+   - Data produk, SMM, dan Top Up murni berasal dari API Xaviera secara real-time.
+
+5. **Implementasi Sistem Whitelist Grup WhatsApp**:
+   - Toggle whitelist di tab Grup mengontrol apakah bot merespon di grup tertentu atau tidak.
+
+6. **Penyimpanan Modular Database**:
+   - File JSON konfigurasi tersimpan di folder `/database/`.
+
+7. **Pemulihan File Modular & Hook (Fix Import Errors)**:
+   - Seluruh hook kustom (`useBotConnection`, `useButtonModal`, `useStoreConfig`, `useWhatsAppGroups`, `useXavieraData`) dan komponen tab (`TabStoreInfo`, `TabCommand`, `TabProduk`, `TabSsm`, `TabTopUp`, `TabGrup`, `TabConnection`) telah tersimpan permanen di direktori proyek.
+   - Pengecekan TypeScript linting (`tsc --noEmit`) dan build compilation lulus 100% tanpa error.
+
+8. **Migrasi Penuh Payment Gateway dari SairiPedia ke LunasQRIS (Completed)**:
+   - **Arsitektur Dual-Key**: Menggunakan Public API Key (`pk_...`) untuk request API (`X-API-Key`) dan Secret Key (`sk_...`) untuk verifikasi tanda tangan Webhook HMAC-SHA256 (`X-Callback-Signature`).
+   - **Layanan Backend (`server/services/lunasQrisService.ts`)**: Fungsi `getLunasQrisBalance`, `createLunasQrisTransaction`, `checkLunasQrisStatus`, `cancelLunasQrisTransaction`, `startLunasQrisPolling`, dan `verifyLunasQrisSignature`.
+   - **Alur Transaksi WhatsApp Bot (`server/handlers/messageDispatcher.ts`)**: Saat pembeli klik varian produk, bot otomatis menerbitkan transaksi LunasQRIS dengan ID unik (`ORD-...`), kode unik (`unique_code`), dan total tagihan presisi (`total_amount`). Mengirimkan notifikasi ke grup, invoice QRIS lengkap ke DM pembeli, dan menjalankan polling status otomatis tiap 4 detik. Saat lunas, kredensial akun digital dikirim ke DM pembeli dan notifikasi diteruskan ke owner.
+   - **Proxy & Webhook Middleware (`vite.config.ts`)**: Menangani route proxy `/api/lunasqris/balance`, `/api/lunasqris/transaction/status`, `/api/lunasqris/transaction/create`, dan `/api/lunasqris/webhook`.
+   - **Antarmuka Tab Connection & Profile Header**: Form modern untuk input Public Key (`pk_...`), Secret Key (`sk_...`), Base URL, tombol Cek Saldo real-time (Saldo Siap Tarik & Saldo Hold), dan copy URL Webhook untuk dipasang di panel LunasQRIS.
+   - **Database**: Tersimpan rapi di `/database/api_config.json`.
 
 ---
 
 ## 📂 Struktur Penting
-- `src/App.tsx`: UI Dashboard Admin (Tab Status, Menu, List, Carousel, Xaviera API, Grup, Produk, SSM, Top Up).
-- `server/handlers/messageDispatcher.ts`: Router pesan masuk WhatsApp (pemeriksaan whitelist grup).
-- `server/services/groupService.ts`: Pengelolaan data whitelist grup di `database/groups_config.json`.
-- `server/services/xavieraService.ts`: Penghubung data API Xaviera untuk bot WhatsApp (Pure Live API Mode).
-- `server/botManager.ts`: Lifecycle koneksi Baileys WhatsApp & grup fetch.
-- `vite.config.ts`: Konfigurasi server Vite + API middleware (`/api/bot/*`, `/api/xaviera/*`, `/api/media/*`).
-
----
-
-## 🚀 Prosedur AI Selanjutnya
-Setiap kali diminta melakukan modifikasi:
-1. **Buat Rencana Implementasi**: Jelaskan langkah dan file yang akan disentuh.
-2. **Perbarui `PROGRESS.md`**: Catat rencana dan status terbaru ke dalam dokumen ini.
-3. **Eksekusi Perubahan Kode**: Lakukan modifikasi kode sesuai rencana.
-4. **Verifikasi**: Jalankan linter dan compiler untuk memastikan sistem berjalan tanpa error.
+- `src/components/tabs/TabContentRenderer.tsx`: Pengendali rendering konten tab yang aktif.
+- `src/components/tabs/TabSsm.tsx`: Komponen visual katalog layanan SMM.
+- `src/hooks/useXavieraData.ts`: Hook pengambil data produk, SMM, dan game dari Xaviera API.
+- `src/hooks/useLunasQrisData.ts`: Hook pengelola data saldo dan status LunasQRIS Payment Gateway.
+- `src/types/dashboard.types.ts`: Definisi interface tipe data dan helper fungsi `detectSmmPlatform`.
+- `server/services/lunasQrisService.ts`: Mesin interaksi API dan verifikasi Webhook LunasQRIS.

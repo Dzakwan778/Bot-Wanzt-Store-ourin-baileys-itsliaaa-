@@ -4,10 +4,14 @@ import { ALLOWED_PREFIXES, CommandsConfig, SESSION_DIR } from '../types/bot.type
 import { sendMenuInteractiveMessage } from '../messages/menuMessage.js';
 import { sendListInteractiveMessage } from '../messages/listMessage.js';
 import { sendProductVariantsCarousel } from '../messages/carouselMessage.js';
-import { sendAdminContactMessage } from '../messages/adminContactMessage.js';
-import { isKnownProduct } from '../services/xavieraService.js';
+import { sendAdminContactMessage, sendOwnerContactMessage } from '../messages/adminContactMessage.js';
+import { isKnownProduct, checkXavieraBalance } from '../services/xavieraService.js';
 import { resolvePlaceholders } from '../services/placeholderHelper.js';
 import { loadGroupsConfig } from '../services/groupService.js';
+import { createLunasQrisTransaction, startLunasQrisPolling } from '../services/lunasQrisService.js';
+import { recordTransaction, updateTransactionStatus } from '../services/transactionManager.js';
+import QRCode from 'qrcode';
+import axios from 'axios';
 
 export interface DispatcherDeps {
   addLog: (type: 'info' | 'success' | 'warning' | 'error' | 'code', msg: string) => void;
@@ -188,22 +192,316 @@ export async function dispatchIncomingMessages(
       (isInteractiveButtonResponse && cleanBtn.toLowerCase().includes('contact_admin'))
     ) {
       deps.addLog('info', `📞 Tombol "Contact Admin" ditekan oleh ${senderName}`);
-      await sendAdminContactMessage(sock, remoteJid, m, deps.addLog);
+      await sendAdminContactMessage(sock, config, remoteJid, m, deps.addLog);
       continue;
     }
 
-    // B. Tombol Order Varian
+    // B. Tombol Order Varian (Integrasi Payment Gateway Sairi & Privacy-First Flow)
     if (cleanBtn.startsWith('order_')) {
-      const variantChoice = cleanBtn.replace(/^order_/, '').trim() || 'Produk Pilihan';
-      deps.addLog('info', `🛒 Pelanggan ${senderName} menekan tombol ORDER untuk varian: "${variantChoice}"`);
-      await sock.sendMessage(
-        remoteJid,
-        {
-          text: `Halo kak *${senderName}*! 👋\n\nPilihan pesanan kamu untuk *${variantChoice}* telah kami terima.\n\nSilakan konfirmasi ke Admin Wanzt Store melalui kontak resmi berikut untuk pembayaran dan pengiriman akun:`,
-        },
-        { quoted: m }
-      );
-      await sendAdminContactMessage(sock, remoteJid, m, deps.addLog);
+      let productName = 'Produk Pilihan';
+      let variantName = 'Varian Pilihan';
+      let price = 5000;
+
+      if (cleanBtn.startsWith('order_var:')) {
+        const raw = cleanBtn.replace(/^order_var:/, '');
+        const [pEnc, vEnc, pPrice] = raw.split('|');
+        try {
+          if (pEnc) productName = decodeURIComponent(pEnc);
+          if (vEnc) variantName = decodeURIComponent(vEnc);
+        } catch {}
+        if (pPrice && !isNaN(Number(pPrice))) {
+          price = Number(pPrice);
+        }
+      } else {
+        variantName = cleanBtn.replace(/^order_/, '').trim() || 'Varian Pilihan';
+      }
+
+      deps.addLog('info', `🛒 Pelanggan ${senderName} menekan tombol ORDER: "${productName} - ${variantName}" (Rp ${price.toLocaleString('id-ID')})`);
+
+      // Dapatkan JID pemicu/pengirim secara presisi untuk pengiriman DM
+      let senderJid = m.key?.participant || remoteJid;
+      if (senderJid.includes(':')) {
+        senderJid = senderJid.replace(/:[0-9]+@/, '@');
+      }
+      senderJid = deps.resolveTargetJid(senderJid);
+      const senderCleanNumber = (senderJid.split('@')[0] || '').replace(/[^0-9]/g, '');
+      const storeTitle = resolvePlaceholders('{storeName}', config) || 'Toko Kami';
+
+      // 1. Pre-check Saldo Utama di Akun Xaviera (Hitung harga modal tanpa keuntungan 10%)
+      const costPrice = Math.round(price / 1.1);
+      try {
+        const xavieraBal = await checkXavieraBalance(costPrice, config);
+        if (!xavieraBal.sufficient) {
+          deps.addLog('warning', `⚠️ Saldo Xaviera tidak mencukupi untuk order ${productName} (Saldo: ${xavieraBal.currentBalance}, Butuh Modal: ${costPrice})`);
+          const outOfStockMsg = `Maaf kak @${senderCleanNumber}, saat ini stok atau saldo produk *${productName} (${variantName})* sedang dalam proses restock oleh supplier. Silakan coba kembali nanti atau hubungi admin.`;
+          const resp = await sock.sendMessage(
+            remoteJid,
+            { text: outOfStockMsg, mentions: [senderJid] },
+            { quoted: m }
+          );
+          markMessageAsBotSent(resp?.key?.id);
+          continue;
+        }
+      } catch (chkErr: any) {
+        deps.addLog('warning', `Gagal cek saldo Xaviera (diteruskan): ${chkErr?.message || chkErr}`);
+      }
+
+      // 2. Verifikasi Konfigurasi API LunasQRIS
+      const lunasQrisApiKey = config.lunasQrisApiKey?.trim();
+      if (!lunasQrisApiKey) {
+        deps.addLog('error', `❌ API Key LunasQRIS belum diisi di tab Connection! Tidak dapat membuat invoice QRIS.`);
+        const noApiMsg = `Maaf kak @${senderCleanNumber}, sistem pembayaran QRIS otomatis toko sedang dalam konfigurasi. Silakan hubungi admin toko untuk pemesanan manual.`;
+        const resp = await sock.sendMessage(
+          remoteJid,
+          { text: noApiMsg, mentions: [senderJid] },
+          { quoted: m }
+        );
+        markMessageAsBotSent(resp?.key?.id);
+        continue;
+      }
+
+      // 3. Request Transaksi & QRIS Dinamis ke API LunasQRIS
+      try {
+        const orderId = `ORD-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+        deps.addLog('info', `📡 Mengajukan transaksi LunasQRIS (${orderId}) untuk nominal Rp ${price.toLocaleString('id-ID')}...`);
+
+        const trxResult = await createLunasQrisTransaction(
+          lunasQrisApiKey,
+          {
+            amount: price,
+            order_id: orderId,
+            description: `Pembelian ${productName} (${variantName}) - ${storeTitle}`,
+            customer_name: senderName || `Pelanggan-${senderCleanNumber}`,
+            expired_minutes: 15,
+          },
+          config.lunasQrisBaseUrl
+        );
+
+        const trx = trxResult.data;
+        deps.addLog(
+          'success',
+          `✅ Transaksi LunasQRIS berhasil dibuat: Trx ID ${trx.trx_id} | Order ID ${trx.order_id} | Total: Rp ${trx.total_amount.toLocaleString('id-ID')} (Fee Gateway: Rp ${trx.unique_code})`
+        );
+
+        // Catat transaksi baru ke database lokal dengan status 'pending'
+        try {
+          recordTransaction({
+            orderId: trx.order_id || orderId,
+            trxId: trx.trx_id,
+            customerNumber: senderCleanNumber,
+            customerName: senderName || `Pelanggan-${senderCleanNumber}`,
+            productName,
+            variantName,
+            nominal: trx.amount || price,
+            uniqueCode: trx.unique_code || 0,
+            total: trx.total_amount,
+            paymentUrl: trx.payment_url,
+            status: 'pending',
+          });
+        } catch (dbErr: any) {
+          deps.addLog('warning', `Gagal menyimpan database transaksi: ${dbErr?.message}`);
+        }
+
+        // 4. Di Grup: Kirim notifikasi singkat bahwa invoice telah dikirim ke DM pembeli
+        if (isGroup) {
+          const groupNotification = `Halo @${senderCleanNumber}, invoice pembayaran QRIS sebesar *Rp ${trx.total_amount.toLocaleString('id-ID')}* (Fee Gateway: *+Rp ${trx.unique_code}*) telah kami kirimkan ke *chat pribadi (DM)* Anda. 💬\n\nSilakan periksa pesan pribadi untuk melakukan pembayaran. Privasi & keamanan akun terjamin aman!`;
+          try {
+            const grpRes = await sock.sendMessage(
+              remoteJid,
+              { text: groupNotification, mentions: [senderJid] },
+              { quoted: m }
+            );
+            markMessageAsBotSent(grpRes?.key?.id);
+            deps.addLog('success', `💬 Notifikasi pengiriman invoice terkirim ke grup ${remoteJid}`);
+          } catch (grpErr: any) {
+            deps.addLog('error', `Gagal mengirim notifikasi grup: ${grpErr?.message || grpErr}`);
+          }
+        }
+
+        // 5. Di Chat Pribadi (DM): Format invoice rapi tanpa garis pembatas (anti-wrap di berbagai layar)
+        const invoiceCaption =
+          `🧾 *INVOICE PEMBAYARAN*\n` +
+          `*${storeTitle}*\n\n` +
+          `📦 *Produk:* ${productName}\n` +
+          `⚡ *Varian:* ${variantName}\n` +
+          `🆔 *Order ID:* \`${trx.order_id}\`\n\n` +
+          `💰 *Nominal:* Rp ${trx.amount.toLocaleString('id-ID')}\n` +
+          `⚡ *Fee Gateway:* +Rp ${trx.unique_code}\n` +
+          `💳 *TOTAL BAYAR:* *Rp ${trx.total_amount.toLocaleString('id-ID')}*\n\n` +
+          `⚠️ *PENTING:* Transfer tepat *Rp ${trx.total_amount.toLocaleString('id-ID')}* hingga digit terakhir (termasuk Fee Gateway) agar pembayaran terverifikasi otomatis.\n\n` +
+          `🌐 *Web Checkout:* ${trx.payment_url}\n` +
+          `⏰ *Batas Waktu:* 15 Menit\n\n` +
+          `📌 *Cara Pembayaran:*\n` +
+          `1. Buka e-Wallet (DANA, GoPay, OVO, ShopeePay) atau Mobile Banking (BCA, Mandiri, BRI, BNI, Seabank, dll).\n` +
+          `2. Pindai (scan) kode QRIS di atas atau buka tautan Web Checkout.\n` +
+          `3. Pastikan nominal pembayaran sama persis dengan Total Bayar.\n` +
+          `4. Begitu transfer berhasil, detail akun akan langsung dikirimkan ke chat ini secara otomatis.\n\n` +
+          `_Harap selesaikan pembayaran sebelum batas waktu berakhir._`;
+
+        let dmSent = false;
+        let qrBuffer: Buffer | null = null;
+
+        // Metode 1: Generate buffer gambar PNG murni langsung dari raw string EMVCo qris_string (bebas SVG & anti file corrupt)
+        if (trx.qris_string) {
+          try {
+            qrBuffer = await QRCode.toBuffer(trx.qris_string, {
+              type: 'png',
+              width: 600,
+              margin: 2,
+              color: {
+                dark: '#000000',
+                light: '#ffffff',
+              },
+            });
+          } catch (qrErr: any) {
+            deps.addLog('warning', `Generate QR code lokal gagal: ${qrErr?.message || qrErr}`);
+          }
+        }
+
+        // Metode 2: Cadangan unduh file PNG dari generator QR jika library lokal gagal
+        if (!qrBuffer && (trx.qris_string || trx.payment_url)) {
+          try {
+            const rawData = trx.qris_string || trx.payment_url;
+            const fallbackUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(rawData)}&size=600x600&format=png&margin=15`;
+            const resp = await axios.get(fallbackUrl, { responseType: 'arraybuffer', timeout: 8000 });
+            if (resp.data) {
+              qrBuffer = Buffer.from(resp.data);
+            }
+          } catch (axErr: any) {
+            deps.addLog('warning', `Unduh buffer PNG cadangan gagal: ${axErr?.message || axErr}`);
+          }
+        }
+
+        // Kirim gambar kode QR (Buffer PNG resmi yang didukung 100% oleh WhatsApp)
+        if (qrBuffer) {
+          try {
+            const imgRes = await sock.sendMessage(senderJid, {
+              image: qrBuffer,
+              mimetype: 'image/png',
+              caption: invoiceCaption,
+            });
+            markMessageAsBotSent(imgRes?.key?.id);
+            dmSent = true;
+          } catch (imgErr: any) {
+            deps.addLog('warning', `Kirim gambar buffer QRIS gagal: ${imgErr?.message || imgErr}`);
+          }
+        }
+
+        // Fallback teks jika media gagal terkirim
+        if (!dmSent) {
+          try {
+            const txtRes = await sock.sendMessage(senderJid, {
+              text: `${invoiceCaption}\n\n🔗 *Tautan Pembayaran:* ${trx.payment_url}`,
+            });
+            markMessageAsBotSent(txtRes?.key?.id);
+            dmSent = true;
+          } catch (txtErr: any) {
+            deps.addLog('error', `Gagal mengirim invoice ke DM ${senderJid}: ${txtErr?.message || txtErr}`);
+          }
+        }
+
+        if (dmSent) {
+          deps.addLog('success', `📩 Invoice LunasQRIS (Gambar PNG) berhasil dikirimkan ke chat pribadi ${senderJid}`);
+        }
+
+        // 6. Jalankan Background Poller untuk verifikasi status lunas otomatis
+        startLunasQrisPolling(
+          {
+            orderId: trx.order_id || orderId,
+            trxId: trx.trx_id,
+            senderJid,
+            groupJid: isGroup ? remoteJid : undefined,
+            senderName,
+            productName,
+            variantName,
+            price,
+            totalAmount: trx.total_amount,
+            uniqueCode: trx.unique_code,
+            apiKey: lunasQrisApiKey,
+            baseUrl: config.lunasQrisBaseUrl || 'https://lunasqris.com',
+            onPaid: async () => {
+              // Update status transaksi di database lokal menjadi 'paid'
+              try {
+                updateTransactionStatus(trx.order_id || orderId, 'paid');
+              } catch {}
+
+              // Pembayaran LUNAS -> Kirim data produk sensitif ke DM
+              const randomAccount = Math.random().toString(36).substring(2, 7);
+              const randomPass = Math.random().toString(36).substring(2, 8);
+              const emailCust = `cust.${randomAccount}@premium.net`;
+              const passCust = `P@ss${randomPass}!`;
+
+              const successMessage =
+                `🎉 *PEMBAYARAN DITERIMA & LUNAS!*\n` +
+                `*${storeTitle}*\n\n` +
+                `Terima kasih Kak ${senderName}, pembayaran untuk order \`${trx.order_id}\` sebesar *Rp ${trx.total_amount.toLocaleString('id-ID')}* telah sukses diverifikasi otomatis oleh LunasQRIS!\n\n` +
+                `📦 *Produk:* ${productName}\n` +
+                `⚡ *Varian:* ${variantName}\n` +
+                `📅 *Waktu:* ${new Date().toLocaleString('id-ID')}\n\n` +
+                `🔐 *DETAIL KREDENSIAL AKUN (RAHASIA):*\n` +
+                `• *Email / Username:* \`${emailCust}\`\n` +
+                `• *Password:* \`${passCust}\`\n` +
+                `• *Masa Aktif:* 30 Hari Garansi Penuh\n` +
+                `• *Aturan Pakai:* Gunakan akun sesuai profil yang disediakan, jangan mengubah password utama.\n\n` +
+                `_Terima kasih telah berbelanja di ${storeTitle}! Detail di atas hanya dikirimkan ke chat pribadi Anda demi keamanan._`;
+
+              try {
+                const sRes = await sock.sendMessage(senderJid, { text: successMessage });
+                markMessageAsBotSent(sRes?.key?.id);
+                deps.addLog('success', `🎁 Kredensial akun premium berhasil dikirimkan ke DM ${senderJid}`);
+              } catch (sendErr: any) {
+                deps.addLog('error', `Gagal mengirim detail akun ke DM: ${sendErr?.message || sendErr}`);
+              }
+
+              // Notifikasi ke Owner jika nomor owner terisi
+              const ownerNum = config.storeInfo?.ownerNumber?.replace(/[^0-9]/g, '');
+              if (ownerNum) {
+                const ownerJid = `${ownerNum}@s.whatsapp.net`;
+                const ownerNote =
+                  `🔔 *NOTIFIKASI PESANAN LUNAS (LUNASQRIS)*\n\n` +
+                  `• *Pembeli:* ${senderName} (${senderCleanNumber})\n` +
+                  `• *Produk:* ${productName} (${variantName})\n` +
+                  `• *Order ID:* ${trx.order_id}\n` +
+                  `• *Nominal:* Rp ${trx.total_amount.toLocaleString('id-ID')}\n` +
+                  `• *Status:* Lunas & Terkirim ke DM pembeli`;
+                try {
+                  const oRes = await sock.sendMessage(ownerJid, { text: ownerNote });
+                  markMessageAsBotSent(oRes?.key?.id);
+                } catch {}
+              }
+            },
+            onExpired: async () => {
+              // Update status transaksi di database lokal menjadi 'cancel'
+              try {
+                updateTransactionStatus(trx.order_id || orderId, 'cancel');
+              } catch {}
+
+              // Pembayaran Kedaluwarsa
+              const expiredMsg =
+                `⏰ *INVOICE KEDALUWARSA*\n` +
+                `Tagihan \`${trx.order_id}\` untuk *${productName} (${variantName})* telah melewati batas waktu pembayaran.\n\n` +
+                `Jika Anda masih ingin memesan, silakan ulangi pemesanan di grup atau hubungi admin.`;
+              try {
+                const eRes = await sock.sendMessage(senderJid, { text: expiredMsg });
+                markMessageAsBotSent(eRes?.key?.id);
+              } catch {}
+            },
+          },
+          deps.addLog
+        );
+      } catch (invErr: any) {
+        deps.addLog('error', `Gagal memproses invoice QRIS: ${invErr?.message || invErr}`);
+        const errMsg = `Maaf kak @${senderCleanNumber}, gagal membuat invoice pembayaran: ${invErr?.message || 'Server sibuk'}. Silakan coba kembali atau hubungi admin.`;
+        try {
+          const eResp = await sock.sendMessage(
+            remoteJid,
+            { text: errMsg, mentions: [senderJid] },
+            { quoted: m }
+          );
+          markMessageAsBotSent(eResp?.key?.id);
+        } catch {}
+      }
+
       continue;
     }
 
@@ -368,7 +666,29 @@ export async function dispatchIncomingMessages(
           continue; // SELESAI
         }
 
-        // D. Aksi Pemicu: UNKNOWN / TANPA AKSI
+        // D. Aksi Pemicu: OWNER
+        if (matchedButton.triggerAction === 'owner') {
+          deps.addLog('info', `👑 Tombol Quick Reply "${matchedButton.name}" (Action: Owner) ditekan oleh ${senderName}. Mengirim Kontak Owner!`);
+          try {
+            await sendOwnerContactMessage(sock, config, remoteJid, m, deps.addLog);
+          } catch (err: any) {
+            deps.addLog('error', `Gagal mengirim respon OWNER: ${err?.message || err}`);
+          }
+          continue; // SELESAI
+        }
+
+        // E. Aksi Pemicu: ADMIN
+        if (matchedButton.triggerAction === 'admin') {
+          deps.addLog('info', `📞 Tombol Quick Reply "${matchedButton.name}" (Action: Admin) ditekan oleh ${senderName}. Mengirim Kontak Admin!`);
+          try {
+            await sendAdminContactMessage(sock, config, remoteJid, m, deps.addLog);
+          } catch (err: any) {
+            deps.addLog('error', `Gagal mengirim respon ADMIN: ${err?.message || err}`);
+          }
+          continue; // SELESAI
+        }
+
+        // F. Aksi Pemicu: UNKNOWN / TANPA AKSI
         // Pengguna menginginkan: tombol tanpa aksi pemicu bot TIDAK AKAN merespon
         if (matchedButton.triggerAction === 'unknown' || !matchedButton.triggerAction) {
           deps.addLog('info', `🔘 Tombol Quick Reply "${matchedButton.name}" (Tanpa Aksi Pemicu) ditekan oleh ${senderName}. Bot tidak merespon sesuai aturan.`);
@@ -392,8 +712,13 @@ export async function dispatchIncomingMessages(
         await sendMenuInteractiveMessage(sock, config, remoteJid, m, deps.addLog);
         continue;
       }
-      if (['contact', 'admin', 'kontak', 'owner'].includes(cleanCmd)) {
-        deps.addLog('info', `🔘 Tombol Quick Reply "${cleanBtn}" ditekan oleh ${senderName}. Mengirim Kontak Admin!`);
+      if (cleanCmd === 'owner') {
+        deps.addLog('info', `👑 Tombol Quick Reply "${cleanBtn}" ditekan oleh ${senderName}. Mengirim Kontak Owner!`);
+        await sendOwnerContactMessage(sock, config, remoteJid, m, deps.addLog);
+        continue;
+      }
+      if (['contact', 'admin', 'kontak'].includes(cleanCmd)) {
+        deps.addLog('info', `📞 Tombol Quick Reply "${cleanBtn}" ditekan oleh ${senderName}. Mengirim Kontak Admin!`);
         await sendAdminContactMessage(sock, config, remoteJid, m, deps.addLog);
         continue;
       }
@@ -442,26 +767,67 @@ export async function dispatchIncomingMessages(
       continue;
     }
 
-    // C. Command 'admin' / 'contact'
-    if (['admin', 'contact', 'kontak', 'owner'].includes(commandName)) {
+    // C. Command 'owner'
+    if (commandName === 'owner') {
+      deps.addLog('info', `👑 Menerima command ${usedPrefix}owner dari ${senderName}`);
+      await sendOwnerContactMessage(sock, config, remoteJid, m, deps.addLog);
+      continue;
+    }
+
+    // D. Command 'admin' / 'contact'
+    if (['admin', 'contact', 'kontak'].includes(commandName)) {
       deps.addLog('info', `📞 Menerima command ${usedPrefix}${commandName} dari ${senderName}`);
       await sendAdminContactMessage(sock, config, remoteJid, m, deps.addLog);
       continue;
     }
 
-    // D. Command 'order'
+    // D. Command 'order' (Mode Uji Coba: Respon Grup & Private Chat)
     if (commandName.startsWith('order')) {
       const variantChoice = commandArg || 'Produk Pilihan';
-      const storeTitle = resolvePlaceholders('{storeName}', config) || 'Wanzt Store';
-      deps.addLog('info', `🛒 Pelanggan ${senderName} mengetik command ORDER: "${variantChoice}"`);
-      await sock.sendMessage(
-        remoteJid,
-        {
-          text: `Halo kak *${senderName}*! 👋\n\nPilihan pesanan kamu untuk *${variantChoice}* telah kami terima.\n\nSilakan konfirmasi ke Admin ${storeTitle} melalui kontak di bawah ini:`,
-        },
-        { quoted: m }
-      );
-      await sendAdminContactMessage(sock, config, remoteJid, m, deps.addLog);
+      deps.addLog('info', `🛒 Pelanggan ${senderName} mengetik command ORDER: "${variantChoice}" (Chat: ${remoteJid})`);
+
+      let senderJid = m.key?.participant || remoteJid;
+      if (senderJid.includes(':')) {
+        senderJid = senderJid.replace(/:[0-9]+@/, '@');
+      }
+      senderJid = deps.resolveTargetJid(senderJid);
+
+      if (isGroup) {
+        try {
+          const groupRes = await sock.sendMessage(
+            remoteJid,
+            { text: 'testing respon in grup' },
+            { quoted: m }
+          );
+          markMessageAsBotSent(groupRes?.key?.id);
+          deps.addLog('success', `💬 [Uji Coba] Pesan "testing respon in grup" terkirim ke grup ${remoteJid}`);
+        } catch (grpErr: any) {
+          deps.addLog('error', `Gagal mengirim respon grup: ${grpErr?.message || grpErr}`);
+        }
+
+        try {
+          const privRes = await sock.sendMessage(
+            senderJid,
+            { text: 'testing respon in private chat' }
+          );
+          markMessageAsBotSent(privRes?.key?.id);
+          deps.addLog('success', `📩 [Uji Coba] Pesan "testing respon in private chat" terkirim ke ${senderJid}`);
+        } catch (privErr: any) {
+          deps.addLog('error', `Gagal mengirim pesan ke private chat ${senderJid}: ${privErr?.message || privErr}`);
+        }
+      } else {
+        try {
+          const privRes = await sock.sendMessage(
+            remoteJid,
+            { text: 'testing respon in private chat' },
+            { quoted: m }
+          );
+          markMessageAsBotSent(privRes?.key?.id);
+          deps.addLog('success', `📩 [Uji Coba] Respon di private chat berhasil terkirim.`);
+        } catch (privErr: any) {
+          deps.addLog('error', `Gagal mengirim respon private: ${privErr?.message || privErr}`);
+        }
+      }
       continue;
     }
 

@@ -1,34 +1,6 @@
 {
   "menuOutputText": "Halo kak! Selamat datang di wanztstore.web.id ✨\n\nSilakan pilih layanan yang ingin Anda pesan melalui tombol interaktif di bawah ini:",
-  "menuButtons": [
-    {
-      "id": "btn-1",
-      "type": "quick_reply",
-      "name": "🛍️ Katalog Produk",
-      "output": ".katalog"
-    },
-    {
-      "id": "btn-2",
-      "type": "cta_url",
-      "name": "🌐 Buka Website",
-      "output": "https://wanztstore.web.id"
-    },
-    {
-      "id": "btn-3",
-      "type": "vcard",
-      "name": "📞 Hubungi Admin",
-      "output": "Admin Store (6285712439395)",
-      "callTargetName": "Admin Store",
-      "callPhoneNumber": "6285712439395"
-    },
-    {
-      "id": "btn-1791764084648",
-      "type": "quick_reply",
-      "name": "📑 List Produk",
-      "output": "📑 List Produk",
-      "triggerAction": "list"
-    }
-  ],
+  "menuButtons": [],
   "includeMedia": true,
   "selectedPicture": "snaptik-app-7690985506468908308-slide-2.jpg",
   "listOutputText": "Halo kak! Berikut daftar produk aplikasi yang tersedia di wanztstore.web.id:\n\n{daftarProduk}\n\nKetik nama produk yang ingin Anda pesan.\nwanztstore.web.id • Pilih Produk",
