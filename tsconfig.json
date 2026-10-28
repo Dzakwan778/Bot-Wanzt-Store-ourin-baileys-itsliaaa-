@@ -20,5 +20,5 @@
       "@/*": ["./*"]
     }
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "frontend/src", "backend", "server.ts", "vite.config.ts"]
 }

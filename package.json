@@ -4,10 +4,13 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port=3000 --host=0.0.0.0",
-    "build": "vite build",
+    "dev": "tsx server.ts",
+    "build": "vite build && (mkdir -p frontend/dist && cp -r dist/* frontend/dist/ 2>/dev/null || true)",
+    "start": "tsx server.ts",
+    "backend": "tsx backend/server.ts",
+    "frontend:dev": "vite --port=3000 --host=0.0.0.0",
     "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
+    "clean": "rm -rf dist frontend/dist server.js",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
@@ -16,6 +19,8 @@
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^6.1.1",
     "axios": "^1.20.0",
+    "cors": "^2.8.6",
+    "express": "^5.3.0",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "ourin-baileys": "^9.0.21",
@@ -26,12 +31,15 @@
     "vite": "^8.3.0"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/node": "^22.14.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
 }

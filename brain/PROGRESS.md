@@ -150,16 +150,58 @@ Aplikasi ini mengatur bot WhatsApp toko otomatis dengan fitur:
       - Input Nomor WhatsApp Owner dilengkapi *prefix badge* bendera + kode negara `+62` yang identik dengan form koneksi WhatsApp pada panel dashboard.
       - Selaras 100% dengan keseluruhan antarmuka sistem.
 
+17. **Pemisahan Frontend & Backend serta Panduan Deployment VPS (`INSTALASI.md`)**:
+    - **Pemisahan Modular Backend Express**:
+      - Seluruh 600+ baris middleware yang sebelumnya menumpuk di `vite.config.ts` telah dipisahkan ke modul Express router mandiri di `/server/routes/`:
+        - `authRoutes.ts`: Login PBKDF2, session token, logout, dan store info setup.
+        - `botRoutes.ts`: Status, pairing code, start (dengan lock store info), stop, reset, dan whitelist grup.
+        - `lunasQrisRoutes.ts`: Cek saldo, status pembayaran, create transaksi, dan webhook callback dengan verifikasi HMAC-SHA256 signature.
+        - `xavieraRoutes.ts`: Proxy profil saldo, daftar produk, SMM services, dan game.
+        - `transactionRoutes.ts`: Get transactions, ringkasan metrik, sync pending, dan delete.
+        - `mediaRoutes.ts`: Gambar QR & upload media.
+      - `/server/app.ts`: Setup Express app sentral dengan CORS dan body-parser rawBody.
+      - `/server/standalone.ts`: Server backend mandiri di port 5000 (`npm run backend`).
+      - `server.ts`: Entry point full-stack standar menghubungkan Express dan Vite middlewares (`npm run dev` & `npm run start`).
+    - **Penyederhanaan `vite.config.ts`**:
+      - `vite.config.ts` menjadi konfigurasi Vite murni yang bersih, cepat, dan teratur dengan proxy otomatis `/api` ke `http://localhost:5000` jika frontend dijalankan terpisah.
+    - **Konfigurasi PM2 Siap Pakai (`ecosystem.config.cjs`)**:
+      - Terkonfigurasi untuk deployment di VPS `104.64.15.80` dalam folder `bot-whatsapp`, auto-restart on crash, memory limit 1GB, dan startup ready.
+    - **Panduan Terperinci di `INSTALASI.md`**:
+      - Panduan copy-paste langkah demi langkah untuk VPS IP `104.64.15.80` di folder `bot-whatsapp`:
+        - Persiapan OS (Node.js 20, PM2, Git, Nginx, UFW).
+        - Menaruh file ke `/root/bot-whatsapp`.
+        - Perintah PM2 (`pm2 start ecosystem.config.cjs`, `pm2 startup`, `pm2 save`).
+        - Konfigurasi Nginx Reverse Proxy (Port 80 -> 3000) lengkap dengan header WebSocket Baileys dan Webhook LunasQRIS.
+        - Pengaturan URL Webhook LunasQRIS `http://104.64.15.80/api/lunasqris/webhook`.
+18. **Pemisahan Fisik Folder `bot-whatsapp/frontend` & `bot-whatsapp/backend` serta Konfigurasi Domain `testbot.wanma2.my.id`**:
+    - **Struktur Folder Terpisah**:
+      - `bot-whatsapp/frontend/`: Memuat seluruh antarmuka React (`src/`), `index.html`, `vite.config.ts`, `package.json`, dan bundle `dist/`.
+      - `bot-whatsapp/backend/`: Memuat server Express di Port 5000 (`backend/server.ts`), modular routes (`backend/routes/`), business services (`backend/services/`), handlers Baileys (`backend/handlers/`), database lokal (`backend/database/`), dan `package.json`.
+    - **Konfigurasi Domain `testbot.wanma2.my.id` (IP: 104.64.15.80)**:
+      - **Nginx Reverse Proxy**:
+        - Menyajikan file frontend statis dari `/root/bot-whatsapp/frontend/dist` pada port 80/443.
+        - Meneruskan seluruh request `/api/` ke backend port 5000 dengan header WebSocket Baileys dan HMAC signature webhook LunasQRIS.
+      - **PM2**: Dikonfigurasi di `ecosystem.config.cjs` dengan proses `bot-backend` (`backend/server.ts`) yang berjalan 24/7 di Port 5000.
+      - **Webhook LunasQRIS**: Diarahkan ke `https://testbot.wanma2.my.id/api/lunasqris/webhook`.
+      - **SSL Gratis**: Panduan 1-baris Certbot `certbot --nginx -d testbot.wanma2.my.id`.
+    - **Pembaruan Skrip Otomasi**: `deploy-vps.sh` dan `INSTALASI.md` diselaraskan 100% dengan struktur direktori dan domain ini.
+
 ---
 
 ## 📂 Struktur Penting
+- `INSTALASI.md`: Panduan instalasi dan deployment lengkap VPS 104.64.15.80 di folder `bot-whatsapp`.
+- `ecosystem.config.cjs`: Konfigurasi manajemen proses PM2 production.
+- `server.ts`: Entry point server full-stack utama (Express + Vite).
+- `server/app.ts`: Aplikasi Express modular terpusat.
+- `server/standalone.ts`: Server backend independen (Port 5000).
+- `server/routes/`: Seluruh controller REST API modular (auth, bot, lunasqris, xaviera, transactions, media).
+- `deploy-vps.sh`: Skrip otomasi deployment 1-klik untuk VPS Ubuntu/Debian.
 - `database/command_invoice.json`: File database persisten template teks & footer invoice.
-- `src/components/tabs/TabCommand.tsx`: Antarmuka manajemen command (Menu, List, Carousel, Invoice) dengan pratinjau interaktif.
-- `server/messages/adminContactMessage.ts`: Fungsi pengiriman vCard admin dengan fallback otomatis ke nomor owner (`sendInvoiceAdminContactMessage`).
+- `database/auth.json`: Kredensial akun admin ter-hash PBKDF2.
+- `database/transactions.json`: Database riwayat transaksi pesanan bot.
 - `src/components/tabs/TabTransaksi.tsx`: Komponen tampilan tabel riwayat transaksi dengan tombol hapus inline confirmation yang aman.
 - `server/services/transactionManager.ts`: Modul pengelola transaksi & database persisten `/database/transactions.json`.
 - `src/hooks/useTransactions.ts`: Hook reaktif sinkronisasi transaksi dashboard.
-- `deploy-vps.sh`: Skrip instalasi otomatis bot & dashboard di VPS Ubuntu/Debian.
 - `server/messages/carouselMessage.ts`: Pembuat kartu Carousel varian produk dengan markup harga jual +10%.
 - `server/handlers/messageDispatcher.ts`: Dispatcher pesan, generate QRIS PNG buffer, format invoice rapi, dan auto-fulfillment.
 - `src/components/tabs/TabConnection.tsx`: Antarmuka manajemen konfigurasi API LunasQRIS dan Xaviera.

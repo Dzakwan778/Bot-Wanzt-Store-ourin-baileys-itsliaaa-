@@ -50,7 +50,7 @@ echo -e "${GREEN}[4/7] Menginstall PM2 Process Manager secara global...${NC}"
 npm install -g pm2 tsx
 
 # 4. Menyiapkan Folder Proyek
-APP_DIR="/var/www/wanzt-bot"
+APP_DIR="/root/bot-whatsapp"
 echo -e "${GREEN}[5/7] Menyiapkan direktori aplikasi di ${APP_DIR}...${NC}"
 
 # Cek apakah dijalankan langsung di dalam folder repo
@@ -61,14 +61,14 @@ if [ -f "package.json" ] && [ -d "server" ]; then
   cp -r ./.[!.]* "$APP_DIR/" 2>/dev/null || true
   cd "$APP_DIR"
 elif [ -d "$APP_DIR" ]; then
-  echo -e "${YELLOW}Folder $APP_DIR sudah ada, memperbarui dari git...${NC}"
+  echo -e "${YELLOW}Folder $APP_DIR sudah ada, memperbarui...${NC}"
   cd "$APP_DIR"
   if [ -d ".git" ]; then
     git pull origin main || true
   fi
 else
-  echo -e "${YELLOW}Melakukan clone repository resmi...${NC}"
-  git clone https://github.com/Dzakwan778/Bot-Wanzt-Store-ourin-baileys-itsliaaa-remix.git "$APP_DIR"
+  echo -e "${YELLOW}Menyiapkan folder $APP_DIR...${NC}"
+  mkdir -p "$APP_DIR"
   cd "$APP_DIR"
 fi
 
@@ -79,30 +79,44 @@ mkdir -p "$APP_DIR/session"
 echo -e "${GREEN}Menginstall dependensi npm di folder aplikasi...${NC}"
 npm install --legacy-peer-deps
 
+echo -e "${GREEN}Melakukan build bundle Frontend...${NC}"
+npm run build
+
 # 5. Konfigurasi Nginx Reverse Proxy
-echo -e "${GREEN}[6/7] Mengonfigurasi Nginx Reverse Proxy (Port 80/Domain -> Port 3000)...${NC}"
-cat << 'EOF' > /etc/nginx/sites-available/wanzt-bot
+echo -e "${GREEN}[6/7] Mengonfigurasi Nginx Reverse Proxy untuk testbot.wanma2.my.id...${NC}"
+cat << 'EOF' > /etc/nginx/sites-available/bot-whatsapp
 server {
     listen 80;
     listen [::]:80;
-    server_name _;
+    server_name testbot.wanma2.my.id 104.64.15.80;
 
     client_max_body_size 50M;
 
-    # Proxy ke aplikasi Node.js / Vite di Port 3000
+    # Sajikan file Frontend statis hasil build dari frontend/dist
+    root /root/bot-whatsapp/frontend/dist;
+    index index.html;
+
     location / {
-        proxy_pass http://127.0.0.1:3000;
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Proxy ke Backend Node.js / Express di Port 5000
+    location /api/ {
+        proxy_pass http://127.0.0.1:5000;
         proxy_http_version 1.1;
         
-        # Dukungan WebSocket untuk Baileys & Vite HMR
+        # Dukungan WebSocket untuk Baileys & Real-time updates
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
         
-        # Header Asli Klien & Webhook Signature
+        # Header Asli Klien & Webhook Signature LunasQRIS
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Callback-Signature $http_x_callback_signature;
+        proxy_set_header X-Callback-Timestamp $http_x_callback_timestamp;
+        proxy_set_header X-Callback-Event $http_x_callback_event;
         
         proxy_pass_request_headers on;
         proxy_read_timeout 86400s;
@@ -112,7 +126,7 @@ server {
 EOF
 
 # Aktifkan site di Nginx
-ln -sf /etc/nginx/sites-available/wanzt-bot /etc/nginx/sites-enabled/
+ln -sf /etc/nginx/sites-available/bot-whatsapp /etc/nginx/sites-enabled/
 rm -f /etc/nginx/sites-enabled/default || true
 
 # Test & reload Nginx
@@ -125,13 +139,20 @@ echo -e "${GREEN}Mengatur keamanan firewall UFW...${NC}"
 ufw allow 22/tcp comment 'SSH'
 ufw allow 80/tcp comment 'HTTP'
 ufw allow 443/tcp comment 'HTTPS'
-ufw allow 3000/tcp comment 'Direct Node Port'
+ufw allow 5000/tcp comment 'Backend Port'
 echo "y" | ufw enable || true
 
 # 7. Jalankan Aplikasi dengan PM2
-echo -e "${GREEN}[7/7] Menjalankan Bot & Dashboard dengan PM2...${NC}"
+echo -e "${GREEN}[7/7] Menjalankan Bot & Backend dengan PM2...${NC}"
+pm2 delete bot-backend 2>/dev/null || true
+pm2 delete bot-whatsapp 2>/dev/null || true
 pm2 delete wanzt-bot 2>/dev/null || true
-pm2 start "npm run dev" --name "wanzt-bot" --time
+
+if [ -f "ecosystem.config.cjs" ]; then
+  pm2 start ecosystem.config.cjs --only bot-backend
+else
+  pm2 start "npx tsx backend/server.ts" --name "bot-backend" --time
+fi
 
 # Simpan proses agar otomatis nyala saat VPS reboot
 pm2 save
@@ -140,14 +161,14 @@ pm2 startup systemd -u root --hp /root || true
 echo -e "\n${CYAN}================================================================${NC}"
 echo -e "${GREEN}  🎉 DEPLOYMENT BERHASIL & BOT SUDAH AKTIF 24/7!${NC}"
 echo -e "${CYAN}================================================================${NC}"
-echo -e "• Dashboard Web: ${YELLOW}http://104.64.15.80${NC} atau ${YELLOW}http://104.64.15.80:3000${NC}"
-echo -e "• Webhook LunasQRIS: ${YELLOW}http://104.64.15.80/api/lunasqris/webhook${NC}"
+echo -e "• Domain Dashboard : ${YELLOW}http://testbot.wanma2.my.id${NC}"
+echo -e "• Akses IP         : ${YELLOW}http://104.64.15.80${NC}"
+echo -e "• Webhook LunasQRIS: ${YELLOW}https://testbot.wanma2.my.id/api/lunasqris/webhook${NC}"
 echo -e "\n${PURPLE}📌 Perintah Berguna PM2:${NC}"
-echo -e "  - Cek Log Real-Time : ${CYAN}pm2 logs wanzt-bot${NC}"
+echo -e "  - Cek Log Real-Time : ${CYAN}pm2 logs bot-backend${NC}"
 echo -e "  - Cek Status Bot    : ${CYAN}pm2 status${NC}"
-echo -e "  - Restart Bot       : ${CYAN}pm2 restart wanzt-bot${NC}"
-echo -e "  - Hentikan Bot      : ${CYAN}pm2 stop wanzt-bot${NC}"
-echo -e "\n${PURPLE}🌐 Pasang Domain & SSL Gratis (HTTPS):${NC}"
-echo -e "  Jika Anda sudah menghubungkan domain (A Record ke 104.64.15.80):"
-echo -e "  Ketik: ${CYAN}certbot --nginx -d namadomainanda.com${NC}"
+echo -e "  - Restart Bot       : ${CYAN}pm2 restart bot-backend${NC}"
+echo -e "  - Hentikan Bot      : ${CYAN}pm2 stop bot-backend${NC}"
+echo -e "\n${PURPLE}🌐 Pasang SSL Gratis (HTTPS) dengan Certbot:${NC}"
+echo -e "  Ketik: ${CYAN}certbot --nginx -d testbot.wanma2.my.id${NC}"
 echo -e "${CYAN}================================================================${NC}\n"

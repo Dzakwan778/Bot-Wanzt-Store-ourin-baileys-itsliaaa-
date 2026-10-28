@@ -348,12 +348,93 @@ Menyelaraskan desain antarmuka `LoginPage.tsx` dan `MandatoryStoreSetupModal.tsx
 2. `/src/components/modals/MandatoryStoreSetupModal.tsx`: Redesain total selaras dengan palet dashboard.
 3. `/brain/PROGRESS.md`: Pencatatan progres.
 
+## 📌 Rencana Implementasi: Pemisahan Frontend & Backend serta Panduan Instalasi VPS (`INSTALASI.md`)
+
+### 1. Tujuan & Deskripsi
+Memisahkan arsitektur sistem menjadi Frontend (React + Vite) dan Backend (Express + Node.js) yang terpisah, bersih, dan modular, serta menyusun panduan lengkap instalasi VPS di `INSTALASI.md` untuk IP `104.64.15.80` dalam direktori `bot-whatsapp` dengan manajemen proses PM2:
+1. **Pemisahan Arsitektur Backend (Express Modular Routes)**:
+   - Memindahkan seluruh logika route REST API yang sebelumnya menumpuk di dalam middleware `vite.config.ts` (600+ baris) ke dalam folder `/server/routes/`:
+     - `/server/routes/authRoutes.ts`: Route otentikasi aman (`/api/auth/*`).
+     - `/server/routes/botRoutes.ts`: Route kontrol WhatsApp Baileys bot (`/api/bot/*`).
+     - `/server/routes/xavieraRoutes.ts`: Route proxy integrasi Xaviera API (`/api/xaviera/*`).
+     - `/server/routes/lunasQrisRoutes.ts`: Route proxy LunasQRIS & Webhook HMAC-SHA256 (`/api/lunasqris/*`).
+     - `/server/routes/transactionRoutes.ts`: Route data riwayat transaksi (`/api/transactions/*`).
+     - `/server/routes/mediaRoutes.ts`: Route manajemen file gambar (`/api/media/*`).
+   - Membuat `/server/app.ts`: Setup Express app utama dengan middleware `cors`, parsing JSON (dengan rawBody buffer untuk signature webhook), dan mounting semua routes.
+   - Membuat `/server/standalone.ts`: Server backend mandiri (port 5000 / `process.env.PORT`) untuk skenario eksekusi backend terpisah di VPS.
+2. **Server Entry Point & Integrasi Dev (`server.ts`)**:
+   - Sesuai standar AI Studio Build Full-Stack: Membuat `server.ts` yang menjalankan Express app pada port 3000 dengan `vite.middlewares` saat development (`npm run dev`), dan menyajikan bundle statis `dist` saat production.
+3. **Penyederhanaan `vite.config.ts`**:
+   - Menghapus 600+ baris middleware dari `vite.config.ts` sehingga menjadi file konfigurasi Vite murni, ringan, dan cepat.
+4. **Pembaruan `package.json`**:
+   - Menambahkan script `"dev": "tsx server.ts"`, `"start": "tsx server.ts"`, `"backend": "tsx server/standalone.ts"`, dan `"frontend:dev": "vite --port=3000 --host=0.0.0.0"`.
+5. **Konfigurasi PM2 (`ecosystem.config.cjs`)**:
+   - Menyediakan file konfigurasi PM2 siap pakai untuk folder `bot-whatsapp` di VPS `104.64.15.80`.
+6. **Dokumentasi Lengkap `INSTALASI.md`**:
+   - Panduan terperinci langkah demi langkah untuk VPS IP `104.64.15.80`:
+     - Struktur folder proyek di dalam `/root/bot-whatsapp` (atau `/home/ubuntu/bot-whatsapp`).
+     - Penjelasan pemisahan Frontend dan Backend.
+     - Prasyarat (Node.js 20 LTS, Git, PM2).
+     - Menjalankan via PM2 (`pm2 start ecosystem.config.cjs` / perintah mandiri).
+     - Konfigurasi Nginx Reverse Proxy & Firewall (UFW).
+     - Konfigurasi Webhook LunasQRIS ke `http://104.64.15.80/api/lunasqris/webhook`.
+     - Monitoring, logs, restart otomatis, dan troubleshooting.
+
+### 2. File Target
+1. `/server/routes/authRoutes.ts` (BARU)
+2. `/server/routes/botRoutes.ts` (BARU)
+3. `/server/routes/xavieraRoutes.ts` (BARU)
+4. `/server/routes/lunasQrisRoutes.ts` (BARU)
+5. `/server/routes/transactionRoutes.ts` (BARU)
+6. `/server/routes/mediaRoutes.ts` (BARU)
+7. `/server/app.ts` (BARU)
+8. `/server/standalone.ts` (BARU)
+9. `/server.ts` (BARU)
+10. `/vite.config.ts` (REFACTOR - bersihkan middleware)
+11. `/package.json` (UPDATE scripts)
+12. `/ecosystem.config.cjs` (BARU)
+13. `/INSTALASI.md` (BARU)
+14. `/brain/PROGRESS.md` (UPDATE)
+
+## 📌 Rencana Implementasi: Pemisahan Fisik Folder `frontend/` dan `backend/` serta Domain `testbot.wanma2.my.id`
+
+### 1. Tujuan & Deskripsi
+Menerapkan pemisahan fisik penuh struktur direktori proyek menjadi:
+- `bot-whatsapp/frontend/`: Seluruh kode dan aset antarmuka (React components, hooks, types, `index.html`, `vite.config.ts`, `package.json`).
+- `bot-whatsapp/backend/`: Seluruh engine dan API server (Express server, routes, services, handlers, database JSON, `package.json`).
+- Serta mengonfigurasi domain khusus pengguna **`testbot.wanma2.my.id`** pada Nginx Reverse Proxy, SSL Certbot, Webhook LunasQRIS, skrip otomatisasi `deploy-vps.sh`, dan panduan `INSTALASI.md`.
+
+### 2. File Target
+1. `/frontend/` (BARU):
+   - `/frontend/package.json`
+   - `/frontend/vite.config.ts`
+   - `/frontend/index.html`
+   - `/frontend/src/` (Komponen, hooks, types, media)
+2. `/backend/` (BARU):
+   - `/backend/package.json`
+   - `/backend/server.ts` (Express server port 5000)
+   - `/backend/app.ts` (Express app & routing)
+   - `/backend/routes/` (auth, bot, lunasqris, xaviera, transaction, media)
+   - `/backend/services/`
+   - `/backend/handlers/`
+   - `/backend/messages/`
+   - `/backend/config/`
+   - `/backend/database/` (Data json persisten)
+3. Root Orchestrator:
+   - `/package.json`: Menghubungkan dev, build, dan start agar berjalan mulus di AI Studio port 3000 maupun di VPS.
+   - `/server.ts`: Full-stack dev runner menghubungkan backend Express dan frontend Vite middleware.
+   - `/ecosystem.config.cjs`: Disesuaikan untuk domain `testbot.wanma2.my.id` dan target folder `backend/server.ts`.
+   - `/INSTALASI.md`: Panduan instalasi terupdate khusus domain `testbot.wanma2.my.id` dan VPS `104.64.15.80`.
+   - `/deploy-vps.sh`: Skrip otomatisasi dengan domain `testbot.wanma2.my.id`.
+
 ---
 
 ## ⏳ Log Status & Riwayat Rencana Implementasi
 
 | Tanggal | Tugas / Fitur | File Target | Status |
 | :--- | :--- | :--- | :--- |
+| 2026-10-28 | Pemisahan Fisik Folder `frontend/` & `backend/` + Domain `testbot.wanma2.my.id` | `frontend/*`, `backend/*`, `INSTALASI.md` | Selesai (Verified) |
+| 2026-10-28 | Pemisahan Frontend & Backend serta Panduan Instalasi VPS | `server/*`, `server.ts`, `vite.config.ts`, `INSTALASI.md` | Selesai (Verified) |
 | 2026-10-28 | Redesain Login Page & Pop-up Modal Sesuai `DESIGN (2).md` | `src/components/auth/*`, `src/components/modals/*` | Selesai (Verified) |
 | 2026-10-27 | Halaman Login Aman & Lock Wajib Store Info | `server/*`, `src/*`, `database/auth.json` | Selesai (Verified) |
 | 2026-10-27 | Live Requirements Checklist Custom Pairing Code | `src/components/connection/WhatsAppConnectionPanel.tsx` | Selesai (Verified) |
@@ -366,6 +447,7 @@ Menyelaraskan desain antarmuka `LoginPage.tsx` dan `MandatoryStoreSetupModal.tsx
 | 2026-10-26 | Pemulihan File Modular & Hook (Fix Import Errors) | `src/hooks/*`, `src/components/tabs/*` | Selesai (Verified) |
 | 2026-10-26 | Perbaikan Bug Tab SMM (Fix Typo SMM vs SSM) | `src/components/tabs/TabContentRenderer.tsx`, `src/types/dashboard.types.ts` | Selesai (Verified) |
 | 2026-10-25 | Sinkronisasi Kode GitHub & Modularisasi | `src/App.tsx`, `src/components/*` | Selesai (Verified) |
+
 
 
 

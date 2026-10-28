@@ -1,0 +1,28 @@
+{
+  "name": "wanzt-bot-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server.ts",
+    "start": "tsx server.ts",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@google/genai": "^2.4.0",
+    "@itsliaaa/baileys": "^0.3.18-final",
+    "axios": "^1.20.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "ourin-baileys": "^9.0.21",
+    "pino": "^10.4.0",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.14.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}
