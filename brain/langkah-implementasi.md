@@ -230,10 +230,68 @@ Mengganti slot `tab05` menjadi tab resmi bernama **"Transaksi"** yang memuat sel
 
 ---
 
+## 📌 Rencana Implementasi: Command Invoice Dinamis & Perbaikan Tombol Hapus Transaksi
+
+### 1. Tujuan & Deskripsi
+Menerapkan 2 tugas utama sesuai instruksi pengguna:
+1. **Command Invoice Dinamis di Tab Command**:
+   - Menambahkan opsi `'Invoice'` pada dropdown pilih command di Tab Command (`Menu`, `List`, `Carousel`, `Invoice`).
+   - Konten halaman Command Invoice memungkinkan admin mengatur template teks invoice tagihan (`invoiceOutputText`) dan footer (`invoiceFooterText`).
+   - Mendukung seluruh placeholder toko & produk: `{storeName}`, `{ownerNumber}`, `{category}`, `{varian}`, `{price}`, `{produkName}`, `{adminNumber}`, `{webLink}`.
+   - Mendukung placeholder khusus invoice: `{orderId}`, `{total}`, `{unikCode}`.
+   - Menyertakan **2 tombol interaktif Native Flow**:
+     - **Tombol 1 (Quick Reply - Hubungi Admin)**: Saat diklik oleh pembeli di WhatsApp, bot mengirimkan vCard kontak WhatsApp nomor admin toko. Jika form nomor admin kosong (karena opsional), otomatis fallback mengirimkan nomor owner toko.
+     - **Tombol 2 (CTA URL - Web Checkout)**: Tombol resmi yang mengarahkan pembeli langsung ke URL web checkout LunasQRIS (`payment_url`).
+   - Pratinjau interaktif (*Live WhatsApp Preview*) POV pembeli lengkap dengan simulasi QR code dan 2 tombol interaktif.
+   - Penyimpanan persisten di `/database/command_invoice.json` dan tersinkronisasi dengan konfigurasi backend.
+   - Di `server/handlers/messageDispatcher.ts`, pesan invoice akan dirender menggunakan template dinamis ini dengan seluruh placeholder diganti secara tepat, dan dikirimkan bersama QRIS serta kedua tombol interaktif tersebut.
+2. **Perbaikan Tombol Hapus Transaksi (Icon Tempat Sampah) di Tab Transaksi**:
+   - **Penyebab Masalah**: Tombol sebelumnya memanggil fungsi bawaan peramban `window.confirm(...)`. Di dalam lingkungan sandbox iframe AI Studio atau web preview, pemanggilan `window.confirm` dilarang/diblokir oleh browser sandbox (`Avoid window.alert/window.open`), sehingga konfirmasi langsung gagal/noop dan penghapusan tidak pernah dieksekusi. Selain itu, tombol aksi berada di ujung kanan dengan padding kecil yang rentan tertimpa *hitbox* tautan Web Checkout.
+   - **Solusi**:
+     - Hapus `window.confirm(...)`.
+     - Terapkan **Inline Two-Step Confirmation**: Klik pertama mengubah tombol menjadi konfirmasi "Hapus? Ya" (atau tombol konfirmasi merah cerah dengan ikon centang) dengan timeout otomatis pembatalan 3 detik jika tidak diklik.
+     - Perbesar area klik (*touch target*) dengan `relative z-10`, padding memadai, dan efek visual yang jelas.
+     - Tambahkan feedback notifikasi toast saat transaksi berhasil dihapus.
+
+### 2. File Target
+1. `/database/command_invoice.json` (BARU): Tempat penyimpanan persisten template teks & footer invoice.
+2. `/server/types/bot.types.ts`: Menambahkan `InvoiceCommandConfig` dan properti `invoiceOutputText`, `invoiceFooterText`.
+3. `/server/config/configManager.ts`: Mengelola load dan save untuk file `command_invoice.json`.
+4. `/src/types/dashboard.types.ts`: Menambahkan opsi `'Invoice'` pada `selectedCommand` dan interface invoice.
+5. `/src/hooks/useStoreConfig.ts`: Menambahkan state `invoiceOutputText` & `invoiceFooterText` dan sinkronisasi server.
+6. `/src/components/tabs/TabCommand.tsx`: Menambahkan tampilan form pengaturan Invoice (chips placeholder, textarea, footer, preview WhatsApp, tombol simpan).
+7. `/server/handlers/messageDispatcher.ts`: Menggunakan template dinamis invoice saat kirim QRIS, menyertakan 2 tombol native flow, dan handler tombol vCard Hubungi Admin (dengan fallback nomor owner).
+8. `/src/components/tabs/TabTransaksi.tsx`: Memperbaiki tombol tempat sampah dengan inline confirmation bebas `window.confirm`.
+9. `/brain/PROGRESS.md`: Pencatatan status progres.
+
+---
+
+## 📌 Rencana Implementasi: Live Requirements Checklist untuk Custom Pairing Code
+
+### 1. Tujuan & Deskripsi
+Mengganti kotak peringatan kuning statis (*"Form Pairing Code Belum Diisi"*) pada panel koneksi WhatsApp dengan antarmuka **Live Requirements Checklist** modern dan interaktif, mengacu pada contoh referensi `Screenshot_20261028-064352.png`:
+1. **Segmented Progress Bar**:
+   - Baris 4-segmen animasi transisi halus di bawah input pairing code.
+   - Status warna: Merah (kosong/simbol), Kuning (1-7 char), Hijau (8 char valid).
+2. **Status Label Dinamis**:
+   - Menampilkan status kekuatan kode: `Belum Diisi` (abu), `Format Tidak Sesuai` (merah), `Panjang Belum Cukup (x/8)` (kuning/sky), dan `Kode Valid & Siap Digunakan` (hijau).
+3. **Daftar Syarat Real-Time (Requirements Checklist)**:
+   - **Syarat 1 (Wajib 8 karakter)**: Menampilkan tanda centang hijau `✓` jika tepat 8 karakter, atau titik `•` / hitungan sisa karakter jika belum 8 karakter.
+   - **Syarat 2 (Tidak menyertakan simbol)**: Menampilkan tanda centang hijau `✓` jika bersih tanpa simbol/spasi, atau silang merah `✕` jika terdeteksi simbol.
+   - **Syarat 3 (Hanya angka dan huruf A-Z, 0-9)**: Menampilkan tanda centang hijau `✓` jika mengandung kombinasi alfanumerik yang valid.
+
+### 2. File Target
+1. `/src/components/connection/WhatsAppConnectionPanel.tsx`: Mengganti alert box lama dengan komponen Live Requirements Checklist dan segmented progress bar.
+2. `/brain/PROGRESS.md`: Pencatatan status progres penyelesaian.
+
+---
+
 ## ⏳ Log Status & Riwayat Rencana Implementasi
 
 | Tanggal | Tugas / Fitur | File Target | Status |
 | :--- | :--- | :--- | :--- |
+| 2026-10-27 | Live Requirements Checklist Custom Pairing Code | `src/components/connection/WhatsAppConnectionPanel.tsx` | Selesai (Verified) |
+| 2026-10-27 | Command Invoice Dinamis & Fix Tombol Hapus Transaksi | `src/*`, `server/*`, `database/command_invoice.json` | Selesai (Verified) |
 | 2026-10-26 | Ganti tab05 Jadi Tab "Transaksi" & Data Riwayat Real-time | `src/*`, `server/*`, `database/transactions.json` | Selesai (Verified) |
 | 2026-10-26 | Ubah Istilah "Kode Unik" Menjadi "Fee Gateway" | `server/handlers/messageDispatcher.ts`, `src/components/tabs/TabConnection.tsx` | Selesai (Verified) |
 | 2026-10-26 | Harga Carousel +10%, QR PNG Buffer, & Hapus Garis Invoice | `server/messages/carouselMessage.ts`, `server/handlers/messageDispatcher.ts` | Selesai (Verified) |
@@ -242,5 +300,6 @@ Mengganti slot `tab05` menjadi tab resmi bernama **"Transaksi"** yang memuat sel
 | 2026-10-26 | Pemulihan File Modular & Hook (Fix Import Errors) | `src/hooks/*`, `src/components/tabs/*` | Selesai (Verified) |
 | 2026-10-26 | Perbaikan Bug Tab SMM (Fix Typo SMM vs SSM) | `src/components/tabs/TabContentRenderer.tsx`, `src/types/dashboard.types.ts` | Selesai (Verified) |
 | 2026-10-25 | Sinkronisasi Kode GitHub & Modularisasi | `src/App.tsx`, `src/components/*` | Selesai (Verified) |
+
 
 

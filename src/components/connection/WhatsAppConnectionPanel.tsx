@@ -11,6 +11,7 @@ import {
   Check,
   Copy,
   ShieldCheck,
+  X,
 } from 'lucide-react';
 import { BotStatusResponse } from '../../types/dashboard.types';
 
@@ -46,6 +47,11 @@ export const WhatsAppConnectionPanel: React.FC<WhatsAppConnectionPanelProps> = (
   const hasSymbol = /[^A-Z0-9]/.test(trimmedCode);
   const isExact8Chars = trimmedCode.length === 8;
   const isValidCode = !isEmpty && !hasSymbol && isExact8Chars;
+
+  // Syarat Kriteria Real-Time (Requirements Checklist)
+  const reqLength = isExact8Chars;
+  const reqNoSymbol = !isEmpty && !hasSymbol;
+  const reqAlphanumeric = !isEmpty && /^[A-Z0-9]+$/.test(trimmedCode);
 
   return (
     <div className="space-y-6">
@@ -137,55 +143,127 @@ export const WhatsAppConnectionPanel: React.FC<WhatsAppConnectionPanelProps> = (
               </span>
             </div>
 
-            {/* Pesan Validasi Status Form Pairing Code */}
-            <div className="mt-2 space-y-1">
-              {isEmpty && (
-                <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50/90 border border-amber-200 text-xs text-amber-800 animate-in fade-in duration-150">
-                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-semibold text-amber-900">Form Pairing Code Belum Diisi</p>
-                    <p className="text-[11px] text-amber-700 mt-0.5 leading-relaxed">
-                      Kolom ini wajib diisi untuk melakukan koneksi ke WhatsApp. Masukkan 8 karakter alfanumerik (hanya angka dan huruf saja, tanpa simbol).
-                    </p>
-                  </div>
-                </div>
-              )}
+            {/* Live Requirements Checklist & Progress Bar (Mirip Password Requirements) */}
+            <div className="mt-2.5 p-3 rounded-lg bg-slate-50/90 border border-slate-200 space-y-2.5">
+              {/* Segmented Progress Bar */}
+              <div className="grid grid-cols-4 gap-1.5">
+                {[1, 2, 3, 4].map((seg) => {
+                  let segColor = 'bg-slate-200';
+                  if (hasSymbol) {
+                    if (seg === 1) segColor = 'bg-rose-500';
+                  } else if (isValidCode) {
+                    segColor = 'bg-emerald-500';
+                  } else if (trimmedCode.length >= 7 && seg <= 3) {
+                    segColor = 'bg-sky-500';
+                  } else if (trimmedCode.length >= 4 && seg <= 2) {
+                    segColor = 'bg-amber-400';
+                  } else if (trimmedCode.length >= 1 && seg === 1) {
+                    segColor = 'bg-amber-400';
+                  }
+                  return (
+                    <div
+                      key={seg}
+                      className={`h-1.5 rounded-full transition-all duration-300 ${segColor}`}
+                    />
+                  );
+                })}
+              </div>
 
-              {hasSymbol && (
-                <div className="flex items-start gap-2 p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-800 animate-in fade-in duration-150">
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-semibold text-rose-900">Custom Pairing Code Tidak Sesuai</p>
-                    <p className="text-[11px] text-rose-700 mt-0.5 leading-relaxed">
-                      Dilarang menggunakan simbol atau spasi! Syarat utamanya adalah hanya boleh terdiri dari kombinasi <strong>angka (0-9)</strong> dan <strong>huruf (A-Z)</strong> saja.
-                    </p>
-                  </div>
-                </div>
-              )}
+              {/* Status Header */}
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[11px] font-semibold text-slate-600">
+                  Pairing Code Requirements:
+                </span>
+                <span
+                  className={`text-[11px] font-semibold transition-colors ${
+                    isValidCode
+                      ? 'text-emerald-600 font-bold'
+                      : hasSymbol
+                      ? 'text-rose-600 font-bold'
+                      : isEmpty
+                      ? 'text-slate-400'
+                      : 'text-amber-600'
+                  }`}
+                >
+                  {isValidCode
+                    ? 'Siap Digunakan ✓'
+                    : hasSymbol
+                    ? 'Format Tidak Sesuai'
+                    : isEmpty
+                    ? 'Wajib Diisi'
+                    : `Panjang Belum Cukup (${trimmedCode.length}/8)`}
+                </span>
+              </div>
 
-              {!isEmpty && !hasSymbol && !isExact8Chars && (
-                <div className="flex items-start gap-2 p-2.5 rounded-lg bg-sky-50 border border-sky-200 text-xs text-sky-800 animate-in fade-in duration-150">
-                  <AlertCircle className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-semibold text-sky-900">Panjang Karakter Belum Sesuai</p>
-                    <p className="text-[11px] text-sky-700 mt-0.5 leading-relaxed">
-                      Syarat utamanya adalah wajib tepat <strong>8 karakter</strong> alfanumerik. Saat ini baru {trimmedCode.length} karakter (kurang {8 - trimmedCode.length} karakter lagi).
-                    </p>
-                  </div>
+              {/* Checklist Syarat */}
+              <div className="space-y-1.5 pt-1.5 border-t border-slate-200/70 text-xs">
+                {/* Syarat 1: Wajib 8 karakter */}
+                <div
+                  className={`flex items-center gap-2 transition-colors ${
+                    reqLength
+                      ? 'text-emerald-700 font-medium'
+                      : 'text-slate-500'
+                  }`}
+                >
+                  {reqLength ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 stroke-[2.5]" />
+                  ) : (
+                    <span className="w-3.5 h-3.5 flex items-center justify-center text-slate-400 font-bold shrink-0 text-sm leading-none">
+                      •
+                    </span>
+                  )}
+                  <span>Wajib 8 karakter</span>
+                  {!reqLength && !isEmpty && (
+                    <span className="text-[10px] font-mono text-slate-400">
+                      ({trimmedCode.length}/8 karakter)
+                    </span>
+                  )}
                 </div>
-              )}
 
-              {isValidCode && (
-                <div className="flex items-start gap-2 p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 animate-in fade-in duration-150">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-semibold text-emerald-900">Format Pairing Code Sesuai</p>
-                    <p className="text-[11px] text-emerald-700 mt-0.5 leading-relaxed">
-                      Kode <span className="font-mono font-bold tracking-wider">{trimmedCode}</span> telah memenuhi syarat (8 karakter angka dan huruf tanpa simbol). Siap digunakan untuk koneksi.
-                    </p>
-                  </div>
+                {/* Syarat 2: Tidak menyertakan simbol */}
+                <div
+                  className={`flex items-center gap-2 transition-colors ${
+                    hasSymbol
+                      ? 'text-rose-700 font-medium'
+                      : reqNoSymbol
+                      ? 'text-emerald-700 font-medium'
+                      : 'text-slate-500'
+                  }`}
+                >
+                  {hasSymbol ? (
+                    <X className="w-3.5 h-3.5 text-rose-600 shrink-0 stroke-[2.5]" />
+                  ) : reqNoSymbol ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 stroke-[2.5]" />
+                  ) : (
+                    <span className="w-3.5 h-3.5 flex items-center justify-center text-slate-400 font-bold shrink-0 text-sm leading-none">
+                      •
+                    </span>
+                  )}
+                  <span>
+                    {hasSymbol
+                      ? 'Dilarang menyertakan simbol atau spasi'
+                      : 'Tidak menyertakan simbol'}
+                  </span>
                 </div>
-              )}
+
+                {/* Syarat 3: Hanya angka dan huruf */}
+                <div
+                  className={`flex items-center gap-2 transition-colors ${
+                    reqAlphanumeric
+                      ? 'text-emerald-700 font-medium'
+                      : 'text-slate-500'
+                  }`}
+                >
+                  {reqAlphanumeric ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 stroke-[2.5]" />
+                  ) : (
+                    <span className="w-3.5 h-3.5 flex items-center justify-center text-slate-400 font-bold shrink-0 text-sm leading-none">
+                      •
+                    </span>
+                  )}
+                  <span>Hanya angka dan huruf (A-Z, 0-9)</span>
+                </div>
+              </div>
             </div>
           </div>
 

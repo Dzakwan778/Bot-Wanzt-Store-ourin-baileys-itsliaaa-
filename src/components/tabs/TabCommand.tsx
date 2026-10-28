@@ -11,12 +11,16 @@ import {
   Sparkles,
   RefreshCw,
   CheckCircle2,
+  QrCode,
+  Receipt,
+  ExternalLink,
+  PhoneCall,
 } from 'lucide-react';
 import { WhatsAppButton, StoreInfoConfig } from '../../types/dashboard.types';
 
 interface TabCommandProps {
-  selectedCommand: 'Menu' | 'List' | 'Carousel';
-  setSelectedCommand: (cmd: 'Menu' | 'List' | 'Carousel') => void;
+  selectedCommand: 'Menu' | 'List' | 'Carousel' | 'Invoice';
+  setSelectedCommand: (cmd: 'Menu' | 'List' | 'Carousel' | 'Invoice') => void;
   // Menu Props
   menuOutputText: string;
   setMenuOutputText: (txt: string) => void;
@@ -47,6 +51,12 @@ interface TabCommandProps {
   carouselPicture: string;
   setCarouselPicture: (pic: string) => void;
   onSaveCarousel: () => void;
+  // Invoice Props
+  invoiceOutputText: string;
+  setInvoiceOutputText: (txt: string) => void;
+  invoiceFooterText: string;
+  setInvoiceFooterText: React.Dispatch<React.SetStateAction<string>>;
+  onSaveInvoice: () => void;
   // General Props
   storeInfo: StoreInfoConfig;
   isSavingConfig: boolean;
@@ -83,6 +93,11 @@ export const TabCommand: React.FC<TabCommandProps> = ({
   carouselPicture,
   setCarouselPicture,
   onSaveCarousel,
+  invoiceOutputText,
+  setInvoiceOutputText,
+  invoiceFooterText,
+  setInvoiceFooterText,
+  onSaveInvoice,
   storeInfo,
   isSavingConfig,
   showToast,
@@ -98,12 +113,13 @@ export const TabCommand: React.FC<TabCommandProps> = ({
           <div className="relative inline-block w-48">
             <select
               value={selectedCommand}
-              onChange={(e) => setSelectedCommand(e.target.value as 'Menu' | 'List' | 'Carousel')}
+              onChange={(e) => setSelectedCommand(e.target.value as 'Menu' | 'List' | 'Carousel' | 'Invoice')}
               className="w-full appearance-none bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 pr-8 text-sm font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 cursor-pointer shadow-2xs"
             >
               <option value="Menu">Menu</option>
               <option value="List">List</option>
               <option value="Carousel">Carousel</option>
+              <option value="Invoice">Invoice</option>
             </select>
             <ChevronDown className="w-4 h-4 text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
@@ -785,6 +801,294 @@ export const TabCommand: React.FC<TabCommandProps> = ({
                 <CheckCircle2 className="w-4 h-4" />
               )}
               Simpan Perubahan Carousel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Jika Command "Invoice" Dipilih */}
+      {selectedCommand === 'Invoice' && (
+        <div className="space-y-5">
+          {/* 1. Header Pengaturan Invoice */}
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-800 flex items-center gap-2">
+                <Receipt className="w-4 h-4 text-sky-600" />
+                <span>Pengaturan Teks Tagihan Invoice QRIS</span>
+              </label>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">
+                Privacy-First (DM)
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              Format teks pesan ini akan otomatis dikirimkan ke chat pribadi (DM) pembeli bersama dengan gambar QR code LunasQRIS saat pembeli memilih varian produk di grup.
+            </p>
+          </div>
+
+          {/* 2. Textarea Template Teks Output Invoice dengan Placeholder Lengkap */}
+          <div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+              <div>
+                <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-sky-600" />
+                  Template Konten Teks Invoice
+                </label>
+                <p className="text-[11px] text-slate-500">
+                  Gunakan placeholder untuk menampilkan detail pesanan, total harga, dan kode unik secara otomatis.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const defaultVal = `🧾 *INVOICE PEMBAYARAN*\n*{storeName}*\n\n📦 *Produk:* {produkName}\n⚡ *Varian:* {varian}\n🆔 *Order ID:* \`{orderId}\`\n\n💰 *Harga:* Rp {price}\n⚡ *Fee Gateway:* +Rp {unikCode}\n💳 *TOTAL BAYAR:* *Rp {total}*\n\n⚠️ *PENTING:* Transfer tepat *Rp {total}* hingga digit terakhir agar pembayaran terverifikasi otomatis.\n\n⏰ *Batas Waktu:* 15 Menit\n\n📌 *Cara Pembayaran:*\n1. Pindai (scan) kode QRIS di atas atau klik tombol *Web Checkout* di bawah.\n2. Pastikan nominal transfer sama persis dengan Total Bayar.\n3. Begitu transfer berhasil, detail akun akan langsung dikirimkan ke chat ini secara otomatis.\n\n_Harap selesaikan pembayaran sebelum batas waktu berakhir._`;
+                  setInvoiceOutputText(defaultVal);
+                  showToast('Template Invoice direset ke format default!');
+                }}
+                className="text-[11px] text-slate-500 hover:text-slate-800 underline font-medium cursor-pointer"
+              >
+                Reset Default
+              </button>
+            </div>
+
+            {/* Chips Placeholder Toko & Produk */}
+            <div className="space-y-1.5 mb-2">
+              <div className="flex flex-wrap items-center gap-1.5 p-2 rounded-lg bg-slate-100/80 border border-slate-200">
+                <span className="text-[11px] font-semibold text-slate-600 mr-1 flex items-center gap-1">
+                  Placeholder Toko & Produk:
+                </span>
+                {[
+                  { tag: '{storeName}', label: 'Nama Toko' },
+                  { tag: '{produkName}', label: 'Nama Produk' },
+                  { tag: '{category}', label: 'Kategori' },
+                  { tag: '{varian}', label: 'Varian' },
+                  { tag: '{price}', label: 'Harga' },
+                  { tag: '{adminNumber}', label: 'No. Admin' },
+                  { tag: '{ownerNumber}', label: 'No. Owner' },
+                  { tag: '{webLink}', label: 'Website' },
+                ].map((item) => (
+                  <button
+                    key={item.tag}
+                    type="button"
+                    onClick={() => {
+                      const updated = `${invoiceOutputText} ${item.tag}`;
+                      setInvoiceOutputText(updated);
+                      showToast(`Placeholder ${item.tag} disisipkan!`);
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-white hover:bg-sky-50 text-sky-700 border border-slate-200 hover:border-sky-300 transition cursor-pointer shadow-2xs"
+                    title={`${item.tag} — ${item.label}`}
+                  >
+                    <Plus className="w-3 h-3 text-sky-600" />
+                    <code>{item.tag}</code>
+                  </button>
+                ))}
+              </div>
+
+              {/* Chips Placeholder Khusus Invoice */}
+              <div className="flex flex-wrap items-center gap-1.5 p-2 rounded-lg bg-amber-50/80 border border-amber-200">
+                <span className="text-[11px] font-semibold text-amber-800 mr-1 flex items-center gap-1">
+                  ⭐ Placeholder Khusus Invoice:
+                </span>
+                {[
+                  { tag: '{orderId}', label: 'Order ID' },
+                  { tag: '{total}', label: 'Harga Total (Harga + Kode Unik)' },
+                  { tag: '{unikCode}', label: 'Nominal Kode Unik' },
+                ].map((item) => (
+                  <button
+                    key={item.tag}
+                    type="button"
+                    onClick={() => {
+                      const updated = `${invoiceOutputText} ${item.tag}`;
+                      setInvoiceOutputText(updated);
+                      showToast(`Placeholder khusus ${item.tag} disisipkan!`);
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-mono font-semibold bg-white text-amber-900 border border-amber-300 hover:bg-amber-100 hover:border-amber-400 transition cursor-pointer shadow-2xs"
+                    title={`${item.tag} — ${item.label}`}
+                  >
+                    <Plus className="w-3 h-3 text-amber-700" />
+                    <code>{item.tag}</code>
+                    <span className="text-[10px] text-amber-700 font-sans font-normal">({item.label})</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Textarea Input Template Invoice */}
+            <textarea
+              rows={9}
+              value={invoiceOutputText}
+              onChange={(e) => setInvoiceOutputText(e.target.value)}
+              placeholder="Tulis template teks invoice di sini..."
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg p-3 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 transition shadow-2xs leading-relaxed font-mono"
+            />
+
+            {/* Form Teks Footer Command Invoice */}
+            <div className="mt-3 pt-3 border-t border-slate-200/80">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-sky-600" />
+                  Teks Footer Pesan Invoice
+                </label>
+                <span className="text-[10px] text-slate-400 font-mono">Dukungan Placeholder</span>
+              </div>
+              <input
+                type="text"
+                value={invoiceFooterText}
+                onChange={(e) => setInvoiceFooterText(e.target.value)}
+                placeholder="{storeName} Official • Pembayaran Otomatis"
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:bg-white focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 font-mono shadow-2xs"
+              />
+              <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                <span className="text-[10px] text-slate-500 font-medium">Sisipkan ke footer:</span>
+                {['{storeName}', '{webLink}', '{ownerNumber}', '{adminNumber}'].map((ph) => (
+                  <button
+                    key={ph}
+                    type="button"
+                    onClick={() => {
+                      setInvoiceFooterText((prev) => `${prev} ${ph}`);
+                      showToast(`Placeholder ${ph} disisipkan ke footer Invoice!`);
+                    }}
+                    className="px-1.5 py-0.5 text-[10px] font-mono bg-white hover:bg-sky-50 text-sky-700 border border-slate-200 rounded cursor-pointer"
+                  >
+                    {ph}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Panel Penjelasan 2 Tombol Interaktif Native Flow */}
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                <Layers className="w-4 h-4 text-sky-600" />
+                2 Tombol Interaktif Resmi yang Dikirim Bersama Invoice
+              </span>
+              <span className="text-[10px] uppercase font-mono font-semibold text-sky-700 bg-sky-100/70 px-2 py-0.5 rounded border border-sky-200">
+                Otomatis
+              </span>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Setiap pesan invoice yang dikirimkan bot ke DM pembeli akan otomatis dilengkapi dengan 2 tombol interaktif di bawah ini:
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-slate-900 flex items-center gap-1.5">
+                    <PhoneCall className="w-3.5 h-3.5 text-emerald-600" />
+                    Tombol 1: Hubungi Admin
+                  </span>
+                  <span className="text-[10px] font-mono bg-emerald-50 text-emerald-700 px-1.5 py-0.2 rounded border border-emerald-200">
+                    Quick Reply
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Ketika dipicu oleh pembeli, bot otomatis mengirimkan kartu kontak (vCard) WhatsApp nomor admin toko. Jika form nomor admin kosong (karena opsional), bot otomatis mengirimkan vCard nomor owner toko.
+                </p>
+              </div>
+
+              <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-slate-900 flex items-center gap-1.5">
+                    <ExternalLink className="w-3.5 h-3.5 text-sky-600" />
+                    Tombol 2: Web Checkout
+                  </span>
+                  <span className="text-[10px] font-mono bg-sky-50 text-sky-700 px-1.5 py-0.2 rounded border border-sky-200">
+                    CTA URL
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Tombol link langsung yang membawa pembeli ke halaman pembayaran web checkout resmi LunasQRIS untuk transaksi tersebut.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* 4. WhatsApp Live Preview Invoice */}
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-emerald-600" />
+                Pratinjau Hasil Output Invoice (POV Pelanggan di WhatsApp)
+              </span>
+              <span className="text-[10px] uppercase font-mono font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                Live Preview
+              </span>
+            </div>
+
+            <div className="max-w-md mx-auto bg-white rounded-2xl border border-slate-300 shadow-sm overflow-hidden">
+              <div className="bg-slate-900 text-white px-3 py-2 flex items-center justify-between text-[11px]">
+                <span className="font-semibold flex items-center gap-1.5 text-emerald-400">
+                  <Receipt className="w-3.5 h-3.5" />
+                  Chat Pribadi (DM) • Invoice QRIS
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">15 Menit</span>
+              </div>
+
+              {/* Simulasi Gambar QRIS */}
+              <div className="bg-slate-100 p-4 border-b border-slate-200 flex flex-col items-center justify-center gap-2">
+                <div className="w-36 h-36 bg-white p-2 rounded-xl shadow-xs border border-slate-200 flex flex-col items-center justify-center">
+                  <QrCode className="w-28 h-28 text-slate-900" />
+                  <span className="text-[9px] font-mono font-bold text-slate-700 mt-0.5">QRIS DINAMIS</span>
+                </div>
+                <span className="text-[10px] text-slate-500 font-mono">Scan via DANA, GoPay, OVO, BCA, dll</span>
+              </div>
+
+              <div className="p-4 space-y-3 text-xs leading-relaxed bg-[#f0f2f5]/40">
+                <div className="whitespace-pre-wrap font-sans text-slate-800 bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
+                  {invoiceOutputText
+                    .replace(/\{storeName\}|\{namaStore\}/gi, storeInfo.storeName || 'Wanzt Store')
+                    .replace(/\{ownerName\}|\{namaOwner\}/gi, storeInfo.ownerName || 'Wanzt')
+                    .replace(/\{webLink\}|\{linkWebsite\}/gi, storeInfo.webLink || 'wanztstore.web.id')
+                    .replace(/\{adminNumber\}|\{adminMumber\}|\{nomerAdmin\}/gi, storeInfo.adminNumber || storeInfo.ownerNumber || '08123456789')
+                    .replace(/\{ownerNumber\}|\{nomerOwner\}/gi, storeInfo.ownerNumber || '082173515807')
+                    .replace(/\{produkName\}|\{productName\}/gi, 'Netflix Premium')
+                    .replace(/\{category\}|\{kategori\}/gi, 'Streaming')
+                    .replace(/\{varian\}|\{variant\}/gi, '1 Bulan 1 Profile 4K UHD')
+                    .replace(/\{price\}|\{harga\}/gi, '35.000')
+                    .replace(/\{orderId\}/gi, 'ORD-M5X91A-8821')
+                    .replace(/\{total\}/gi, '35.342')
+                    .replace(/\{unikCode\}/gi, '342')}
+                </div>
+
+                <div className="text-[10px] text-slate-500 font-medium text-left px-1">
+                  {invoiceFooterText
+                    .replace(/\{storeName\}|\{namaStore\}/gi, storeInfo.storeName || 'Wanzt Store')
+                    .replace(/\{webLink\}|\{linkWebsite\}/gi, storeInfo.webLink || 'wanztstore.web.id')
+                    .replace(/\{ownerNumber\}|\{nomerOwner\}/gi, storeInfo.ownerNumber || '082173515807')
+                    .replace(/\{adminNumber\}|\{adminMumber\}|\{nomerAdmin\}/gi, storeInfo.adminNumber || '08123456789') ||
+                    'Wanzt Store Official • Pembayaran Otomatis'}
+                </div>
+
+                {/* 2 Tombol Interaktif WhatsApp POV */}
+                <div className="space-y-1.5 pt-1">
+                  <div className="w-full py-2 px-3 rounded-lg bg-white border border-slate-300 text-slate-800 font-semibold text-center text-xs flex items-center justify-center gap-1.5 shadow-2xs hover:bg-slate-50 transition cursor-pointer">
+                    <PhoneCall className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>📞 Hubungi Admin</span>
+                  </div>
+                  <div className="w-full py-2 px-3 rounded-lg bg-sky-600 text-white font-semibold text-center text-xs flex items-center justify-center gap-1.5 shadow-2xs hover:bg-sky-700 transition cursor-pointer">
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>🌐 Web Checkout</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 5. Tombol Simpan Perubahan Invoice */}
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <button
+              type="button"
+              disabled={isSavingConfig}
+              onClick={onSaveInvoice}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-sm transition disabled:opacity-50 cursor-pointer"
+            >
+              {isSavingConfig ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4" />
+              )}
+              Simpan Perubahan Invoice
             </button>
           </div>
         </div>

@@ -78,9 +78,12 @@ Setiap ada ide rencana baru dari hasil diskusi atau instruksi pengguna, daftarka
 | 2026-10-26 | Deployment ke VPS 104.64.15.80 | Panduan remote SSH, skrip otomasi `deploy-vps.sh`, instalasi Node.js 20, PM2, konfigurasi Nginx reverse proxy, dan setup webhook domain | Panduan & Skrip | Siap Diterapkan |
 
 
-| 2026-10-27 | Command Invoice Dinamis & Tombol Interaktif | Menambahkan command Invoice pada Tab Command, template teks invoice kustom, dukungan placeholder ({storeName}, {ownerNumber}, {category}, {varian}, {price}, {produkName}, {adminNumber}, {webLink}, {orderId}, {total}, {unikCode}), tombol Quick Reply vCard (Admin/fallback Owner), dan tombol CTA URL Web Checkout | Tahap Diskusi & Review | Rencana Disetujui / Menunggu Konfirmasi Eksekusi |
+| 2026-10-27 | Command Invoice Dinamis & Tombol Interaktif | Menambahkan command Invoice pada Tab Command, template teks invoice kustom, dukungan placeholder ({storeName}, {ownerNumber}, {category}, {varian}, {price}, {produkName}, {adminNumber}, {webLink}, {orderId}, {total}, {unikCode}), tombol Quick Reply vCard (Admin/fallback Owner), dan tombol CTA URL Web Checkout | Tahap Implementasi | Selesai Diimplementasikan |
+| 2026-10-27 | Migrasi Database ke SQLite (`better-sqlite3`) | Menggantikan file JSON lokal dengan SQLite database (`database/bot.db`) untuk transaksi & konfigurasi, mendukung ACID, zero-config untuk skrip siap jual, bebas biaya pihak ketiga | Roadmap Masa Depan | Terjadwal (Scheduled) |
+| 2026-10-27 | Halaman Login Aman & Lock Wajib Store Info | Pembuatan sistem otentikasi login berbasis server (zero inspect leak), hashing aman, proteksi lock bot tanpa store info, dan pop-up modal wajib isi store info (non-dismissible) | Tahap Diskusi & Review | Menunggu Konfirmasi Eksekusi |
 
 ### 5. Rencana Command Invoice Dinamis & Pesan Interaktif Bot
+- **Status Rencana**: Selesai Diimplementasikan (Completed).
 - **Latar Belakang**: Memungkinkan pemilik toko mengatur sendiri teks invoice tagihan pembayaran QRIS melalui dashboard di Tab Command opsi "Invoice", tanpa perlu mengubah kode sumber.
 - **Rincian Komponen**:
   1. **Opsi Command**: Menambahkan `'Invoice'` pada dropdown pilih command di Tab Command (`Menu`, `List`, `Carousel`, `Invoice`).
@@ -93,3 +96,21 @@ Setiap ada ide rencana baru dari hasil diskusi atau instruksi pengguna, daftarka
   5. **Dua Tombol Interaktif Pesan Invoice**:
      - **Tombol 1 (Quick Reply - Hubungi Admin)**: Mengirimkan vCard kontak WhatsApp nomor admin toko. Jika form nomor admin kosong, otomatis fallback mengirimkan vCard nomor owner toko.
      - **Tombol 2 (CTA URL - Web Checkout)**: Tombol link langsung mengarahkan pembeli ke URL pembayaran web checkout LunasQRIS (`payment_url`).
+
+### 6. Rencana Migrasi Database ke SQLite (`better-sqlite3`)
+- **Status Rencana**: Terjadwal (Scheduled) - Tidak dieksekusi sekarang sesuai arahan pengguna.
+- **Latar Belakang & Tujuan**:
+  - Menggantikan sistem penyimpanan flat-file JSON lokal (`database/*.json`) dengan database relasional SQLite file tunggal (`database/bot.db`).
+  - Menyiapkan arsitektur database yang tangguh, aman, dan *zero-configuration* untuk produk script bot yang siap dijual ke publik.
+- **Keunggulan untuk Script yang Dijual**:
+  1. **Zero-Configuration (Plug & Play)**: Pembeli script tidak perlu install service database eksternal (MySQL/Postgres) di VPS. Cukup jalankan bot, file database `.db` akan terbuat secara otomatis.
+  2. **Bebas Ketergantungan Cloud & Biaya Bulanan**: Menghindari Firebase/Supabase yang merepotkan pembeli script (harus daftar akun, pasang API keys, dan risiko biaya kuota).
+  3. **Keamanan Transaksi Bersamaan (ACID & WAL Mode)**: Mencegah risiko file corrupt saat banyak pesanan masuk di detik yang sama melalui mekanisme transaksi database yang solid.
+  4. **Kemudahan Backup & Migrasi**: Pembeli script cukup mencadangkan satu file `bot.db` untuk menyimpan seluruh riwayat transaksi dan pengaturan toko.
+  5. **Query Cepat & Fleksibel**: Mendukung query SQL lengkap untuk pagination riwayat transaksi, pencarian, dan rekap keuangan bulanan.
+- **Rencana Skema Tabel**:
+  - `transactions`: ID transaksi, order_id, customer_number, customer_name, product_name, variant_name, nominal, fee_gateway, total, payment_url, status (`pending`, `paid`, `cancel`), created_at, updated_at.
+  - `store_config`: Pengaturan profil toko (nama store, owner, admin, web link).
+  - `command_templates`: Template teks & footer dinamis untuk menu, list, carousel, dan invoice.
+  - `api_config`: Kredensial API LunasQRIS dan Xaviera.
+

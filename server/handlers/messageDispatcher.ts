@@ -4,12 +4,13 @@ import { ALLOWED_PREFIXES, CommandsConfig, SESSION_DIR } from '../types/bot.type
 import { sendMenuInteractiveMessage } from '../messages/menuMessage.js';
 import { sendListInteractiveMessage } from '../messages/listMessage.js';
 import { sendProductVariantsCarousel } from '../messages/carouselMessage.js';
-import { sendAdminContactMessage, sendOwnerContactMessage } from '../messages/adminContactMessage.js';
-import { isKnownProduct, checkXavieraBalance } from '../services/xavieraService.js';
+import { sendAdminContactMessage, sendOwnerContactMessage, sendInvoiceAdminContactMessage } from '../messages/adminContactMessage.js';
+import { isKnownProduct, checkXavieraBalance, DEFAULT_CATALOG } from '../services/xavieraService.js';
 import { resolvePlaceholders } from '../services/placeholderHelper.js';
 import { loadGroupsConfig } from '../services/groupService.js';
 import { createLunasQrisTransaction, startLunasQrisPolling } from '../services/lunasQrisService.js';
 import { recordTransaction, updateTransactionStatus } from '../services/transactionManager.js';
+import { DEFAULT_INVOICE_TEMPLATE } from '../config/configManager.js';
 import QRCode from 'qrcode';
 import axios from 'axios';
 
@@ -186,13 +187,24 @@ export async function dispatchIncomingMessages(
     const cleanBtn = (buttonIdOrText || '').trim();
 
     // 1. TANGANI INTERAKSI TOMBOL KHUSUS CAROUSEL, ORDER & VCARD
-    // A. Tombol Contact Admin
+    // A. Tombol Contact Admin & Invoice Contact Admin
     if (
+      cleanBtn === 'invoice_contact_admin' ||
       cleanBtn === 'contact_admin' ||
-      (isInteractiveButtonResponse && cleanBtn.toLowerCase().includes('contact_admin'))
+      (isInteractiveButtonResponse &&
+        (cleanBtn.toLowerCase().includes('invoice_contact_admin') ||
+          cleanBtn.toLowerCase().includes('contact_admin')))
     ) {
-      deps.addLog('info', `📞 Tombol "Contact Admin" ditekan oleh ${senderName}`);
-      await sendAdminContactMessage(sock, config, remoteJid, m, deps.addLog);
+      if (
+        cleanBtn === 'invoice_contact_admin' ||
+        cleanBtn.toLowerCase().includes('invoice_contact_admin')
+      ) {
+        deps.addLog('info', `📞 Tombol "Hubungi Admin" (dari Invoice) ditekan oleh ${senderName}`);
+        await sendInvoiceAdminContactMessage(sock, config, remoteJid, m, deps.addLog);
+      } else {
+        deps.addLog('info', `📞 Tombol "Contact Admin" ditekan oleh ${senderName}`);
+        await sendAdminContactMessage(sock, config, remoteJid, m, deps.addLog);
+      }
       continue;
     }
 
@@ -318,25 +330,55 @@ export async function dispatchIncomingMessages(
           }
         }
 
-        // 5. Di Chat Pribadi (DM): Format invoice rapi tanpa garis pembatas (anti-wrap di berbagai layar)
-        const invoiceCaption =
-          `🧾 *INVOICE PEMBAYARAN*\n` +
-          `*${storeTitle}*\n\n` +
-          `📦 *Produk:* ${productName}\n` +
-          `⚡ *Varian:* ${variantName}\n` +
-          `🆔 *Order ID:* \`${trx.order_id}\`\n\n` +
-          `💰 *Nominal:* Rp ${trx.amount.toLocaleString('id-ID')}\n` +
-          `⚡ *Fee Gateway:* +Rp ${trx.unique_code}\n` +
-          `💳 *TOTAL BAYAR:* *Rp ${trx.total_amount.toLocaleString('id-ID')}*\n\n` +
-          `⚠️ *PENTING:* Transfer tepat *Rp ${trx.total_amount.toLocaleString('id-ID')}* hingga digit terakhir (termasuk Fee Gateway) agar pembayaran terverifikasi otomatis.\n\n` +
-          `🌐 *Web Checkout:* ${trx.payment_url}\n` +
-          `⏰ *Batas Waktu:* 15 Menit\n\n` +
-          `📌 *Cara Pembayaran:*\n` +
-          `1. Buka e-Wallet (DANA, GoPay, OVO, ShopeePay) atau Mobile Banking (BCA, Mandiri, BRI, BNI, Seabank, dll).\n` +
-          `2. Pindai (scan) kode QRIS di atas atau buka tautan Web Checkout.\n` +
-          `3. Pastikan nominal pembayaran sama persis dengan Total Bayar.\n` +
-          `4. Begitu transfer berhasil, detail akun akan langsung dikirimkan ke chat ini secara otomatis.\n\n` +
-          `_Harap selesaikan pembayaran sebelum batas waktu berakhir._`;
+        // 5. Di Chat Pribadi (DM): Format invoice dinamis dari konfigurasi Tab Command (Invoice)
+        const matchedCat = DEFAULT_CATALOG.find((cat) =>
+          cat.items.some((item) => item.toLowerCase() === productName.toLowerCase())
+        );
+        const category = matchedCat?.kategori || 'Digital';
+
+        const templateInvoice =
+          config.invoiceOutputText && config.invoiceOutputText.trim()
+            ? config.invoiceOutputText
+            : DEFAULT_INVOICE_TEMPLATE;
+
+        const invoiceCaption = resolvePlaceholders(templateInvoice, config, {
+          name: productName,
+          variant: variantName,
+          category,
+          price: trx.amount || price,
+          total: trx.total_amount,
+          unikCode: trx.unique_code,
+          orderId: trx.order_id || orderId,
+        });
+
+        const templateFooter =
+          config.invoiceFooterText && config.invoiceFooterText.trim()
+            ? config.invoiceFooterText
+            : '{storeName} Official • Pembayaran Otomatis';
+
+        const invoiceFooter = resolvePlaceholders(templateFooter, config, {
+          name: productName,
+          variant: variantName,
+          category,
+          price: trx.amount || price,
+          total: trx.total_amount,
+          unikCode: trx.unique_code,
+          orderId: trx.order_id || orderId,
+        });
+
+        // 2 Tombol Interaktif Native Flow:
+        // 1. Quick Reply: Hubungi Admin (memicu vCard nomor admin atau fallback nomor owner)
+        // 2. CTA URL: Langsung menuju web checkout pembayaran
+        const invoiceButtons = [
+          {
+            text: '📞 Hubungi Admin',
+            id: 'invoice_contact_admin',
+          },
+          {
+            text: '🌐 Web Checkout',
+            url: trx.payment_url || 'https://lunasqris.com',
+          },
+        ];
 
         let dmSent = false;
         let qrBuffer: Buffer | null = null;
@@ -372,31 +414,54 @@ export async function dispatchIncomingMessages(
           }
         }
 
-        // Kirim gambar kode QR (Buffer PNG resmi yang didukung 100% oleh WhatsApp)
+        // Kirim gambar kode QR (Buffer PNG resmi yang didukung 100% oleh WhatsApp) dengan native buttons & footer
         if (qrBuffer) {
           try {
             const imgRes = await sock.sendMessage(senderJid, {
               image: qrBuffer,
               mimetype: 'image/png',
               caption: invoiceCaption,
+              footer: invoiceFooter,
+              nativeFlow: invoiceButtons,
             });
             markMessageAsBotSent(imgRes?.key?.id);
             dmSent = true;
           } catch (imgErr: any) {
-            deps.addLog('warning', `Kirim gambar buffer QRIS gagal: ${imgErr?.message || imgErr}`);
+            deps.addLog('warning', `Kirim gambar buffer QRIS dengan tombol gagal: ${imgErr?.message || imgErr}. Mencoba tanpa tombol...`);
+            try {
+              const fallbackImg = await sock.sendMessage(senderJid, {
+                image: qrBuffer,
+                mimetype: 'image/png',
+                caption: invoiceCaption,
+              });
+              markMessageAsBotSent(fallbackImg?.key?.id);
+              dmSent = true;
+            } catch (fbErr: any) {
+              deps.addLog('warning', `Kirim gambar fallback gagal: ${fbErr?.message || fbErr}`);
+            }
           }
         }
 
-        // Fallback teks jika media gagal terkirim
+        // Fallback pesan teks jika media gambar gagal terkirim
         if (!dmSent) {
           try {
             const txtRes = await sock.sendMessage(senderJid, {
               text: `${invoiceCaption}\n\n🔗 *Tautan Pembayaran:* ${trx.payment_url}`,
+              footer: invoiceFooter,
+              nativeFlow: invoiceButtons,
             });
             markMessageAsBotSent(txtRes?.key?.id);
             dmSent = true;
           } catch (txtErr: any) {
-            deps.addLog('error', `Gagal mengirim invoice ke DM ${senderJid}: ${txtErr?.message || txtErr}`);
+            try {
+              const rawTxtRes = await sock.sendMessage(senderJid, {
+                text: `${invoiceCaption}\n\n🔗 *Tautan Pembayaran:* ${trx.payment_url}`,
+              });
+              markMessageAsBotSent(rawTxtRes?.key?.id);
+              dmSent = true;
+            } catch (err: any) {
+              deps.addLog('error', `Gagal mengirim invoice ke DM ${senderJid}: ${err?.message || err}`);
+            }
           }
         }
 

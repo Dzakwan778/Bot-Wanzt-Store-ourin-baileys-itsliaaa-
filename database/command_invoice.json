@@ -1,0 +1,4 @@
+{
+  "invoiceOutputText": "🧾 *INVOICE PEMBAYARAN*\n*{storeName}*\n\n📦 *Produk:* {produkName}\n⚡ *Varian:* {varian}\n🆔 *Order ID:* `{orderId}`\n\n💰 *Harga:* Rp {price}\n⚡ *Fee Gateway:* +Rp {unikCode}\n💳 *TOTAL BAYAR:* *Rp {total}*\n\n⚠️ *PENTING:* Transfer tepat *Rp {total}* hingga digit terakhir agar pembayaran terverifikasi otomatis.\n\n⏰ *Batas Waktu:* 15 Menit\n\n📌 *Cara Pembayaran:*\n1. Pindai (scan) kode QRIS di atas atau klik tombol *Web Checkout* di bawah.\n2. Pastikan nominal transfer sama persis dengan Total Bayar.\n3. Begitu transfer berhasil, detail akun akan langsung dikirimkan ke chat ini secara otomatis.\n\n_Harap selesaikan pembayaran sebelum batas waktu berakhir._",
+  "invoiceFooterText": "{storeName} Official • Pembayaran Otomatis"
+}

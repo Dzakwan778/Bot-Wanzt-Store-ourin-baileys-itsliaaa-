@@ -30,13 +30,17 @@ export function useStoreConfig(
   const [menuFooterText, setMenuFooterText] = useState<string>('{webLink} • Otomatis');
   const [listFooterText, setListFooterText] = useState<string>('{webLink} • Pilih Produk');
   const [carouselFooterText, setCarouselFooterText] = useState<string>('{storeName} Official');
+  const [invoiceFooterText, setInvoiceFooterText] = useState<string>('{storeName} Official • Pembayaran Otomatis');
 
   // Command State
-  const [selectedCommand, setSelectedCommand] = useState<'Menu' | 'List' | 'Carousel'>('Menu');
+  const [selectedCommand, setSelectedCommand] = useState<'Menu' | 'List' | 'Carousel' | 'Invoice'>('Menu');
   const [carouselOutputText, setCarouselOutputText] = useState<string>(
     `*Wanzt Store*\n\n*{produkName} | {category}*\n\nNikmati produk pilihanmu dengan harga terbaik di Wanzt Store.\n\n*Detail Produk:*\n- Varian: {varian}\n- Harga: {price}\n- Stok: {stock} tersedia\n\nProduk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk melanjutkan.`
   );
   const [carouselPicture, setCarouselPicture] = useState<string>('snaptik-app-7690985506468908308-slide-2.jpg');
+  const [invoiceOutputText, setInvoiceOutputText] = useState<string>(
+    `🧾 *INVOICE PEMBAYARAN*\n*{storeName}*\n\n📦 *Produk:* {produkName}\n⚡ *Varian:* {varian}\n🆔 *Order ID:* \`{orderId}\`\n\n💰 *Harga:* Rp {price}\n⚡ *Fee Gateway:* +Rp {unikCode}\n💳 *TOTAL BAYAR:* *Rp {total}*\n\n⚠️ *PENTING:* Transfer tepat *Rp {total}* hingga digit terakhir agar pembayaran terverifikasi otomatis.\n\n⏰ *Batas Waktu:* 15 Menit\n\n📌 *Cara Pembayaran:*\n1. Pindai (scan) kode QRIS di atas atau klik tombol *Web Checkout* di bawah.\n2. Pastikan nominal transfer sama persis dengan Total Bayar.\n3. Begitu transfer berhasil, detail akun akan langsung dikirimkan ke chat ini secara otomatis.\n\n_Harap selesaikan pembayaran sebelum batas waktu berakhir._`
+  );
   const [menuOutputText, setMenuOutputText] = useState<string>(
     'Halo kak! Selamat datang di wanztstore.web.id ✨\n\nSilakan pilih layanan yang ingin Anda pesan melalui tombol interaktif di bawah ini:'
   );
@@ -74,6 +78,8 @@ export function useStoreConfig(
     if (config.selectedPicture) setSelectedPicture(config.selectedPicture);
     if (config.carouselOutputText) setCarouselOutputText(config.carouselOutputText);
     if (config.carouselPicture) setCarouselPicture(config.carouselPicture);
+    if (config.invoiceOutputText) setInvoiceOutputText(config.invoiceOutputText);
+    if (config.invoiceFooterText) setInvoiceFooterText(config.invoiceFooterText);
     if (config.storeInfo) setStoreInfo(config.storeInfo);
     if (config.menuFooterText) setMenuFooterText(config.menuFooterText);
     if (config.listFooterText) setListFooterText(config.listFooterText);
@@ -115,6 +121,8 @@ export function useStoreConfig(
         carouselOutputText,
         carouselFooterText,
         carouselPicture,
+        invoiceOutputText,
+        invoiceFooterText,
         xavieraApiKey: newApiKey !== undefined ? newApiKey : xavieraApiKey,
         xavieraBaseUrl: newBaseUrl !== undefined ? newBaseUrl : xavieraBaseUrl,
         lunasQrisApiKey: newLunasQrisApiKey !== undefined ? newLunasQrisApiKey : lunasQrisApiKey,
@@ -170,12 +178,16 @@ export function useStoreConfig(
     setListFooterText,
     carouselFooterText,
     setCarouselFooterText,
+    invoiceFooterText,
+    setInvoiceFooterText,
     selectedCommand,
     setSelectedCommand,
     carouselOutputText,
     setCarouselOutputText,
     carouselPicture,
     setCarouselPicture,
+    invoiceOutputText,
+    setInvoiceOutputText,
     menuOutputText,
     setMenuOutputText,
     menuButtons,

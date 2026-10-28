@@ -81,6 +81,11 @@ export interface CarouselCommandConfig {
   carouselPicture: string;
 }
 
+export interface InvoiceCommandConfig {
+  invoiceOutputText: string;
+  invoiceFooterText: string;
+}
+
 export interface ApiConfig {
   xavieraApiKey: string;
   xavieraBaseUrl: string;
@@ -101,6 +106,8 @@ export interface CommandsConfig {
   carouselOutputText?: string;
   carouselFooterText?: string;
   carouselPicture?: string;
+  invoiceOutputText?: string;
+  invoiceFooterText?: string;
   xavieraApiKey?: string;
   xavieraBaseUrl?: string;
   lunasQrisApiKey?: string;

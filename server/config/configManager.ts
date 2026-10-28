@@ -6,6 +6,7 @@ import {
   MenuCommandConfig,
   ListCommandConfig,
   CarouselCommandConfig,
+  InvoiceCommandConfig,
   ApiConfig,
   CONFIG_FILE,
 } from '../types/bot.types.js';
@@ -17,6 +18,7 @@ export const DB_FILES = {
   menu: path.join(DB_DIR, 'command_menu.json'),
   list: path.join(DB_DIR, 'command_list.json'),
   carousel: path.join(DB_DIR, 'command_carousel.json'),
+  invoice: path.join(DB_DIR, 'command_invoice.json'),
   api: path.join(DB_DIR, 'api_config.json'),
 };
 
@@ -65,6 +67,33 @@ export const DEFAULT_CAROUSEL_CONFIG: CarouselCommandConfig = {
   carouselPicture: 'snaptik-app-7690985506468908308-slide-2.jpg',
 };
 
+export const DEFAULT_INVOICE_TEMPLATE = `🧾 *INVOICE PEMBAYARAN*
+*{storeName}*
+
+📦 *Produk:* {produkName}
+⚡ *Varian:* {varian}
+🆔 *Order ID:* \`{orderId}\`
+
+💰 *Harga:* Rp {price}
+⚡ *Fee Gateway:* +Rp {unikCode}
+💳 *TOTAL BAYAR:* *Rp {total}*
+
+⚠️ *PENTING:* Transfer tepat *Rp {total}* hingga digit terakhir agar pembayaran terverifikasi otomatis.
+
+⏰ *Batas Waktu:* 15 Menit
+
+📌 *Cara Pembayaran:*
+1. Pindai (scan) kode QRIS di atas atau klik tombol *Web Checkout* di bawah.
+2. Pastikan nominal transfer sama persis dengan Total Bayar.
+3. Begitu transfer berhasil, detail akun akan langsung dikirimkan ke chat ini secara otomatis.
+
+_Harap selesaikan pembayaran sebelum batas waktu berakhir._`;
+
+export const DEFAULT_INVOICE_CONFIG: InvoiceCommandConfig = {
+  invoiceOutputText: DEFAULT_INVOICE_TEMPLATE,
+  invoiceFooterText: '{storeName} Official • Pembayaran Otomatis',
+};
+
 export const DEFAULT_API_CONFIG: ApiConfig = {
   xavieraApiKey: 'xvs_0726effe853aadea27bd6608ef98468cc3121b82e036e5f7',
   xavieraBaseUrl: 'https://xavierastore.com/api/v1',
@@ -85,6 +114,8 @@ export const DEFAULT_CONFIG: CommandsConfig = {
   carouselOutputText: DEFAULT_CAROUSEL_CONFIG.carouselOutputText,
   carouselFooterText: DEFAULT_CAROUSEL_CONFIG.carouselFooterText,
   carouselPicture: DEFAULT_CAROUSEL_CONFIG.carouselPicture,
+  invoiceOutputText: DEFAULT_INVOICE_CONFIG.invoiceOutputText,
+  invoiceFooterText: DEFAULT_INVOICE_CONFIG.invoiceFooterText,
   xavieraApiKey: DEFAULT_API_CONFIG.xavieraApiKey,
   xavieraBaseUrl: DEFAULT_API_CONFIG.xavieraBaseUrl,
   lunasQrisApiKey: DEFAULT_API_CONFIG.lunasQrisApiKey,
@@ -241,6 +272,18 @@ export function saveCarouselConfig(update: Partial<CarouselCommandConfig>): Caro
   return merged;
 }
 
+export function loadInvoiceConfig(): InvoiceCommandConfig {
+  ensureDbDir();
+  return readJsonFile<InvoiceCommandConfig>(DB_FILES.invoice, DEFAULT_INVOICE_CONFIG);
+}
+
+export function saveInvoiceConfig(update: Partial<InvoiceCommandConfig>): InvoiceCommandConfig {
+  const current = loadInvoiceConfig();
+  const merged = { ...current, ...update };
+  writeJsonFile(DB_FILES.invoice, merged);
+  return merged;
+}
+
 export function loadApiConfig(): ApiConfig {
   ensureDbDir();
   return readJsonFile<ApiConfig>(DB_FILES.api, DEFAULT_API_CONFIG);
@@ -263,6 +306,7 @@ export function loadCommandsConfig(): CommandsConfig {
   const menu = loadMenuConfig();
   const list = loadListConfig();
   const carousel = loadCarouselConfig();
+  const invoice = loadInvoiceConfig();
   const api = loadApiConfig();
 
   return {
@@ -277,6 +321,8 @@ export function loadCommandsConfig(): CommandsConfig {
     carouselOutputText: carousel.carouselOutputText,
     carouselFooterText: carousel.carouselFooterText,
     carouselPicture: carousel.carouselPicture,
+    invoiceOutputText: invoice.invoiceOutputText,
+    invoiceFooterText: invoice.invoiceFooterText,
     xavieraApiKey: api.xavieraApiKey,
     xavieraBaseUrl: api.xavieraBaseUrl,
     lunasQrisApiKey: api.lunasQrisApiKey !== undefined ? api.lunasQrisApiKey : DEFAULT_API_CONFIG.lunasQrisApiKey,
@@ -337,7 +383,15 @@ export function saveCommandsConfig(
     });
   }
 
-  // 5. Simpan ke database/api_config.json jika ada data API
+  // 5. Simpan ke database/command_invoice.json jika ada data invoice
+  if (newConfig.invoiceOutputText !== undefined || newConfig.invoiceFooterText !== undefined) {
+    saveInvoiceConfig({
+      ...(newConfig.invoiceOutputText !== undefined && { invoiceOutputText: newConfig.invoiceOutputText }),
+      ...(newConfig.invoiceFooterText !== undefined && { invoiceFooterText: newConfig.invoiceFooterText }),
+    });
+  }
+
+  // 6. Simpan ke database/api_config.json jika ada data API
   if (
     newConfig.xavieraApiKey !== undefined ||
     newConfig.xavieraBaseUrl !== undefined ||

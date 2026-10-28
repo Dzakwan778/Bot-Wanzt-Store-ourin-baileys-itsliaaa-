@@ -139,3 +139,63 @@ export async function sendAdminContactMessage(
     }
   }
 }
+
+/**
+ * Mengirimkan vCard kontak Admin untuk tombol Invoice.
+ * Sesuai spesifikasi: Jika nomor admin pada dashboard kosong (karena opsional),
+ * maka bot secara otomatis mengirimkan vCard nomor Owner toko.
+ */
+export async function sendInvoiceAdminContactMessage(
+  sock: any,
+  config: CommandsConfig,
+  remoteJid: string,
+  quotedMsg?: any,
+  addLog?: (type: 'info' | 'success' | 'warning' | 'error' | 'code', msg: string) => void
+): Promise<void> {
+  if (!sock) return;
+
+  const store = config.storeInfo;
+  const adminRaw = store?.adminNumber ? String(store.adminNumber).trim() : '';
+  const adminClean = adminRaw.replace(/[^0-9]/g, '');
+
+  // 1. Jika nomor admin diisi di dashboard, kirim vCard Admin
+  if (adminClean) {
+    const displayName = resolvePlaceholders(store?.adminName || '{adminName}', config) || 'Admin Store';
+    const orgName = resolvePlaceholders(store?.storeName || '{storeName}', config) || 'Wanzt Store';
+    const vcard =
+      'BEGIN:VCARD\n' +
+      'VERSION:3.0\n' +
+      `FN:${displayName}\n` +
+      `ORG:${orgName};\n` +
+      `TEL;type=CELL;type=VOICE;waid=${adminClean}:+${adminClean}\n` +
+      'END:VCARD';
+
+    try {
+      await sock.sendMessage(
+        remoteJid,
+        {
+          contacts: {
+            displayName,
+            contacts: [{ vcard }],
+          },
+        },
+        quotedMsg ? { quoted: quotedMsg } : undefined
+      );
+      if (addLog) {
+        addLog('success', `📞 Berhasil mengirimkan kartu kontak (vCard) Admin: ${displayName} (${adminClean}) ke ${remoteJid}`);
+      }
+    } catch (err: any) {
+      if (addLog) {
+        addLog('error', `Gagal mengirim kontak admin: ${err?.message || err}`);
+      }
+    }
+    return;
+  }
+
+  // 2. Jika form admin kosong (karena opsional), otomatis kirimkan vCard nomor Owner!
+  if (addLog) {
+    addLog('info', `ℹ️ Nomor admin tidak diisi di dashboard. Mengalihkan pengiriman vCard ke nomor Owner...`);
+  }
+  await sendOwnerContactMessage(sock, config, remoteJid, quotedMsg, addLog);
+}
+

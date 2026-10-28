@@ -86,10 +86,45 @@ Aplikasi ini mengatur bot WhatsApp toko otomatis dengan fitur:
       - Saat batas waktu pembayaran berakhir (expired), status terupdate otomatis menjadi `cancel`.
     - **Fitur Tambahan**: Kartu statistik ringkasan omset (Total Order, Omset Paid, Jumlah Sukses/Pending/Cancel), pencarian multi-kolom, filter status tab, tombol sinkronisasi manual pending, dan tombol hapus transaksi.
 
+13. **Command Invoice Dinamis di Tab Command & Perbaikan Tombol Hapus Transaksi**:
+    - **Command Invoice di Tab Command**:
+      - Menambahkan opsi **"Invoice"** pada dropdown pilih command di Tab Command (`Menu`, `List`, `Carousel`, `Invoice`).
+      - Antarmuka form lengkap untuk mengatur template pesan tagihan (`invoiceOutputText`) dan footer (`invoiceFooterText`).
+      - Menyediakan chip quick-insert untuk seluruh placeholder:
+        - Standar: `{storeName}`, `{ownerNumber}`, `{category}`, `{varian}`, `{price}`, `{produkName}`, `{adminNumber}` / `{adminMumber}`, `{webLink}`.
+        - Khusus Invoice: `{orderId}`, `{total}`, `{unikCode}`.
+      - Antarmuka *Live WhatsApp Preview* yang menyimulasikan tampilan POV pembeli saat menerima invoice lengkap dengan QRIS dan 2 tombol interaktif.
+      - **Dua Tombol Interaktif Native Flow**:
+        - **Tombol 1 (Quick Reply - Hubungi Admin)**: Saat pembeli mengetuk tombol ini di WhatsApp, bot mengirimkan vCard kontak WhatsApp nomor admin toko. Jika form nomor admin pada dashboard kosong (karena opsional), sistem otomatis fallback mengirimkan vCard nomor owner toko (`sendInvoiceAdminContactMessage`).
+        - **Tombol 2 (CTA URL - Web Checkout)**: Tombol resmi yang mengarahkan pembeli langsung ke URL web checkout pembayaran LunasQRIS (`payment_url`).
+      - Database persisten: `/database/command_invoice.json` dimuat dan disimpan otomatis via `configManager.ts`.
+      - Pada `server/handlers/messageDispatcher.ts`, rendering invoice DM pembeli menggunakan template dinamis dengan resolusi placeholder yang aman dan anti-duplikasi `Rp`, serta menyematkan kedua tombol interaktif tersebut ke payload pengiriman Baileys.
+    - **Perbaikan Tombol Hapus Transaksi (Icon Tempat Sampah)**:
+      - **Akar Masalah**: Tombol sebelumnya menggunakan `window.confirm(...)` yang diblokir oleh sandbox iframe peramban, serta memiliki area klik yang sempit.
+      - **Solusi**: Mengganti pemanggilan `window.confirm` dengan **Inline Two-Step Confirmation** (`deleteConfirmId === trx.orderId`). Klik pertama memunculkan tombol konfirmasi bertuliskan "Hapus?", dengan timer auto-reset 4 detik, hit area yang lebih lega (`relative z-20`), dan feedback notifikasi toast yang informatif.
+
+14. **Live Requirements Checklist untuk Custom Pairing Code (UI Modern Mirip Password Requirements)**:
+    - **Pembaruan UX Sesuai Referensi Pengguna (`Screenshot_20261028-064352.png`)**:
+      - Mengganti kotak peringatan kuning statis lama (*"Form Pairing Code Belum Diisi"*) dengan komponen interaktif **Live Requirements Checklist**.
+      - **Segmented Progress Bar**: Indikator 4 segmen dinamis yang menyala halus:
+        - Abu-abu / kosong saat belum diisi.
+        - Merah cerah jika terdeteksi simbol terlarang.
+        - Kuning/Sky bertahap sesuai panjang karakter (1-7 karakter).
+        - Hijau penuh (`bg-emerald-500`) saat kode tepat 8 karakter dan valid.
+      - **Status Header Dinamis**: Teks status cerdas (`Wajib Diisi`, `Format Tidak Sesuai`, `Panjang Belum Cukup (x/8)`, dan `Siap Digunakan ✓`).
+      - **Checklist Kriteria Real-Time**:
+        - `✓ Wajib 8 karakter`: Menampilkan centang hijau saat tepat 8 karakter, atau titik `•` beserta sisa karakter yang dibutuhkan saat belum cukup.
+        - `✓ Tidak menyertakan simbol`: Menampilkan centang hijau saat bersih tanpa simbol, atau silang merah `✕` saat terdeteksi karakter simbol/spasi.
+        - `✓ Hanya angka dan huruf (A-Z, 0-9)`: Menampilkan centang hijau saat menggunakan kombinasi alfanumerik yang sah.
+    - **Hasil**: Input pairing code kini memiliki validasi langsung (*live motion feedback*) yang elegan, intuitif, dan tidak memakan ruang berlebih pada panel koneksi WhatsApp.
+
 ---
 
 ## 📂 Struktur Penting
-- `src/components/tabs/TabTransaksi.tsx`: Komponen tampilan tabel riwayat transaksi (Nomer Pembeli, Produk, Varian, Order ID, Nominal, Kode Unik, Total, Status).
+- `database/command_invoice.json`: File database persisten template teks & footer invoice.
+- `src/components/tabs/TabCommand.tsx`: Antarmuka manajemen command (Menu, List, Carousel, Invoice) dengan pratinjau interaktif.
+- `server/messages/adminContactMessage.ts`: Fungsi pengiriman vCard admin dengan fallback otomatis ke nomor owner (`sendInvoiceAdminContactMessage`).
+- `src/components/tabs/TabTransaksi.tsx`: Komponen tampilan tabel riwayat transaksi dengan tombol hapus inline confirmation yang aman.
 - `server/services/transactionManager.ts`: Modul pengelola transaksi & database persisten `/database/transactions.json`.
 - `src/hooks/useTransactions.ts`: Hook reaktif sinkronisasi transaksi dashboard.
 - `deploy-vps.sh`: Skrip instalasi otomatis bot & dashboard di VPS Ubuntu/Debian.
@@ -99,3 +134,4 @@ Aplikasi ini mengatur bot WhatsApp toko otomatis dengan fitur:
 - `server/services/lunasQrisService.ts`: Modul layanan integrasi LunasQRIS API & Webhook.
 - `src/hooks/useXavieraData.ts`: Hook pengambil data produk, SMM, dan game dari Xaviera API.
 - `src/types/dashboard.types.ts`: Definisi interface tipe data dan helper fungsi `detectSmmPlatform`.
+

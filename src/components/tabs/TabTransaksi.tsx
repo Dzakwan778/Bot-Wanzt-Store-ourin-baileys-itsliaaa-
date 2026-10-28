@@ -41,6 +41,7 @@ export const TabTransaksi: React.FC<TabTransaksiProps> = ({
   } = transactionsState;
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [selectedTrxDetail, setSelectedTrxDetail] = useState<TransactionItem | null>(null);
 
   const handleCopy = (text: string, label: string, keyId: string) => {
@@ -366,7 +367,7 @@ export const TabTransaksi: React.FC<TabTransaksiProps> = ({
 
                       {/* Aksi */}
                       <td className="py-3 px-3.5 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1">
+                        <div className="flex items-center justify-end gap-1.5 relative">
                           {trx.paymentUrl && (
                             <a
                               href={trx.paymentUrl}
@@ -379,18 +380,50 @@ export const TabTransaksi: React.FC<TabTransaksiProps> = ({
                               <ExternalLink className="w-3 h-3" />
                             </a>
                           )}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (confirm(`Hapus data transaksi ${trx.orderId}?`)) {
-                                deleteTransactionItem(trx.id || trx.orderId);
-                              }
-                            }}
-                            className="p-1 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer"
-                            title="Hapus Transaksi"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+
+                          {deleteConfirmId === trx.orderId ? (
+                            <div className="flex items-center gap-1 bg-rose-50 border border-rose-300 p-0.5 rounded-lg shadow-sm z-20">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteTransactionItem(trx.id || trx.orderId);
+                                  setDeleteConfirmId(null);
+                                }}
+                                className="px-2 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded text-[10px] font-semibold flex items-center gap-1 transition cursor-pointer"
+                                title="Klik untuk konfirmasi hapus"
+                              >
+                                <Check className="w-3 h-3" />
+                                Hapus
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeleteConfirmId(null);
+                                }}
+                                className="px-1.5 py-1 text-slate-500 hover:text-slate-800 text-[10px] rounded hover:bg-slate-200 transition cursor-pointer font-bold"
+                                title="Batal"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteConfirmId(trx.orderId);
+                                setTimeout(() => {
+                                  setDeleteConfirmId((prev) => (prev === trx.orderId ? null : prev));
+                                }, 4000);
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg border border-transparent hover:border-rose-200 transition cursor-pointer relative z-10"
+                              title="Hapus Transaksi (Klik untuk konfirmasi)"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

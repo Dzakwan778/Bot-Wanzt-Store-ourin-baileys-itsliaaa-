@@ -118,6 +118,16 @@ export const TabContentRenderer: React.FC<TabContentRendererProps> = ({
             storeConfig.carouselFooterText
           )
         }
+        invoiceOutputText={storeConfig.invoiceOutputText}
+        setInvoiceOutputText={storeConfig.setInvoiceOutputText}
+        invoiceFooterText={storeConfig.invoiceFooterText}
+        setInvoiceFooterText={storeConfig.setInvoiceFooterText}
+        onSaveInvoice={() =>
+          storeConfig.syncConfigToServer({
+            invoiceOutputText: storeConfig.invoiceOutputText,
+            invoiceFooterText: storeConfig.invoiceFooterText,
+          })
+        }
         storeInfo={storeConfig.storeInfo}
         isSavingConfig={storeConfig.isSavingConfig}
         showToast={showToast}
