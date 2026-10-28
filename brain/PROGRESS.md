@@ -116,7 +116,39 @@ Aplikasi ini mengatur bot WhatsApp toko otomatis dengan fitur:
         - `✓ Wajib 8 karakter`: Menampilkan centang hijau saat tepat 8 karakter, atau titik `•` beserta sisa karakter yang dibutuhkan saat belum cukup.
         - `✓ Tidak menyertakan simbol`: Menampilkan centang hijau saat bersih tanpa simbol, atau silang merah `✕` saat terdeteksi karakter simbol/spasi.
         - `✓ Hanya angka dan huruf (A-Z, 0-9)`: Menampilkan centang hijau saat menggunakan kombinasi alfanumerik yang sah.
-    - **Hasil**: Input pairing code kini memiliki validasi langsung (*live motion feedback*) yang elegan, intuitif, dan tidak memakan ruang berlebih pada panel koneksi WhatsApp.
+15. **Sistem Login Dashboard Aman (Zero Inspect Leak) & Lock Wajib Store Info**:
+    - **Halaman Login Aman (`src/components/auth/LoginPage.tsx`)**:
+      - Menyediakan antarmuka login minimalis dengan input Username, Password (dengan toggle intip mata), dan tombol Masuk.
+      - **Zero Client Password Leak**: Tidak ada password yang di-*hardcode* atau diekspos di kode JavaScript frontend (tidak bisa dibaca lewat *Inspect Element*, *Sources*, atau *DevTools*).
+      - **Hashing Kriptografis Server-Side**: Password diverifikasi di server via `/api/auth/login` menggunakan algoritma PBKDF2 (SHA-512 dengan 100.000 iterasi dan salt unik 16-byte) yang tersimpan di `/database/auth.json`.
+      - **Manajemen Sesi Token**: Menggunakan session token acak (`crypto.randomBytes(32)`) dengan durasi 7 hari.
+      - **Full Dashboard Gate**: Seluruh dashboard dan data sensitif terkunci rapat sebelum pengguna berhasil login.
+    - **Lock Bot di Server (`POST /api/bot/start`)**:
+      - Server memverifikasi kelengkapan 3 data wajib: `Nama Toko`, `Nama Owner`, dan `Nomer Owner`. Jika belum lengkap, backend langsung menolak menjalankan bot WhatsApp dengan pesan error jelas.
+    - **Pop-up Modal Wajib Isi Store Info (`MandatoryStoreSetupModal.tsx`)**:
+      - Setelah login, jika ketiga data toko belum terisi, otomatis muncul modal pop-up wajib isi data toko.
+      - Modal bersifat **non-dismissible** (tidak bisa ditutup atau di-bypass dengan klik luar atau tombol ESC).
+      - Saat pengguna mengisi dan menyimpan, data otomatis tersimpan permanen ke `/database/store_info.json` dan sinkron langsung ke formulir Store Info dashboard.
+
+16. **Redesain Halaman Login & Pop-up Modal Wajib Store Info Sesuai `DESIGN (2).md` (Anti-AI Slop)**:
+    - **Menghilangkan Seluruh Unsur AI Slop**: Menghapus background gelap dengan efek *glowing blur blob*, kartu gradien warna-warni, serta tombol kapsul (*pill-shaped*). Mengadopsi prinsip desain **Industrial Utility & Editorial Minimalism**.
+    - **Palet Warna & Tata Letak Mode Terang (Light Mode Default)**:
+      - **Background Canvas**: Slate 50 (`#F8FAFC`).
+      - **Surface Kartu**: Putih murni (`#FFFFFF`), border 1px tipis Slate 200 (`#E2E8F0`), bayangan halus (`shadow-xs` / `shadow-sm`).
+      - **Tipografi & Kontras**: Teks judul tebal Slate 900 (`#0F172A`) dengan *letter-spacing* tajam (`tracking-tight`), dan subteks Slate 500 (`#64748B`).
+      - **Aksen Tombol Utama**: Solid Sky 600 (`#0284C7`, `bg-sky-600 hover:bg-sky-700 text-white font-semibold text-sm rounded-lg py-2.5`).
+    - **Halaman Login (`src/components/auth/LoginPage.tsx`)**:
+      - Tampilan bersih, minimalis, dan profesional.
+      - Avatar bot modern dengan palet `bg-sky-50 border-sky-200 text-sky-600 rounded-xl`.
+      - Judul "Bot Dashboard Manager" dengan pesan instruksi yang jelas.
+      - Input fields berstandar input form dashboard dengan outline halus Slate 300 dan ring Sky 600/20 saat fokus.
+      - Indikator keamanan PBKDF2 yang ringkas dan elegan di bagian bawah kartu.
+    - **Modal Pop-up Wajib Store Info (`src/components/modals/MandatoryStoreSetupModal.tsx`)**:
+      - Menghapus header gradien oranye/amber yang mencolok.
+      - Menggunakan header putih bersih dengan garis pembatas tipis (`border-b border-slate-100`) dan badge status amber fungsional (`bg-amber-50 text-amber-700 border-amber-200 text-[10px] font-semibold`).
+      - Kotak pemberitahuan amber utilitas yang rapi dan elegan (`bg-amber-50/80 border-amber-200 text-amber-900`).
+      - Input Nomor WhatsApp Owner dilengkapi *prefix badge* bendera + kode negara `+62` yang identik dengan form koneksi WhatsApp pada panel dashboard.
+      - Selaras 100% dengan keseluruhan antarmuka sistem.
 
 ---
 

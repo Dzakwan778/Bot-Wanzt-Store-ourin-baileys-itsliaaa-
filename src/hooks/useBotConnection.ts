@@ -119,7 +119,6 @@ export function useBotConnection(
   };
 
   const handleReset = async () => {
-    if (!confirm('Hapus seluruh folder sesi penautan? Anda perlu menautkan ulang WhatsApp.')) return;
     setLoading(true);
     try {
       await fetch('/api/bot/reset', { method: 'POST' });

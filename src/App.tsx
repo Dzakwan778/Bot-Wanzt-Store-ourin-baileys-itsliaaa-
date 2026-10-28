@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Check } from 'lucide-react';
 
 // Custom Hooks
+import { useAuth } from './hooks/useAuth';
 import { useBotConnection } from './hooks/useBotConnection';
 import { useXavieraData } from './hooks/useXavieraData';
 import { useWhatsAppGroups } from './hooks/useWhatsAppGroups';
@@ -9,6 +10,11 @@ import { useStoreConfig } from './hooks/useStoreConfig';
 import { useButtonModal } from './hooks/useButtonModal';
 import { useLunasQrisData } from './hooks/useLunasQrisData';
 import { useTransactions } from './hooks/useTransactions';
+
+// Auth & Modals
+import { LoginPage } from './components/auth/LoginPage';
+import { MandatoryStoreSetupModal } from './components/modals/MandatoryStoreSetupModal';
+import { AddEditButtonModal } from './components/modals/AddEditButtonModal';
 
 // Layout components
 import { Navbar } from './components/layout/Navbar';
@@ -21,9 +27,6 @@ import { LiveTerminal } from './components/terminal/LiveTerminal';
 // Tab Renderer component
 import { TabContentRenderer } from './components/tabs/TabContentRenderer';
 
-// Modal components
-import { AddEditButtonModal } from './components/modals/AddEditButtonModal';
-
 export default function App() {
   const [selectedTab, setSelectedTab] = useState<string>('Store Info');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -32,6 +35,9 @@ export default function App() {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
+
+  // 0. Otentikasi Pengguna & Keamanan Sesi Dashboard
+  const auth = useAuth();
 
   // 1. Data Integrasi Xaviera API
   const xaviera = useXavieraData(showToast);
@@ -71,10 +77,36 @@ export default function App() {
   // 7. Riwayat Transaksi LunasQRIS
   const transactionsState = useTransactions(showToast);
 
+  // Jika sedang memverifikasi sesi login awal dari server
+  if (auth.authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
+        <div className="w-10 h-10 border-4 border-sky-500/30 border-t-sky-500 rounded-full animate-spin mb-4"></div>
+        <p className="text-slate-400 text-sm font-medium">Memverifikasi sesi dashboard...</p>
+      </div>
+    );
+  }
+
+  // Jika belum login, tampilkan Login Page (seluruh dashboard terkunci rapat)
+  if (!auth.isAuthenticated) {
+    return <LoginPage onLogin={auth.login} />;
+  }
+
+  // Cek apakah 3 data wajib Store Info sudah diisi lengkap
+  const isStoreInfoComplete = Boolean(
+    storeConfig.storeInfo?.storeName && storeConfig.storeInfo.storeName.trim() &&
+    storeConfig.storeInfo?.ownerName && storeConfig.storeInfo.ownerName.trim() &&
+    storeConfig.storeInfo?.ownerNumber && storeConfig.storeInfo.ownerNumber.trim()
+  );
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-sky-500/20 antialiased flex flex-col">
       {/* 1. Header & Live Status */}
-      <Navbar botData={botConn.botData} />
+      <Navbar
+        botData={botConn.botData}
+        username={auth.user?.username}
+        onLogout={auth.logout}
+      />
 
       {/* Main Workspace */}
       <main className="max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 flex-1 space-y-6">
@@ -191,6 +223,17 @@ export default function App() {
         setCancelReminderOutput={buttonModal.setCancelReminderOutput}
         onSave={buttonModal.handleSaveButton}
       />
+
+      {/* Pop-up Modal Wajib Isi Store Info (Non-dismissible) */}
+      {!isStoreInfoComplete && (
+        <MandatoryStoreSetupModal
+          initialStoreInfo={storeConfig.storeInfo}
+          onSuccess={(updated) => {
+            storeConfig.setStoreInfo((prev) => ({ ...prev, ...updated }));
+            showToast('Informasi toko berhasil disimpan! Bot siap digunakan.');
+          }}
+        />
+      )}
 
       {/* Footer */}
       <footer className="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500">

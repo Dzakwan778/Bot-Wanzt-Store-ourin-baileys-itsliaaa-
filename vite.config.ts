@@ -17,6 +17,14 @@ import {
   updateTransactionStatus,
   deleteTransaction,
 } from './server/services/transactionManager.ts';
+import {
+  initAuth,
+  verifyLogin,
+  createSession,
+  validateSession,
+  revokeSession,
+} from './server/services/authManager.ts';
+import { saveStoreInfo, loadStoreInfo } from './server/config/configManager.ts';
 
 export default defineConfig(() => {
   return {
@@ -26,7 +34,103 @@ export default defineConfig(() => {
       {
         name: 'bot-api-middleware',
         configureServer(server) {
+          initAuth();
           server.middlewares.use(async (req, res, next) => {
+            // ============================================================
+            // ENDPOINT AUTENTIKASI AMAN (LOGIN, SESSION, LOGOUT, STORE-SETUP)
+            // ============================================================
+            if (req.url?.startsWith('/api/auth')) {
+              res.setHeader('Content-Type', 'application/json');
+
+              // 1. Verifikasi Login (POST /api/auth/login)
+              if (req.url === '/api/auth/login' && req.method === 'POST') {
+                let body = '';
+                req.on('data', (chunk) => { body += chunk; });
+                req.on('end', () => {
+                  try {
+                    const { username, password } = body ? JSON.parse(body) : {};
+                    const isValid = verifyLogin(username, password);
+                    if (!isValid) {
+                      res.statusCode = 401;
+                      res.end(JSON.stringify({ success: false, error: 'Username atau password salah!' }));
+                      return;
+                    }
+                    const token = createSession(username);
+                    res.end(JSON.stringify({ success: true, token, user: { username } }));
+                  } catch (err: any) {
+                    res.statusCode = 500;
+                    res.end(JSON.stringify({ success: false, error: err?.message || 'Server error' }));
+                  }
+                });
+                return;
+              }
+
+              // 2. Cek Validitas Sesi (GET /api/auth/session)
+              if (req.url.startsWith('/api/auth/session') && req.method === 'GET') {
+                const authHeader = req.headers['authorization'] || '';
+                const urlObj = new URL(req.url, 'http://localhost');
+                const token = authHeader.replace(/^Bearer\s+/i, '') || urlObj.searchParams.get('token');
+                const isValid = validateSession(token);
+                res.end(JSON.stringify({ authenticated: isValid, user: isValid ? { username: 'admin' } : null }));
+                return;
+              }
+
+              // 3. Logout Sesi (POST /api/auth/logout)
+              if (req.url === '/api/auth/logout' && req.method === 'POST') {
+                const authHeader = req.headers['authorization'] || '';
+                const token = authHeader.replace(/^Bearer\s+/i, '');
+                revokeSession(token);
+                res.end(JSON.stringify({ success: true }));
+                return;
+              }
+
+              // 4. Cek Kelengkapan Data Store Info Wajib (GET /api/auth/store-status)
+              if (req.url === '/api/auth/store-status' && req.method === 'GET') {
+                const currentInfo = loadStoreInfo();
+                const isComplete = Boolean(
+                  currentInfo.storeName && currentInfo.storeName.trim() &&
+                  currentInfo.ownerName && currentInfo.ownerName.trim() &&
+                  currentInfo.ownerNumber && currentInfo.ownerNumber.trim()
+                );
+                res.end(JSON.stringify({ complete: isComplete, storeInfo: currentInfo }));
+                return;
+              }
+
+              // 5. Setup Wajib Data Store Info (POST /api/auth/store-setup)
+              if (req.url === '/api/auth/store-setup' && req.method === 'POST') {
+                let body = '';
+                req.on('data', (chunk) => { body += chunk; });
+                req.on('end', () => {
+                  try {
+                    const { storeName, ownerName, ownerNumber } = body ? JSON.parse(body) : {};
+                    if (!storeName?.trim() || !ownerName?.trim() || !ownerNumber?.trim()) {
+                      res.statusCode = 400;
+                      res.end(JSON.stringify({ success: false, error: 'Nama Toko, Nama Owner, dan Nomer Owner wajib diisi!' }));
+                      return;
+                    }
+
+                    const cleanOwnerNumber = ownerNumber.trim().replace(/[^0-9]/g, '');
+                    const updated = saveStoreInfo({
+                      storeName: storeName.trim(),
+                      ownerName: ownerName.trim(),
+                      ownerNumber: cleanOwnerNumber,
+                    });
+
+                    botManager.saveConfig({
+                      ...botManager.config,
+                      storeInfo: updated,
+                    });
+
+                    res.end(JSON.stringify({ success: true, storeInfo: updated }));
+                  } catch (err: any) {
+                    res.statusCode = 500;
+                    res.end(JSON.stringify({ success: false, error: err?.message || 'Server error' }));
+                  }
+                });
+                return;
+              }
+            }
+
             if (req.url?.startsWith('/api/media')) {
               if (req.method === 'GET' && req.url === '/api/media/pictures') {
                 res.setHeader('Content-Type', 'application/json');
@@ -460,6 +564,25 @@ export default defineConfig(() => {
                   const data = body ? JSON.parse(body) : {};
 
                   if (req.url === '/api/bot/start') {
+                    // Validasi Keamanan Server: Kunci bot jika Nama Toko, Nama Owner, atau Nomer Owner belum diisi
+                    const currentStore = botManager.config?.storeInfo || loadStoreInfo();
+                    const hasStoreName = Boolean(currentStore?.storeName && currentStore.storeName.trim());
+                    const hasOwnerName = Boolean(currentStore?.ownerName && currentStore.ownerName.trim());
+                    const hasOwnerNumber = Boolean(currentStore?.ownerNumber && currentStore.ownerNumber.trim());
+
+                    if (!hasStoreName || !hasOwnerName || !hasOwnerNumber) {
+                      res.statusCode = 400;
+                      res.end(
+                        JSON.stringify({
+                          success: false,
+                          error:
+                            'Akses Dikunci: Anda wajib melengkapi Nama Toko, Nama Owner, dan Nomer Owner di Store Info sebelum menjalankan bot WhatsApp!',
+                          locked: true,
+                        })
+                      );
+                      return;
+                    }
+
                     const result = await botManager.start(data.phoneNumber, data.customCode);
                     res.end(JSON.stringify(result));
                     return;

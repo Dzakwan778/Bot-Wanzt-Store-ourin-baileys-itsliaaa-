@@ -286,10 +286,76 @@ Mengganti kotak peringatan kuning statis (*"Form Pairing Code Belum Diisi"*) pad
 
 ---
 
+## 📌 Rencana Implementasi: Halaman Login Aman & Lock Wajib Store Info
+
+### 1. Tujuan & Deskripsi
+Menerapkan sistem keamanan otentikasi login pengguna dan proteksi operasional bot WhatsApp:
+1. **Halaman Login Aman (Zero Inspect Leak)**:
+   - Antarmuka form login minimalis: Username, Password (dengan toggle intip), dan tombol Login.
+   - Keamanan tingkat tinggi: Tidak ada kredensial yang diletakkan di frontend. Password di-hash di backend (`crypto.pbkdf2Sync` + salt) pada `/database/auth.json`.
+   - Menggunakan session token acak (`crypto.randomBytes(32)`).
+   - Seluruh dashboard terkunci total sebelum pengguna berhasil login.
+2. **Server-Side Enforcement & Bot Lock**:
+   - Di `/api/bot/start` (backend): Jika Nama Toko, Nama Owner, atau Nomer Owner kosong, server menolak menyalakan bot.
+3. **Pop-up Modal Wajib Isi Store Info (Non-Dismissible)**:
+   - Setelah login, jika data toko belum lengkap, tampilkan pop-up modal tanpa tombol close / batalkan (tidak bisa di-dismiss).
+   - Pengguna wajib mengisi: Nama Toko, Nama Owner, dan Nomer Owner.
+   - Saat disimpan, data tersimpan di backend (`/database/store_info.json`) dan otomatis mengisi formulir Store Info pada dashboard.
+
+### 2. File Target
+1. `/server/services/authManager.ts` (BARU): Modul hashing password (PBKDF2), validasi login, dan sesi token.
+2. `/database/auth.json` (BARU): Tempat penyimpanan kredensial akun administrator.
+3. `/vite.config.ts`: Endpoint `/api/auth/login`, `/api/auth/session`, `/api/auth/logout`, `/api/auth/store-setup`, dan validasi data toko di `/api/bot/start`.
+4. `/src/hooks/useAuth.ts` (BARU): Hook status otentikasi pengguna.
+5. `/src/components/auth/LoginPage.tsx` (BARU): Komponen halaman login bersih dan modern.
+6. `/src/components/modals/MandatoryStoreSetupModal.tsx` (BARU): Modal pop-up wajib isi data toko (non-dismissible).
+7. `/src/App.tsx`: Gerbang otentikasi dan render modal wajib store info.
+8. `/brain/PROGRESS.md`: Pencatatan status progres.
+
+---
+
+## 📌 Rencana Implementasi: Redesain Login Page & Pop-up Modal Sesuai `DESIGN (2).md` (Anti-AI Slop)
+
+### 1. Tujuan & Deskripsi
+Menyelaraskan desain antarmuka `LoginPage.tsx` dan `MandatoryStoreSetupModal.tsx` secara 100% konsisten dengan spesifikasi resmi pada `DESIGN (2).md`:
+1. **Menghilangkan Seluruh Unsur "AI Slop"**:
+   - Menghapus gradien warna-warni (purple/indigo/orange gradient), efek neon glow/blur melayang, dan tombol pill berlebihan.
+   - Mengadopsi prinsip **Industrial Utility & Editorial Minimalism**.
+2. **Kesesuaian Palet Warna Mode Terang (Light Mode - Primary Default)**:
+   - **Background Canvas**: `#F8FAFC` (`bg-slate-50`).
+   - **Surface Kartu**: `#FFFFFF` (`bg-white`), tipis 1px border `#E2E8F0` (`border-slate-200`), shadow halus (`shadow-xs` / `shadow-sm`).
+   - **Teks Utama**: `#0F172A` (`text-slate-900`) dengan tracking tajam `-0.02em`.
+   - **Teks Sekunder**: `#64748B` (`text-slate-500`).
+   - **Warna Aksen Brand**: `#0284C7` (`bg-sky-600 hover:bg-sky-700 text-white`).
+   - **Indikator Peringatan / Sukses**: Menggunakan token warna utilitas bersih (`bg-amber-50 border-amber-200 text-amber-800` & `bg-emerald-50 border-emerald-200 text-emerald-800`).
+3. **Redesain `LoginPage.tsx`**:
+   - Background canvas bersih Slate 50.
+   - Kartu login putih minimalis dengan border tipis 1px slate-200.
+   - Header konsisten: Logo avatar `wanztstore` / bot icon bernuansa sky-50/sky-600.
+   - Judul: `Bot Dashboard Manager` (sesuai edit pengguna) dengan subjudul bersih.
+   - Form input bersih: `border-slate-300 focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20`.
+   - Tombol login: Solid Sky 600 (`bg-sky-600 hover:bg-sky-700 text-white font-semibold text-sm rounded-lg py-2.5`).
+   - Footer info keamanan minimalis tanpa dekorasi berlebihan.
+4. **Redesain `MandatoryStoreSetupModal.tsx`**:
+   - Kartu modal putih bersih (`bg-white border-slate-200 rounded-xl`).
+   - Header modal minimalis dengan border bawah tipis (`border-b border-slate-100`) dan badge status amber fungsional (`bg-amber-50 text-amber-700 border-amber-200`).
+   - Kotak informasi tanpa gradien: `bg-amber-50/80 border-amber-200 text-amber-900`.
+   - Input fields: Identik dengan form Store Info di dashboard utama.
+   - Tombol simpan: Solid Sky 600 (`bg-sky-600 hover:bg-sky-700`).
+
+### 2. File Target
+1. `/src/components/auth/LoginPage.tsx`: Redesain total ke style clean industrial minimalism.
+2. `/src/components/modals/MandatoryStoreSetupModal.tsx`: Redesain total selaras dengan palet dashboard.
+3. `/brain/PROGRESS.md`: Pencatatan progres.
+
+---
+
 ## ⏳ Log Status & Riwayat Rencana Implementasi
 
 | Tanggal | Tugas / Fitur | File Target | Status |
 | :--- | :--- | :--- | :--- |
+| 2026-10-28 | Redesain Login Page & Pop-up Modal Sesuai `DESIGN (2).md` | `src/components/auth/*`, `src/components/modals/*` | Selesai (Verified) |
+| 2026-10-27 | Halaman Login Aman & Lock Wajib Store Info | `server/*`, `src/*`, `database/auth.json` | Selesai (Verified) |
 | 2026-10-27 | Live Requirements Checklist Custom Pairing Code | `src/components/connection/WhatsAppConnectionPanel.tsx` | Selesai (Verified) |
 | 2026-10-27 | Command Invoice Dinamis & Fix Tombol Hapus Transaksi | `src/*`, `server/*`, `database/command_invoice.json` | Selesai (Verified) |
 | 2026-10-26 | Ganti tab05 Jadi Tab "Transaksi" & Data Riwayat Real-time | `src/*`, `server/*`, `database/transactions.json` | Selesai (Verified) |
@@ -300,6 +366,8 @@ Mengganti kotak peringatan kuning statis (*"Form Pairing Code Belum Diisi"*) pad
 | 2026-10-26 | Pemulihan File Modular & Hook (Fix Import Errors) | `src/hooks/*`, `src/components/tabs/*` | Selesai (Verified) |
 | 2026-10-26 | Perbaikan Bug Tab SMM (Fix Typo SMM vs SSM) | `src/components/tabs/TabContentRenderer.tsx`, `src/types/dashboard.types.ts` | Selesai (Verified) |
 | 2026-10-25 | Sinkronisasi Kode GitHub & Modularisasi | `src/App.tsx`, `src/components/*` | Selesai (Verified) |
+
+
 
 
 

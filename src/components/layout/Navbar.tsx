@@ -1,12 +1,14 @@
 import React from 'react';
-import { User, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
+import { User, CheckCircle2, Clock, AlertCircle, LogOut } from 'lucide-react';
 import { BotStatusResponse } from '../../types/dashboard.types';
 
 interface NavbarProps {
   botData: BotStatusResponse;
+  username?: string;
+  onLogout?: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ botData }) => {
+export const Navbar: React.FC<NavbarProps> = ({ botData, username, onLogout }) => {
   const getStatusBadge = () => {
     switch (botData.status) {
       case 'connected':
@@ -59,7 +61,7 @@ export const Navbar: React.FC<NavbarProps> = ({ botData }) => {
             <div className="flex items-center gap-2">
               <span className="font-bold text-base text-slate-900 tracking-tight">Dashboard Bot WhatsApp</span>
               <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
-                Bot Console
+                {username || 'Admin'}
               </span>
             </div>
             <p className="text-xs text-slate-500">WhatsApp Bot Management System</p>
@@ -67,8 +69,19 @@ export const Navbar: React.FC<NavbarProps> = ({ botData }) => {
         </div>
         <div className="flex items-center gap-3">
           {getStatusBadge()}
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-lg transition cursor-pointer"
+              title="Keluar dari Dashboard"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Keluar</span>
+            </button>
+          )}
         </div>
       </div>
     </header>
   );
 };
+
