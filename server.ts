@@ -27,8 +27,12 @@ async function startServer() {
 
     if (fs.existsSync(distPath)) {
       serverApp.use(express.static(distPath));
-      serverApp.get('*', (_req, res) => {
-        res.sendFile(path.resolve(distPath, 'index.html'));
+      // Fallback SPA routing kompatibel dengan Express 5 & 4
+      serverApp.use((req, res, next) => {
+        if (req.method === 'GET' && !req.path.startsWith('/api')) {
+          return res.sendFile(path.resolve(distPath, 'index.html'));
+        }
+        next();
       });
     }
   }
