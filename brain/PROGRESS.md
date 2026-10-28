@@ -165,19 +165,19 @@ Aplikasi ini mengatur bot WhatsApp toko otomatis dengan fitur:
     - **Penyederhanaan `vite.config.ts`**:
       - `vite.config.ts` menjadi konfigurasi Vite murni yang bersih, cepat, dan teratur dengan proxy otomatis `/api` ke `http://localhost:5000` jika frontend dijalankan terpisah.
     - **Konfigurasi PM2 Siap Pakai (`ecosystem.config.cjs`)**:
-      - Terkonfigurasi untuk deployment di VPS `104.64.15.80` dalam folder `bot-whatsapp`, auto-restart on crash, memory limit 1GB, dan startup ready.
+      - Terkonfigurasi untuk deployment di VPS `139.59.97.50` dalam folder `bot-whatsapp`, auto-restart on crash, memory limit 1GB, dan startup ready.
     - **Panduan Terperinci di `INSTALASI.md`**:
-      - Panduan copy-paste langkah demi langkah untuk VPS IP `104.64.15.80` di folder `bot-whatsapp`:
+      - Panduan copy-paste langkah demi langkah untuk VPS IP `139.59.97.50` di folder `bot-whatsapp`:
         - Persiapan OS (Node.js 20, PM2, Git, Nginx, UFW).
         - Menaruh file ke `/root/bot-whatsapp`.
         - Perintah PM2 (`pm2 start ecosystem.config.cjs`, `pm2 startup`, `pm2 save`).
         - Konfigurasi Nginx Reverse Proxy (Port 80 -> 3000) lengkap dengan header WebSocket Baileys dan Webhook LunasQRIS.
-        - Pengaturan URL Webhook LunasQRIS `http://104.64.15.80/api/lunasqris/webhook`.
+        - Pengaturan URL Webhook LunasQRIS `http://139.59.97.50/api/lunasqris/webhook`.
 18. **Pemisahan Fisik Folder `bot-whatsapp/frontend` & `bot-whatsapp/backend` serta Konfigurasi Domain `testbot.wanma2.my.id`**:
     - **Struktur Folder Terpisah**:
       - `bot-whatsapp/frontend/`: Memuat seluruh antarmuka React (`src/`), `index.html`, `vite.config.ts`, `package.json`, dan bundle `dist/`.
       - `bot-whatsapp/backend/`: Memuat server Express di Port 5000 (`backend/server.ts`), modular routes (`backend/routes/`), business services (`backend/services/`), handlers Baileys (`backend/handlers/`), database lokal (`backend/database/`), dan `package.json`.
-    - **Konfigurasi Domain `testbot.wanma2.my.id` (IP: 104.64.15.80)**:
+    - **Konfigurasi Domain `testbot.wanma2.my.id` (IP: 139.59.97.50)**:
       - **Nginx Reverse Proxy**:
         - Menyajikan file frontend statis dari `/root/bot-whatsapp/frontend/dist` pada port 80/443.
         - Meneruskan seluruh request `/api/` ke backend port 5000 dengan header WebSocket Baileys dan HMAC signature webhook LunasQRIS.
@@ -189,7 +189,7 @@ Aplikasi ini mengatur bot WhatsApp toko otomatis dengan fitur:
 ---
 
 ## 📂 Struktur Penting
-- `INSTALASI.md`: Panduan instalasi dan deployment lengkap VPS 104.64.15.80 di folder `bot-whatsapp`.
+- `INSTALASI.md`: Panduan instalasi dan deployment lengkap VPS 139.59.97.50 di folder `bot-whatsapp`.
 - `ecosystem.config.cjs`: Konfigurasi manajemen proses PM2 production.
 - `server.ts`: Entry point server full-stack utama (Express + Vite).
 - `server/app.ts`: Aplikasi Express modular terpusat.

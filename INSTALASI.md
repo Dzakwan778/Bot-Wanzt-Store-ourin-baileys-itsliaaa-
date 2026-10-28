@@ -1,8 +1,8 @@
 # Panduan Lengkap Instalasi VPS & Deployment Domain
-## Domain: `testbot.wanma2.my.id` | IP VPS: `104.64.15.80`
+## Domain: `testbot.wanma2.my.id` | IP VPS: `139.59.97.50`
 ### Arsitektur Fisik: `bot-whatsapp/frontend` & `bot-whatsapp/backend`
 
-Panduan ini disusun khusus untuk mendeploy bot WhatsApp toko otomatis (**Wanzt Store**) pada VPS Anda di alamat domain **`testbot.wanma2.my.id`** (IP: **`104.64.15.80`**) dengan struktur folder fisik yang telah dipisahkan secara murni antara **Frontend** dan **Backend** di dalam direktori **`bot-whatsapp`** menggunakan **PM2** dan **Nginx**.
+Panduan ini disusun khusus untuk mendeploy bot WhatsApp toko otomatis (**Wanzt Store**) pada VPS Anda di alamat domain **`testbot.wanma2.my.id`** (IP: **`139.59.97.50`**) dengan struktur folder fisik yang telah dipisahkan secara murni antara **Frontend** dan **Backend** di dalam direktori **`bot-whatsapp`** menggunakan **PM2** dan **Nginx**.
 
 ---
 
@@ -61,7 +61,7 @@ Sebelum mengatur VPS, pastikan domain Anda telah diarahkan ke IP VPS:
 2. Tambahkan **DNS Record Tipe A**:
    - **Type**: `A`
    - **Name**: `testbot` (akan menjadi `testbot.wanma2.my.id`)
-   - **IPv4 Address**: `104.64.15.80`
+   - **IPv4 Address**: `139.59.97.50`
    - **Proxy Status**: *DNS Only* (atau jika menggunakan Cloudflare, nonaktifkan awan oranye terlebih dahulu saat instalasi SSL Certbot).
    - **TTL**: Auto
 
@@ -71,7 +71,7 @@ Sebelum mengatur VPS, pastikan domain Anda telah diarahkan ke IP VPS:
 
 Masuk ke VPS Anda via SSH dari terminal komputer:
 ```bash
-ssh root@104.64.15.80
+ssh root@139.59.97.50
 ```
 
 Jalankan perintah update dan instalasi dependensi sistem:
@@ -166,7 +166,7 @@ nano /etc/nginx/sites-available/testbot
 ```nginx
 server {
     listen 80;
-    server_name testbot.wanma2.my.id 104.64.15.80;
+    server_name testbot.wanma2.my.id 139.59.97.50;
 
     client_max_body_size 50M;
 

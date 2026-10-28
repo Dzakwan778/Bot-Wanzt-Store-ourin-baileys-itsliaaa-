@@ -46,9 +46,9 @@ Dokumen ini mencatat rencana kerja, roadmap fitur, target tonggak pencapaian (*m
      - Komponen: Margin keuntungan (markup persen/nominal), teks template pesan, daftar ID grup yang diizinkan (whitelist), auto-reply switcher, durasi timeout invoice QRIS.
      - Alasan: Bisa diedit sewaktu-waktu atau diperbarui via perintah chat bot WhatsApp (misal perintah admin: `!setmargin 10%`) tanpa harus me-restart proses bot di VPS (*hot-reloading*).
 
-### 4. Rencana & Panduan Deployment VPS (IP: 104.64.15.80)
+### 4. Rencana & Panduan Deployment VPS (IP: 139.59.97.50)
 - **Status Rencana**: Tahap Perencanaan & Panduan Deployment Siap Pakai.
-- **Tujuan**: Memasang dan menjalankan WhatsApp Bot Store & Dashboard Wanzt Store secara persisten 24/7 di VPS Ubuntu/Debian pengguna (`104.64.15.80`).
+- **Tujuan**: Memasang dan menjalankan WhatsApp Bot Store & Dashboard Wanzt Store secara persisten 24/7 di VPS Ubuntu/Debian pengguna (`139.59.97.50`).
 - **Arsitektur Produksi di VPS**:
   1. **Runtime Node.js 20 LTS**: Menjalankan engine Baileys, Express/Vite middleware, dan handler LunasQRIS/Xaviera.
   2. **Process Manager (PM2)**: Menjaga bot tetap aktif 24 jam non-stop, otomatis restart jika terjadi crash, dan otomatis aktif kembali saat VPS reboot (`pm2 startup`).
@@ -75,7 +75,7 @@ Setiap ada ide rencana baru dari hasil diskusi atau instruksi pengguna, daftarka
 | 2026-10-26 | Studi & Rencana Migrasi ke LunasQRIS | Mempelajari dokumentasi resmi LunasQRIS API (lunasqris.com/docs), komparasi dengan Sairi, dan perumusan arsitektur implementasi | Tahap Diskusi & Review | Selesai |
 | 2026-10-26 | Konsep Headless Backend & Struktur Key | Evaluasi arsitektur headless (tanpa dashboard), verifikasi fitur Carousel & alur bot tetap jalan, rekomendasi struktur `.env` dan `config.json` | Tahap Diskusi & Review | Selesai Dicatat |
 | 2026-10-26 | Implementasi Penuh LunasQRIS | Migrasi penuh payment gateway dari Sairi ke LunasQRIS (Dual-Key Auth, Dynamic QRIS + Kode Unik, Polling & Webhook HMAC-SHA256, Tab Connection UI) | Implementasi | Selesai Diimplementasikan |
-| 2026-10-26 | Deployment ke VPS 104.64.15.80 | Panduan remote SSH, skrip otomasi `deploy-vps.sh`, instalasi Node.js 20, PM2, konfigurasi Nginx reverse proxy, dan setup webhook domain | Panduan & Skrip | Siap Diterapkan |
+| 2026-10-26 | Deployment ke VPS 139.59.97.50 | Panduan remote SSH, skrip otomasi `deploy-vps.sh`, instalasi Node.js 20, PM2, konfigurasi Nginx reverse proxy, dan setup webhook domain | Panduan & Skrip | Siap Diterapkan |
 
 
 | 2026-10-27 | Command Invoice Dinamis & Tombol Interaktif | Menambahkan command Invoice pada Tab Command, template teks invoice kustom, dukungan placeholder ({storeName}, {ownerNumber}, {category}, {varian}, {price}, {produkName}, {adminNumber}, {webLink}, {orderId}, {total}, {unikCode}), tombol Quick Reply vCard (Admin/fallback Owner), dan tombol CTA URL Web Checkout | Tahap Implementasi | Selesai Diimplementasikan |

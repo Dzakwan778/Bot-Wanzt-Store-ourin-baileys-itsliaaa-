@@ -54,11 +54,14 @@ APP_DIR="/root/bot-whatsapp"
 echo -e "${GREEN}[5/7] Menyiapkan direktori aplikasi di ${APP_DIR}...${NC}"
 
 # Cek apakah dijalankan langsung di dalam folder repo
-if [ -f "package.json" ] && [ -d "server" ]; then
-  echo -e "${YELLOW}Menggunakan file direktori saat ini...${NC}"
-  mkdir -p "$APP_DIR"
-  cp -r ./* "$APP_DIR/" 2>/dev/null || true
-  cp -r ./.[!.]* "$APP_DIR/" 2>/dev/null || true
+CURRENT_PWD=$(pwd)
+if [ -f "package.json" ] && ([ -d "backend" ] || [ -d "server" ]); then
+  if [ "$CURRENT_PWD" != "$APP_DIR" ]; then
+    echo -e "${YELLOW}Menyalin file dari $CURRENT_PWD ke $APP_DIR...${NC}"
+    mkdir -p "$APP_DIR"
+    cp -r ./* "$APP_DIR/" 2>/dev/null || true
+    cp -r ./.[!.]* "$APP_DIR/" 2>/dev/null || true
+  fi
   cd "$APP_DIR"
 elif [ -d "$APP_DIR" ]; then
   echo -e "${YELLOW}Folder $APP_DIR sudah ada, memperbarui...${NC}"
@@ -72,9 +75,13 @@ else
   cd "$APP_DIR"
 fi
 
-# Pastikan folder database ada
+# Pastikan seluruh folder database dan session runtime ada
 mkdir -p "$APP_DIR/database"
 mkdir -p "$APP_DIR/session"
+mkdir -p "$APP_DIR/session_ourin"
+mkdir -p "$APP_DIR/backend/database"
+mkdir -p "$APP_DIR/src/media/picture"
+mkdir -p "$APP_DIR/public"
 
 echo -e "${GREEN}Menginstall dependensi npm di folder aplikasi...${NC}"
 npm install --legacy-peer-deps
@@ -88,7 +95,7 @@ cat << 'EOF' > /etc/nginx/sites-available/bot-whatsapp
 server {
     listen 80;
     listen [::]:80;
-    server_name testbot.wanma2.my.id 104.64.15.80;
+    server_name testbot.wanma2.my.id 139.59.97.50;
 
     client_max_body_size 50M;
 
@@ -162,7 +169,7 @@ echo -e "\n${CYAN}==============================================================
 echo -e "${GREEN}  🎉 DEPLOYMENT BERHASIL & BOT SUDAH AKTIF 24/7!${NC}"
 echo -e "${CYAN}================================================================${NC}"
 echo -e "• Domain Dashboard : ${YELLOW}http://testbot.wanma2.my.id${NC}"
-echo -e "• Akses IP         : ${YELLOW}http://104.64.15.80${NC}"
+echo -e "• Akses IP         : ${YELLOW}http://139.59.97.50${NC}"
 echo -e "• Webhook LunasQRIS: ${YELLOW}https://testbot.wanma2.my.id/api/lunasqris/webhook${NC}"
 echo -e "\n${PURPLE}📌 Perintah Berguna PM2:${NC}"
 echo -e "  - Cek Log Real-Time : ${CYAN}pm2 logs bot-backend${NC}"

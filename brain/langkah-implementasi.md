@@ -120,7 +120,7 @@ Melakukan migrasi penuh (*full replacement*) sistem pembayaran QRIS otomatis dar
 ## 📌 Rencana Implementasi: Skrip Otomasi Deployment VPS (`deploy-vps.sh`)
 
 ### 1. Tujuan & Deskripsi
-Membuat skrip otomasi bash `deploy-vps.sh` yang dapat langsung dijalankan oleh pengguna di VPS miliknya (`104.64.15.80`). Skrip ini akan secara otomatis:
+Membuat skrip otomasi bash `deploy-vps.sh` yang dapat langsung dijalankan oleh pengguna di VPS miliknya (`139.59.97.50`). Skrip ini akan secara otomatis:
 1. Memperbarui package sistem Ubuntu/Debian (`apt update -y && apt upgrade -y`).
 2. Menginstall dependensi penting: `git`, `curl`, `wget`, `build-essential`, `ufw`, `nginx`, `certbot`, `python3-certbot-nginx`.
 3. Menginstall runtime Node.js v20 LTS dan npm melalui NodeSource.
@@ -351,7 +351,7 @@ Menyelaraskan desain antarmuka `LoginPage.tsx` dan `MandatoryStoreSetupModal.tsx
 ## 📌 Rencana Implementasi: Pemisahan Frontend & Backend serta Panduan Instalasi VPS (`INSTALASI.md`)
 
 ### 1. Tujuan & Deskripsi
-Memisahkan arsitektur sistem menjadi Frontend (React + Vite) dan Backend (Express + Node.js) yang terpisah, bersih, dan modular, serta menyusun panduan lengkap instalasi VPS di `INSTALASI.md` untuk IP `104.64.15.80` dalam direktori `bot-whatsapp` dengan manajemen proses PM2:
+Memisahkan arsitektur sistem menjadi Frontend (React + Vite) dan Backend (Express + Node.js) yang terpisah, bersih, dan modular, serta menyusun panduan lengkap instalasi VPS di `INSTALASI.md` untuk IP `139.59.97.50` dalam direktori `bot-whatsapp` dengan manajemen proses PM2:
 1. **Pemisahan Arsitektur Backend (Express Modular Routes)**:
    - Memindahkan seluruh logika route REST API yang sebelumnya menumpuk di dalam middleware `vite.config.ts` (600+ baris) ke dalam folder `/server/routes/`:
      - `/server/routes/authRoutes.ts`: Route otentikasi aman (`/api/auth/*`).
@@ -369,15 +369,15 @@ Memisahkan arsitektur sistem menjadi Frontend (React + Vite) dan Backend (Expres
 4. **Pembaruan `package.json`**:
    - Menambahkan script `"dev": "tsx server.ts"`, `"start": "tsx server.ts"`, `"backend": "tsx server/standalone.ts"`, dan `"frontend:dev": "vite --port=3000 --host=0.0.0.0"`.
 5. **Konfigurasi PM2 (`ecosystem.config.cjs`)**:
-   - Menyediakan file konfigurasi PM2 siap pakai untuk folder `bot-whatsapp` di VPS `104.64.15.80`.
+   - Menyediakan file konfigurasi PM2 siap pakai untuk folder `bot-whatsapp` di VPS `139.59.97.50`.
 6. **Dokumentasi Lengkap `INSTALASI.md`**:
-   - Panduan terperinci langkah demi langkah untuk VPS IP `104.64.15.80`:
+   - Panduan terperinci langkah demi langkah untuk VPS IP `139.59.97.50`:
      - Struktur folder proyek di dalam `/root/bot-whatsapp` (atau `/home/ubuntu/bot-whatsapp`).
      - Penjelasan pemisahan Frontend dan Backend.
      - Prasyarat (Node.js 20 LTS, Git, PM2).
      - Menjalankan via PM2 (`pm2 start ecosystem.config.cjs` / perintah mandiri).
      - Konfigurasi Nginx Reverse Proxy & Firewall (UFW).
-     - Konfigurasi Webhook LunasQRIS ke `http://104.64.15.80/api/lunasqris/webhook`.
+     - Konfigurasi Webhook LunasQRIS ke `http://139.59.97.50/api/lunasqris/webhook`.
      - Monitoring, logs, restart otomatis, dan troubleshooting.
 
 ### 2. File Target
@@ -424,7 +424,7 @@ Menerapkan pemisahan fisik penuh struktur direktori proyek menjadi:
    - `/package.json`: Menghubungkan dev, build, dan start agar berjalan mulus di AI Studio port 3000 maupun di VPS.
    - `/server.ts`: Full-stack dev runner menghubungkan backend Express dan frontend Vite middleware.
    - `/ecosystem.config.cjs`: Disesuaikan untuk domain `testbot.wanma2.my.id` dan target folder `backend/server.ts`.
-   - `/INSTALASI.md`: Panduan instalasi terupdate khusus domain `testbot.wanma2.my.id` dan VPS `104.64.15.80`.
+   - `/INSTALASI.md`: Panduan instalasi terupdate khusus domain `testbot.wanma2.my.id` dan VPS `139.59.97.50`.
    - `/deploy-vps.sh`: Skrip otomatisasi dengan domain `testbot.wanma2.my.id`.
 
 ---

@@ -1,7 +1,7 @@
 /**
  * PM2 Ecosystem Configuration File
  * Domain: testbot.wanma2.my.id
- * VPS IP: 104.64.15.80
+ * VPS IP: 139.59.97.50
  * Struktur Direktori: bot-whatsapp/ (terpisah frontend/ & backend/)
  *
  * Cara Menjalankan:
