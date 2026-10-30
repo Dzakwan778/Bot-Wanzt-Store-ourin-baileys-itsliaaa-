@@ -1,5 +1,5 @@
-import { CommandsConfig } from '../types/bot.types.js';
-import { resolvePlaceholders } from '../services/placeholderHelper.js';
+import { CommandsConfig } from '../types/bot.types.ts';
+import { resolvePlaceholders } from '../services/placeholderHelper.ts';
 
 /**
  * Mengirimkan vCard kontak Owner Toko dari data Store Info

@@ -2,6 +2,7 @@ import React from 'react';
 import { TabStoreInfo } from './TabStoreInfo';
 import { TabCommand } from './TabCommand';
 import { TabProduk } from './TabProduk';
+import { TabKuponPromo } from './TabKuponPromo';
 import { TabSsm } from './TabSsm';
 import { TabTopUp } from './TabTopUp';
 import { TabConnection } from './TabConnection';
@@ -13,6 +14,8 @@ import { useWhatsAppGroups } from '../../hooks/useWhatsAppGroups';
 import { useButtonModal } from '../../hooks/useButtonModal';
 import { useBotConnection } from '../../hooks/useBotConnection';
 import { useTransactions } from '../../hooks/useTransactions';
+import { usePricingConfig } from '../../hooks/usePricingConfig';
+import { usePromos } from '../../hooks/usePromos';
 
 interface TabContentRendererProps {
   selectedTab: string;
@@ -22,6 +25,8 @@ interface TabContentRendererProps {
   buttonModal: ReturnType<typeof useButtonModal>;
   botConn: ReturnType<typeof useBotConnection>;
   transactionsState: ReturnType<typeof useTransactions>;
+  pricingState: ReturnType<typeof usePricingConfig>;
+  promosState: ReturnType<typeof usePromos>;
   showToast: (msg: string) => void;
 }
 
@@ -33,6 +38,8 @@ export const TabContentRenderer: React.FC<TabContentRendererProps> = ({
   buttonModal,
   botConn,
   transactionsState,
+  pricingState,
+  promosState,
   showToast,
 }) => {
   if (selectedTab === 'Store Info') {
@@ -146,6 +153,33 @@ export const TabContentRenderer: React.FC<TabContentRendererProps> = ({
         setSelectedProductCategory={xaviera.setSelectedProductCategory}
         onRefreshProducts={xaviera.fetchXavieraProducts}
         showToast={showToast}
+        pricingMode={pricingState.pricingMode}
+        pricingValue={pricingState.pricingValue}
+        inputVal={pricingState.inputVal}
+        setInputVal={pricingState.setInputVal}
+        isSavingPricing={pricingState.isSavingPricing}
+        savePricing={pricingState.savePricing}
+        handleToggleMode={pricingState.handleToggleMode}
+        calculateProductPrice={pricingState.calculateProductPrice}
+        variantPricings={pricingState.variantPricings}
+        isSavingVariantPricing={pricingState.isSavingVariantPricing}
+        calculateVariantPrice={pricingState.calculateVariantPrice}
+        getVariantPricingInfo={pricingState.getVariantPricingInfo}
+        saveVariantPricing={pricingState.saveVariantPricing}
+      />
+    );
+  }
+
+  if (selectedTab === 'Kupon Promo' || selectedTab === 'Promo' || selectedTab === 'tabPromo') {
+    return (
+      <TabKuponPromo
+        promosState={promosState}
+        productsList={xaviera.productsList}
+        pricingMode={pricingState.pricingMode}
+        pricingValue={pricingState.pricingValue}
+        variantPricings={pricingState.variantPricings}
+        calculateVariantPrice={pricingState.calculateVariantPrice}
+        showToast={showToast}
       />
     );
   }
@@ -165,6 +199,14 @@ export const TabContentRenderer: React.FC<TabContentRendererProps> = ({
         loadingSmm={xaviera.loadingSmm}
         fetchXavieraSmm={xaviera.fetchXavieraSmm}
         showToast={showToast}
+        smmPricingMode={pricingState.smmPricingMode}
+        smmPricingValue={pricingState.smmPricingValue}
+        smmInputVal={pricingState.smmInputVal}
+        setSmmInputVal={pricingState.setSmmInputVal}
+        isSavingSmmPricing={pricingState.isSavingSmmPricing}
+        saveSmmPricing={pricingState.saveSmmPricing}
+        handleToggleSmmMode={pricingState.handleToggleSmmMode}
+        calculateSmmPrice={pricingState.calculateSmmPrice}
       />
     );
   }
@@ -184,6 +226,14 @@ export const TabContentRenderer: React.FC<TabContentRendererProps> = ({
         loadingTopUp={xaviera.loadingTopUp}
         fetchXavieraGames={xaviera.fetchXavieraGames}
         showToast={showToast}
+        topupPricingMode={pricingState.topupPricingMode}
+        topupPricingValue={pricingState.topupPricingValue}
+        topupInputVal={pricingState.topupInputVal}
+        setTopupInputVal={pricingState.setTopupInputVal}
+        isSavingTopupPricing={pricingState.isSavingTopupPricing}
+        saveTopupPricing={pricingState.saveTopupPricing}
+        handleToggleTopupMode={pricingState.handleToggleTopupMode}
+        calculateTopupPrice={pricingState.calculateTopupPrice}
       />
     );
   }

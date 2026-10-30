@@ -85,9 +85,20 @@ mkdir -p "$APP_DIR/public"
 
 echo -e "${GREEN}Menginstall dependensi npm di folder aplikasi...${NC}"
 npm install --legacy-peer-deps
+npm install better-sqlite3 --legacy-peer-deps
 
 echo -e "${GREEN}Melakukan build bundle Frontend...${NC}"
 npm run build
+
+# Pastikan folder frontend/dist memiliki file build lengkap
+if [ -d "$APP_DIR/dist" ] && [ ! -f "$APP_DIR/frontend/dist/index.html" ]; then
+  mkdir -p "$APP_DIR/frontend/dist"
+  cp -r "$APP_DIR/dist"/* "$APP_DIR/frontend/dist/" 2>/dev/null || true
+fi
+
+# PERMISSION FIX: Berikan izin baca & eksekusi agar user www-data (Nginx) dapat membaca file
+chmod 755 /root
+chmod -R 755 "$APP_DIR"
 
 # 5. Konfigurasi Nginx Reverse Proxy
 echo -e "${GREEN}[6/7] Mengonfigurasi Nginx Reverse Proxy untuk testbot.wanma2.my.id...${NC}"

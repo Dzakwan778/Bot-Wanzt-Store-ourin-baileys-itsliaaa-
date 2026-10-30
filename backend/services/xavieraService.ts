@@ -1,4 +1,4 @@
-import { CommandsConfig, ProductVariantItem } from '../types/bot.types.js';
+import { CommandsConfig, ProductVariantItem } from '../types/bot.types.ts';
 
 export const DEFAULT_CATALOG = [
   {
@@ -674,8 +674,6 @@ export async function getProductVariants(
                 }
               } else {
                 const basePrice = Number(item.price || item.harga || 0);
-                const margin = Math.round(basePrice * 0.1);
-                const sellPrice = basePrice + margin;
 
                 let stockNum = 10;
                 if (typeof item.stock === 'number') stockNum = item.stock;
@@ -687,7 +685,7 @@ export async function getProductVariants(
                   name: item.brand || item.name || productName,
                   variant: item.name || item.product_name || `${productName} Varian`,
                   stock: stockNum,
-                  price: sellPrice || 5000,
+                  price: basePrice || 5000,
                   category: cat,
                 });
               }

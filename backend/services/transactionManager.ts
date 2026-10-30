@@ -1,5 +1,4 @@
-import fs from 'fs';
-import path from 'path';
+import { db } from '../database/sqlite.ts';
 
 export interface TransactionRecord {
   id: string;
@@ -26,55 +25,61 @@ export interface TransactionSummary {
   totalRevenue: number;
 }
 
-function resolveTransactionsPath(): string {
-  const localDb = path.resolve(process.cwd(), 'database', 'transactions.json');
-  if (fs.existsSync(localDb)) return localDb;
-  const backendDb = path.resolve(process.cwd(), 'backend', 'database', 'transactions.json');
-  if (fs.existsSync(backendDb)) return backendDb;
-  return localDb;
+interface DbTransactionRow {
+  id: string;
+  order_id: string;
+  trx_id: string | null;
+  customer_number: string;
+  customer_name: string | null;
+  product_name: string;
+  variant_name: string;
+  nominal: number;
+  unique_code: number;
+  total: number;
+  status: string;
+  payment_url: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
-const DB_PATH = resolveTransactionsPath();
+function mapRowToRecord(row: DbTransactionRow): TransactionRecord {
+  return {
+    id: row.id,
+    orderId: row.order_id,
+    trxId: row.trx_id || '',
+    customerNumber: row.customer_number,
+    customerName: row.customer_name || `Pelanggan-${row.customer_number.slice(-4)}`,
+    productName: row.product_name,
+    variantName: row.variant_name,
+    nominal: Number(row.nominal),
+    uniqueCode: Number(row.unique_code),
+    total: Number(row.total),
+    status: (row.status as any) || 'pending',
+    paymentUrl: row.payment_url || '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
 
 /**
- * Membaca seluruh data transaksi dari file JSON
+ * Membaca seluruh data transaksi dari SQLite database
  */
 export function getAllTransactions(): TransactionRecord[] {
   try {
-    if (!fs.existsSync(DB_PATH)) {
-      fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-      fs.writeFileSync(DB_PATH, JSON.stringify([], null, 2), 'utf-8');
-      return [];
-    }
+    const rows = db.prepare(`
+      SELECT * FROM transactions
+      ORDER BY created_at DESC
+    `).all() as DbTransactionRow[];
 
-    const raw = fs.readFileSync(DB_PATH, 'utf-8');
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed.sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-    }
-    return [];
+    return rows.map(mapRowToRecord);
   } catch (err) {
-    console.error('Gagal membaca database transaksi:', err);
+    console.error('Gagal membaca transaksi dari SQLite:', err);
     return [];
   }
 }
 
 /**
- * Menyimpan seluruh data transaksi ke file JSON
- */
-export function saveAllTransactions(transactions: TransactionRecord[]): void {
-  try {
-    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-    fs.writeFileSync(DB_PATH, JSON.stringify(transactions, null, 2), 'utf-8');
-  } catch (err) {
-    console.error('Gagal menulis database transaksi:', err);
-  }
-}
-
-/**
- * Mendaftarkan transaksi baru dengan status 'pending'
+ * Mendaftarkan transaksi baru dengan status 'pending' ke SQLite
  */
 export function recordTransaction(data: {
   orderId: string;
@@ -89,112 +94,208 @@ export function recordTransaction(data: {
   paymentUrl?: string;
   status?: 'pending' | 'paid' | 'cancel';
 }): TransactionRecord {
-  const current = getAllTransactions();
   const now = new Date().toISOString();
-
-  // Bersihkan format nomor WA
   const cleanNumber = data.customerNumber.replace(/[^0-9]/g, '');
+  const id = `TRX-${data.orderId}`;
+  const status = data.status || 'pending';
+  const customerName = data.customerName || `Pelanggan-${cleanNumber.slice(-4)}`;
 
-  const newRecord: TransactionRecord = {
-    id: `TRX-${data.orderId}`,
-    orderId: data.orderId,
-    trxId: data.trxId || '',
-    customerNumber: cleanNumber,
-    customerName: data.customerName || `Pelanggan-${cleanNumber.slice(-4)}`,
-    productName: data.productName,
-    variantName: data.variantName,
-    nominal: Math.round(data.nominal),
-    uniqueCode: Math.round(data.uniqueCode),
-    total: Math.round(data.total),
-    status: data.status || 'pending',
-    paymentUrl: data.paymentUrl || '',
-    createdAt: now,
-    updatedAt: now,
-  };
+  try {
+    const existing = db.prepare(`
+      SELECT * FROM transactions
+      WHERE order_id = ? OR (trx_id != '' AND trx_id = ?)
+    `).get(data.orderId, data.trxId || '') as DbTransactionRow | undefined;
 
-  // Cek apakah orderId sudah ada sebelumnya
-  const existingIdx = current.findIndex(
-    (item) => item.orderId === data.orderId || (data.trxId && item.trxId === data.trxId)
-  );
+    if (existing) {
+      db.prepare(`
+        UPDATE transactions
+        SET trx_id = ?,
+            customer_number = ?,
+            customer_name = ?,
+            product_name = ?,
+            variant_name = ?,
+            nominal = ?,
+            unique_code = ?,
+            total = ?,
+            status = ?,
+            payment_url = ?,
+            updated_at = ?
+        WHERE id = ?
+      `).run(
+        data.trxId || existing.trx_id || '',
+        cleanNumber,
+        customerName,
+        data.productName,
+        data.variantName,
+        Math.round(data.nominal),
+        Math.round(data.uniqueCode),
+        Math.round(data.total),
+        status,
+        data.paymentUrl || existing.payment_url || '',
+        now,
+        existing.id
+      );
 
-  if (existingIdx >= 0) {
-    current[existingIdx] = {
-      ...current[existingIdx],
-      ...newRecord,
-      createdAt: current[existingIdx].createdAt,
+      return {
+        id: existing.id,
+        orderId: existing.order_id,
+        trxId: data.trxId || existing.trx_id || '',
+        customerNumber: cleanNumber,
+        customerName,
+        productName: data.productName,
+        variantName: data.variantName,
+        nominal: Math.round(data.nominal),
+        uniqueCode: Math.round(data.uniqueCode),
+        total: Math.round(data.total),
+        status,
+        paymentUrl: data.paymentUrl || existing.payment_url || '',
+        createdAt: existing.created_at,
+        updatedAt: now,
+      };
+    } else {
+      db.prepare(`
+        INSERT INTO transactions (
+          id, order_id, trx_id, customer_number, customer_name,
+          product_name, variant_name, nominal, unique_code, total,
+          status, payment_url, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id,
+        data.orderId,
+        data.trxId || '',
+        cleanNumber,
+        customerName,
+        data.productName,
+        data.variantName,
+        Math.round(data.nominal),
+        Math.round(data.uniqueCode),
+        Math.round(data.total),
+        status,
+        data.paymentUrl || '',
+        now,
+        now
+      );
+
+      return {
+        id,
+        orderId: data.orderId,
+        trxId: data.trxId || '',
+        customerNumber: cleanNumber,
+        customerName,
+        productName: data.productName,
+        variantName: data.variantName,
+        nominal: Math.round(data.nominal),
+        uniqueCode: Math.round(data.uniqueCode),
+        total: Math.round(data.total),
+        status,
+        paymentUrl: data.paymentUrl || '',
+        createdAt: now,
+        updatedAt: now,
+      };
+    }
+  } catch (err) {
+    console.error('Gagal menyimpan transaksi ke SQLite:', err);
+    return {
+      id,
+      orderId: data.orderId,
+      trxId: data.trxId || '',
+      customerNumber: cleanNumber,
+      customerName,
+      productName: data.productName,
+      variantName: data.variantName,
+      nominal: Math.round(data.nominal),
+      uniqueCode: Math.round(data.uniqueCode),
+      total: Math.round(data.total),
+      status,
+      paymentUrl: data.paymentUrl || '',
+      createdAt: now,
       updatedAt: now,
     };
-  } else {
-    current.unshift(newRecord);
   }
-
-  saveAllTransactions(current);
-  return newRecord;
 }
 
 /**
- * Memperbarui status transaksi (pending, paid, cancel)
+ * Memperbarui status transaksi (pending, paid, cancel) di SQLite
  */
 export function updateTransactionStatus(
   identifier: string,
   newStatus: 'pending' | 'paid' | 'cancel'
 ): TransactionRecord | null {
   if (!identifier) return null;
-  const current = getAllTransactions();
-  const target = current.find(
-    (t) => t.orderId === identifier || t.trxId === identifier || t.id === identifier
-  );
+  const now = new Date().toISOString();
 
-  if (!target) return null;
+  try {
+    const existing = db.prepare(`
+      SELECT * FROM transactions
+      WHERE order_id = ? OR trx_id = ? OR id = ?
+    `).get(identifier, identifier, identifier) as DbTransactionRow | undefined;
 
-  target.status = newStatus;
-  target.updatedAt = new Date().toISOString();
+    if (!existing) return null;
 
-  saveAllTransactions(current);
-  return target;
+    db.prepare(`
+      UPDATE transactions
+      SET status = ?, updated_at = ?
+      WHERE id = ?
+    `).run(newStatus, now, existing.id);
+
+    return {
+      ...mapRowToRecord(existing),
+      status: newStatus,
+      updatedAt: now,
+    };
+  } catch (err) {
+    console.error('Gagal memperbarui status transaksi di SQLite:', err);
+    return null;
+  }
 }
 
 /**
- * Menghapus transaksi berdasarkan ID atau Order ID
+ * Menghapus transaksi berdasarkan ID atau Order ID dari SQLite
  */
 export function deleteTransaction(identifier: string): boolean {
-  const current = getAllTransactions();
-  const initialLength = current.length;
-  const filtered = current.filter((t) => t.id !== identifier && t.orderId !== identifier);
+  try {
+    const result = db.prepare(`
+      DELETE FROM transactions
+      WHERE id = ? OR order_id = ?
+    `).run(identifier, identifier);
 
-  if (filtered.length !== initialLength) {
-    saveAllTransactions(filtered);
-    return true;
+    return result.changes > 0;
+  } catch (err) {
+    console.error('Gagal menghapus transaksi dari SQLite:', err);
+    return false;
   }
-  return false;
 }
 
 /**
- * Menghitung ringkasan statistik transaksi
+ * Menghitung ringkasan statistik transaksi via SQL agregasi
  */
 export function getTransactionSummary(): TransactionSummary {
-  const list = getAllTransactions();
-  let paidCount = 0;
-  let pendingCount = 0;
-  let cancelCount = 0;
-  let totalRevenue = 0;
+  try {
+    const row = db.prepare(`
+      SELECT
+        COUNT(*) as totalCount,
+        COALESCE(SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END), 0) as paidCount,
+        COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) as pendingCount,
+        COALESCE(SUM(CASE WHEN status = 'cancel' THEN 1 ELSE 0 END), 0) as cancelCount,
+        COALESCE(SUM(CASE WHEN status = 'paid' THEN total ELSE 0 END), 0) as totalRevenue
+      FROM transactions
+    `).get() as any;
 
-  for (const item of list) {
-    if (item.status === 'paid') {
-      paidCount++;
-      totalRevenue += item.total || 0;
-    } else if (item.status === 'pending') {
-      pendingCount++;
-    } else if (item.status === 'cancel') {
-      cancelCount++;
-    }
+    return {
+      totalCount: Number(row?.totalCount || 0),
+      paidCount: Number(row?.paidCount || 0),
+      pendingCount: Number(row?.pendingCount || 0),
+      cancelCount: Number(row?.cancelCount || 0),
+      totalRevenue: Number(row?.totalRevenue || 0),
+    };
+  } catch (err) {
+    console.error('Gagal menghitung ringkasan transaksi dari SQLite:', err);
+    return {
+      totalCount: 0,
+      paidCount: 0,
+      pendingCount: 0,
+      cancelCount: 0,
+      totalRevenue: 0,
+    };
   }
-
-  return {
-    totalCount: list.length,
-    paidCount,
-    pendingCount,
-    cancelCount,
-    totalRevenue,
-  };
 }

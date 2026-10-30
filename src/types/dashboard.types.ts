@@ -48,6 +48,37 @@ export interface WhatsAppButton {
   callPhoneNumber?: string;
 }
 
+export interface PricingConfig {
+  mode: 'rp' | 'percent';
+  value: number;
+}
+
+export interface VariantPricingItem {
+  variantId: string;
+  productName?: string;
+  variantName?: string;
+  pricingType: 'general' | 'custom';
+  mode: 'rp' | 'percent';
+  value: number;
+}
+
+export interface PromoCodeItem {
+  id: number;
+  code: string;
+  discountMode: 'rp' | 'percent';
+  discountValue: number;
+  minSpend: number;
+  quota: number | null;
+  usedCount: number;
+  validUntil: string | null;
+  isForever: boolean;
+  scopeType: 'all' | 'restricted';
+  variantIds: string[];
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PremiumProduct {
   id: string | number;
   name: string;

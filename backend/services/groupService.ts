@@ -1,5 +1,4 @@
-import fs from 'fs';
-import path from 'path';
+import { db } from '../database/sqlite.ts';
 
 export interface GroupItem {
   id: string;
@@ -11,48 +10,55 @@ export interface GroupItem {
   enabled: boolean;
 }
 
-export interface GroupsConfigFile {
-  toggledGroups: Record<string, boolean>;
-  lastUpdated?: number;
-}
-
-const DATABASE_DIR = path.join(process.cwd(), 'database');
-const GROUPS_CONFIG_FILE = path.join(DATABASE_DIR, 'groups_config.json');
-
 export function loadGroupsConfig(): Record<string, boolean> {
   try {
-    if (!fs.existsSync(DATABASE_DIR)) {
-      fs.mkdirSync(DATABASE_DIR, { recursive: true });
+    const rows = db.prepare('SELECT group_id, enabled FROM group_whitelist').all() as {
+      group_id: string;
+      enabled: number;
+    }[];
+
+    const result: Record<string, boolean> = {};
+    for (const row of rows) {
+      result[row.group_id] = row.enabled === 1;
     }
-    if (fs.existsSync(GROUPS_CONFIG_FILE)) {
-      const content = fs.readFileSync(GROUPS_CONFIG_FILE, 'utf-8');
-      const data = JSON.parse(content) as GroupsConfigFile;
-      return data.toggledGroups || {};
-    }
+    return result;
   } catch (err) {
-    console.error('Gagal membaca groups_config.json:', err);
+    console.error('Gagal membaca whitelist grup dari SQLite:', err);
+    return {};
   }
-  return {};
 }
 
 export function saveGroupsConfig(toggledGroups: Record<string, boolean>): void {
   try {
-    if (!fs.existsSync(DATABASE_DIR)) {
-      fs.mkdirSync(DATABASE_DIR, { recursive: true });
-    }
-    const data: GroupsConfigFile = {
-      toggledGroups,
-      lastUpdated: Date.now(),
-    };
-    fs.writeFileSync(GROUPS_CONFIG_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    const insertGroup = db.prepare(`
+      INSERT OR REPLACE INTO group_whitelist (group_id, enabled, updated_at)
+      VALUES (?, ?, ?)
+    `);
+    const now = new Date().toISOString();
+
+    const insertMany = db.transaction((groups: Record<string, boolean>) => {
+      for (const [gid, enabled] of Object.entries(groups)) {
+        insertGroup.run(gid, enabled ? 1 : 0, now);
+      }
+    });
+
+    insertMany(toggledGroups);
   } catch (err) {
-    console.error('Gagal menyimpan groups_config.json:', err);
+    console.error('Gagal menyimpan whitelist grup ke SQLite:', err);
   }
 }
 
 export function setGroupToggle(groupId: string, enabled: boolean): Record<string, boolean> {
-  const current = loadGroupsConfig();
-  current[groupId] = enabled;
-  saveGroupsConfig(current);
-  return current;
+  try {
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT OR REPLACE INTO group_whitelist (group_id, enabled, updated_at)
+      VALUES (?, ?, ?)
+    `).run(groupId, enabled ? 1 : 0, now);
+
+    return loadGroupsConfig();
+  } catch (err) {
+    console.error(`Gagal mengubah status toggle grup ${groupId} di SQLite:`, err);
+    return loadGroupsConfig();
+  }
 }

@@ -1,16 +1,17 @@
 import fs from 'fs';
 import path from 'path';
-import { ALLOWED_PREFIXES, CommandsConfig, SESSION_DIR } from '../types/bot.types.js';
-import { sendMenuInteractiveMessage } from '../messages/menuMessage.js';
-import { sendListInteractiveMessage } from '../messages/listMessage.js';
-import { sendProductVariantsCarousel } from '../messages/carouselMessage.js';
-import { sendAdminContactMessage, sendOwnerContactMessage, sendInvoiceAdminContactMessage } from '../messages/adminContactMessage.js';
-import { isKnownProduct, checkXavieraBalance, DEFAULT_CATALOG } from '../services/xavieraService.js';
-import { resolvePlaceholders } from '../services/placeholderHelper.js';
-import { loadGroupsConfig } from '../services/groupService.js';
-import { createLunasQrisTransaction, startLunasQrisPolling } from '../services/lunasQrisService.js';
-import { recordTransaction, updateTransactionStatus } from '../services/transactionManager.js';
-import { DEFAULT_INVOICE_TEMPLATE } from '../config/configManager.js';
+import { ALLOWED_PREFIXES, CommandsConfig, SESSION_DIR } from '../types/bot.types.ts';
+import { sendMenuInteractiveMessage } from '../messages/menuMessage.ts';
+import { sendListInteractiveMessage } from '../messages/listMessage.ts';
+import { sendProductVariantsCarousel } from '../messages/carouselMessage.ts';
+import { sendAdminContactMessage, sendOwnerContactMessage, sendInvoiceAdminContactMessage } from '../messages/adminContactMessage.ts';
+import { isKnownProduct, checkXavieraBalance, DEFAULT_CATALOG } from '../services/xavieraService.ts';
+import { resolvePlaceholders } from '../services/placeholderHelper.ts';
+import { loadGroupsConfig } from '../services/groupService.ts';
+import { createLunasQrisTransaction, startLunasQrisPolling } from '../services/lunasQrisService.ts';
+import { recordTransaction, updateTransactionStatus } from '../services/transactionManager.ts';
+import { DEFAULT_INVOICE_TEMPLATE } from '../config/configManager.ts';
+import { getPricingConfig } from '../database/sqlite.ts';
 import QRCode from 'qrcode';
 import axios from 'axios';
 
@@ -239,8 +240,15 @@ export async function dispatchIncomingMessages(
       const senderCleanNumber = (senderJid.split('@')[0] || '').replace(/[^0-9]/g, '');
       const storeTitle = resolvePlaceholders('{storeName}', config) || 'Toko Kami';
 
-      // 1. Pre-check Saldo Utama di Akun Xaviera (Hitung harga modal tanpa keuntungan 10%)
-      const costPrice = Math.round(price / 1.1);
+      // 1. Pre-check Saldo Utama di Akun Xaviera (Hitung harga modal berdasarkan markup aktif)
+      const currentPricing = config.pricingConfig || getPricingConfig();
+      let costPrice = price;
+      if (currentPricing.mode === 'rp') {
+        costPrice = Math.max(0, price - (currentPricing.value || 0));
+      } else {
+        const pct = (currentPricing.value || 0) / 100;
+        costPrice = pct > 0 ? Math.round(price / (1 + pct)) : price;
+      }
       try {
         const xavieraBal = await checkXavieraBalance(costPrice, config);
         if (!xavieraBal.sufficient) {

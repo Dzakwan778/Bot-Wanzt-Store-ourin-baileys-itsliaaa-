@@ -5,6 +5,9 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  Tag,
+  ArrowLeftRight,
+  Check,
 } from 'lucide-react';
 import { SmmService } from '../../types/dashboard.types';
 
@@ -21,6 +24,20 @@ interface TabSsmProps {
   loadingSmm: boolean;
   fetchXavieraSmm: () => void;
   showToast: (msg: string) => void;
+  // SMM Pricing props
+  smmPricingMode?: 'rp' | 'percent';
+  smmPricingValue?: number;
+  smmInputVal?: string;
+  setSmmInputVal?: (val: string) => void;
+  isSavingSmmPricing?: boolean;
+  saveSmmPricing?: (mode?: 'rp' | 'percent', val?: number) => void;
+  handleToggleSmmMode?: () => void;
+  calculateSmmPrice?: (originalRate: number) => {
+    mode: 'rp' | 'percent';
+    value: number;
+    margin: number;
+    sellingPrice: number;
+  };
 }
 
 export const TabSsm: React.FC<TabSsmProps> = ({
@@ -36,9 +53,126 @@ export const TabSsm: React.FC<TabSsmProps> = ({
   loadingSmm,
   fetchXavieraSmm,
   showToast,
+  smmPricingMode = 'rp',
+  smmPricingValue = 100,
+  smmInputVal = '100',
+  setSmmInputVal,
+  isSavingSmmPricing = false,
+  saveSmmPricing,
+  handleToggleSmmMode,
+  calculateSmmPrice,
 }) => {
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
+      {/* 1. Panel Paling Atas: SET HARGA PRODUK SMM */}
+      <div className="bg-white border border-slate-200/90 rounded-xl p-4 sm:p-5 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-sky-50 border border-sky-100 flex items-center justify-center text-sky-600">
+                <Tag className="w-3.5 h-3.5" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-900 tracking-tight">
+                Set Harga Layanan SSM
+              </h3>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              Atur margin keuntungan penjualan seluruh katalog layanan SSM. Pilih penambahan nominal tetap (Rp) atau persentase (%).
+            </p>
+          </div>
+
+          {/* Badge Mode Aktif */}
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200 self-start sm:self-auto">
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span>
+              Aktif: {smmPricingMode === 'rp' ? `+Rp ${smmPricingValue.toLocaleString('id-ID')}` : `+${smmPricingValue}%`}
+            </span>
+          </div>
+        </div>
+
+        {/* Kolom Form Input Angka & Tombol Toggle Mode di Sampingnya */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+          {/* Kolom Input Angka dengan Prefix dan Tombol Toggle Mode */}
+          <div className="flex-1 flex items-center bg-slate-50 border border-slate-200 rounded-lg overflow-hidden focus-within:border-sky-600 focus-within:ring-2 focus-within:ring-sky-600/20 focus-within:bg-white transition shadow-2xs">
+            <div className="px-3 text-xs font-bold text-slate-400 select-none border-r border-slate-200/80 bg-slate-100/60 py-2.5">
+              {smmPricingMode === 'rp' ? 'Rp' : '%'}
+            </div>
+            <input
+              type="number"
+              min="0"
+              value={smmInputVal}
+              onChange={(e) => setSmmInputVal && setSmmInputVal(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && saveSmmPricing) {
+                  saveSmmPricing(smmPricingMode, Number(smmInputVal));
+                }
+              }}
+              placeholder={
+                smmPricingMode === 'rp'
+                  ? 'Masukkan nominal angka markup (contoh: 500)'
+                  : 'Masukkan angka persentase markup (contoh: 15)'
+              }
+              className="w-full bg-transparent px-3 py-2.5 text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none"
+            />
+            {/* Tombol di samping kolom untuk berganti mode antara Rp atau % */}
+            <div className="flex items-center pr-1.5 py-1">
+              <button
+                type="button"
+                onClick={handleToggleSmmMode}
+                title="Klik untuk berganti mode antara Rp dan %"
+                className="px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1.5 cursor-pointer bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 shadow-2xs active:scale-[0.98]"
+              >
+                <ArrowLeftRight className="w-3.5 h-3.5 text-sky-600" />
+                <span>
+                  Mode: <strong className="text-sky-700 font-extrabold">{smmPricingMode === 'rp' ? 'Rp' : '%'}</strong>
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* Tombol Simpan Pengaturan */}
+          <button
+            type="button"
+            onClick={() => saveSmmPricing && saveSmmPricing(smmPricingMode, Number(smmInputVal))}
+            disabled={isSavingSmmPricing}
+            className="px-4 py-2.5 rounded-lg bg-sky-600 hover:bg-sky-700 active:scale-[0.98] text-white text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap disabled:opacity-60"
+          >
+            {isSavingSmmPricing ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Check className="w-3.5 h-3.5" />
+            )}
+            <span>Simpan Pengaturan</span>
+          </button>
+        </div>
+
+        {/* Ringkasan Simulasi Perhitungan Real-Time */}
+        <div className="bg-slate-50/90 border border-slate-200/70 rounded-lg px-3 py-2 text-xs text-slate-600 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+          <div className="flex items-center gap-1.5">
+            <span className="font-semibold text-slate-700">Formula Aktif:</span>
+            {smmPricingMode === 'rp' ? (
+              <span className="text-slate-800 font-medium">Harga Asli + Rp {Number(smmInputVal || 0).toLocaleString('id-ID')}</span>
+            ) : (
+              <span className="text-slate-800 font-medium">Harga Asli + {Number(smmInputVal || 0)}%</span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 text-slate-500 text-[11px]">
+            <span>Contoh: Modal Rate Rp 10.000 / 1k</span>
+            <span className="text-slate-400">→</span>
+            {(() => {
+              const demo = calculateSmmPrice
+                ? calculateSmmPrice(10000)
+                : { sellingPrice: 10100, margin: 100 };
+              return (
+                <strong className="text-slate-800 font-mono font-semibold">
+                  Rp {demo.sellingPrice.toLocaleString('id-ID')} (+Rp {demo.margin.toLocaleString('id-ID')})
+                </strong>
+              );
+            })()}
+          </div>
+        </div>
+      </div>
+
       {/* Header Tab SSM (Social Media Marketing) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
         <div>
@@ -163,7 +297,16 @@ export const TabSsm: React.FC<TabSsmProps> = ({
                 <th className="py-3 px-4">Nama Layanan</th>
                 <th className="py-3 px-4 text-center w-36">Min / Max Order</th>
                 <th className="py-3 px-4 text-right w-36">Harga Asli (1k)</th>
-                <th className="py-3 px-5 text-right w-44">Harga Jual (+10%)</th>
+                <th className="py-3 px-5 text-right w-48">
+                  <div className="flex items-center justify-end gap-1.5">
+                    <span>Harga Jual</span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-sky-100 text-sky-800">
+                      {smmPricingMode === 'rp'
+                        ? `+Rp ${smmPricingValue.toLocaleString('id-ID')}`
+                        : `+${smmPricingValue}%`}
+                    </span>
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody className="text-xs">
@@ -205,8 +348,14 @@ export const TabSsm: React.FC<TabSsmProps> = ({
 
                 return paginated.map((item, index) => {
                   const originalPrice = Number(item.rate) || 0;
-                  const margin = Math.round(originalPrice * 0.1);
-                  const sellingPrice = originalPrice + margin;
+                  const calc = calculateSmmPrice
+                    ? calculateSmmPrice(originalPrice)
+                    : {
+                        margin: Math.round(originalPrice * 0.1),
+                        sellingPrice: originalPrice + Math.round(originalPrice * 0.1),
+                      };
+                  const margin = calc.margin;
+                  const sellingPrice = calc.sellingPrice;
 
                   const getPlatformBadgeStyle = (platform: string) => {
                     switch (platform) {

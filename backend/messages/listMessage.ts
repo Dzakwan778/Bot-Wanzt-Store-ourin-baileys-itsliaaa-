@@ -1,6 +1,6 @@
-import { CommandsConfig } from '../types/bot.types.js';
-import { generateDaftarProdukText, getSingleSelectSections } from '../services/xavieraService.js';
-import { resolvePlaceholders } from '../services/placeholderHelper.js';
+import { CommandsConfig } from '../types/bot.types.ts';
+import { generateDaftarProdukText, getSingleSelectSections } from '../services/xavieraService.ts';
+import { resolvePlaceholders } from '../services/placeholderHelper.ts';
 
 export async function sendListInteractiveMessage(
   sock: any,

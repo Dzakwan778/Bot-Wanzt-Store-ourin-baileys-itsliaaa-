@@ -1,6 +1,5 @@
-import fs from 'fs';
-import path from 'path';
 import crypto from 'crypto';
+import { db } from '../database/sqlite.ts';
 
 export interface AuthConfig {
   username: string;
@@ -16,15 +15,6 @@ export interface SessionData {
   expiresAt: number;
 }
 
-function resolveAuthPath(): string {
-  const localDb = path.resolve(process.cwd(), 'database', 'auth.json');
-  if (fs.existsSync(localDb)) return localDb;
-  const backendDb = path.resolve(process.cwd(), 'backend', 'database', 'auth.json');
-  if (fs.existsSync(backendDb)) return backendDb;
-  return localDb;
-}
-
-const AUTH_FILE = resolveAuthPath();
 const activeSessions = new Map<string, SessionData>();
 
 // Durasi sesi login: 7 Hari
@@ -38,37 +28,38 @@ export function hashPassword(password: string, salt: string): string {
 }
 
 /**
- * Inisialisasi kredensial awal jika file database/auth.json belum ada
+ * Inisialisasi kredensial awal di SQLite jika belum ada
  * Akun default awal: username: "admin", password: "admin123"
  */
 export function initAuth(): AuthConfig {
   try {
-    const dir = path.dirname(AUTH_FILE);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
+    const row = db.prepare(`
+      SELECT username, password_hash as hash, salt, updated_at as updatedAt
+      FROM auth
+      WHERE id = 1
+    `).get() as AuthConfig | undefined;
 
-    if (fs.existsSync(AUTH_FILE)) {
-      const raw = fs.readFileSync(AUTH_FILE, 'utf-8');
-      const parsed = JSON.parse(raw);
-      if (parsed.username && parsed.hash && parsed.salt) {
-        return parsed;
-      }
+    if (row && row.username && row.hash && row.salt) {
+      return row;
     }
 
     const defaultSalt = crypto.randomBytes(16).toString('hex');
     const defaultHash = hashPassword('admin123', defaultSalt);
-    const initialConfig: AuthConfig = {
+    const now = new Date().toISOString();
+
+    db.prepare(`
+      INSERT OR REPLACE INTO auth (id, username, password_hash, salt, iterations, updated_at)
+      VALUES (1, ?, ?, ?, 100000, ?)
+    `).run('admin', defaultHash, defaultSalt, now);
+
+    return {
       username: 'admin',
       salt: defaultSalt,
       hash: defaultHash,
-      updatedAt: new Date().toISOString(),
+      updatedAt: now,
     };
-
-    fs.writeFileSync(AUTH_FILE, JSON.stringify(initialConfig, null, 2), 'utf-8');
-    return initialConfig;
   } catch (err) {
-    console.error('Gagal inisialisasi auth.json:', err);
+    console.error('Gagal membaca kredensial auth dari SQLite:', err);
     const fallbackSalt = crypto.randomBytes(16).toString('hex');
     return {
       username: 'admin',
@@ -104,7 +95,7 @@ export function verifyLogin(usernameInput: string, passwordInput: string): boole
 
     return crypto.timingSafeEqual(hashBuffer, inputBuffer);
   } catch (err) {
-    console.error('Error saat verifikasi login:', err);
+    console.error('Error saat verifikasi login SQLite:', err);
     return false;
   }
 }
@@ -113,7 +104,6 @@ export function verifyLogin(usernameInput: string, passwordInput: string): boole
  * Buat sesi login baru dan kembalikan session token
  */
 export function createSession(username: string): string {
-  // Bersihkan sesi yang kedaluwarsa
   cleanExpiredSessions();
 
   const token = crypto.randomBytes(32).toString('hex');

@@ -6,8 +6,14 @@ import { xavieraRouter } from './routes/xavieraRoutes.ts';
 import { lunasQrisRouter } from './routes/lunasQrisRoutes.ts';
 import { transactionRouter } from './routes/transactionRoutes.ts';
 import { mediaRouter } from './routes/mediaRoutes.ts';
+import { pricingRouter } from './routes/pricingRoutes.ts';
+import { promoRouter } from './routes/promoRoutes.ts';
+import { initDatabase } from './database/sqlite.ts';
 
 export function createServerApp(): Express {
+  // Pastikan database SQLite siap
+  initDatabase();
+
   const app = express();
 
   // Middleware CORS & Body Parser
@@ -30,6 +36,8 @@ export function createServerApp(): Express {
   // Mount API Routers
   app.use('/api/auth', authRouter);
   app.use('/api/bot', botRouter);
+  app.use('/api/pricing', pricingRouter);
+  app.use('/api/promos', promoRouter);
   app.use('/api/xaviera', xavieraRouter);
   app.use('/api/lunasqris', lunasQrisRouter);
   app.use('/api/transactions', transactionRouter);

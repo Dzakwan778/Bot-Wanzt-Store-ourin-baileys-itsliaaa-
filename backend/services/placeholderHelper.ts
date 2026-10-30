@@ -1,4 +1,4 @@
-import { CommandsConfig } from '../types/bot.types.js';
+import { CommandsConfig } from '../types/bot.types.ts';
 
 export interface VariantPlaceholderContext {
   name?: string;

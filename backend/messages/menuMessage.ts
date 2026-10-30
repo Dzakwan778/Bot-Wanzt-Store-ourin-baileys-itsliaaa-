@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { CommandsConfig } from '../types/bot.types.js';
-import { resolvePlaceholders } from '../services/placeholderHelper.js';
+import { CommandsConfig } from '../types/bot.types.ts';
+import { resolvePlaceholders } from '../services/placeholderHelper.ts';
 
 export async function sendMenuInteractiveMessage(
   sock: any,

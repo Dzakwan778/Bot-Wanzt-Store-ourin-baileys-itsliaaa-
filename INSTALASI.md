@@ -117,11 +117,21 @@ Jalankan instalasi dependensi di root dan build frontend:
 ```bash
 cd /root/bot-whatsapp
 
-# 1. Install seluruh package npm
-npm install
+# 1. Install seluruh package npm & dependensi WhatsApp
+npm install --legacy-peer-deps
+npm install better-sqlite3 --legacy-peer-deps
 
 # 2. Build tampilan Frontend menjadi file statis
 npm run build
+
+# 3. Pastikan file dist ada di folder frontend/dist
+mkdir -p /root/bot-whatsapp/frontend/dist
+cp -r /root/bot-whatsapp/dist/* /root/bot-whatsapp/frontend/dist/ 2>/dev/null || true
+
+# 4. PENTING (Mencegah Nginx 500 Internal Server Error):
+# Berikan izin akses folder /root agar Nginx (user www-data) diizinkan membaca file frontend
+chmod 755 /root
+chmod -R 755 /root/bot-whatsapp
 ```
 > Perintah `npm run build` akan menghasilkan folder `/root/bot-whatsapp/frontend/dist` (dan `/root/bot-whatsapp/dist`). File ini yang akan disajikan langsung oleh Nginx secara instan dan sangat hemat RAM!
 
@@ -279,3 +289,33 @@ Gunakan perintah-perintah berikut di VPS untuk memantau kinerja bot:
 | **Hentikan Sementara** | `pm2 stop bot-backend` |
 | **Pantau Penggunaan RAM/CPU** | `pm2 monit` |
 | **Simpan Konfigurasi PM2** | `pm2 save` |
+
+---
+
+## 🛠️ Solusi: Mengatasi "500 Internal Server Error" Nginx
+
+Jika Anda membuka website dan muncul layar putih bertuliskan **500 Internal Server Error (nginx/1.28.3 Ubuntu)**, penyebab utamanya adalah **hak akses (permission) folder `/root`** atau **file `index.html` belum ter-build**.
+
+Jalankan perintah 1-menit perbaikan berikut di terminal VPS Anda:
+
+```bash
+# 1. Berikan izin baca ke Nginx (user www-data) untuk melintasi folder /root
+chmod 755 /root
+chmod -R 755 /root/bot-whatsapp
+
+# 2. Pastikan file Frontend telah di-build
+cd /root/bot-whatsapp
+npm run build
+mkdir -p /root/bot-whatsapp/frontend/dist
+cp -r /root/bot-whatsapp/dist/* /root/bot-whatsapp/frontend/dist/ 2>/dev/null || true
+
+# 3. Bersihkan proses PM2 yang error/duplikat dan jalankan backend secara bersih
+pm2 delete all
+pm2 start "npx tsx backend/server.ts" --name "bot-backend"
+pm2 save
+
+# 4. Reload Nginx
+systemctl restart nginx
+```
+
+Setelah menjalankan perintah di atas, muat ulang (refresh) halaman website Anda di browser. Dashboard toko akan langsung tampil normal!

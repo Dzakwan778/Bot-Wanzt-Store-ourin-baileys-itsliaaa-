@@ -34,7 +34,7 @@ const msgRetryCounterCache = new NodeCache({ stdTTL: 3600, useClones: false });
 const messageCache = new NodeCache({ stdTTL: 3600, useClones: false, maxKeys: 1500 });
 
 // Re-export type definitions & constants for backward compatibility
-export * from './types/bot.types.js';
+export * from './types/bot.types.ts';
 
 import {
   DEFAULT_CUSTOM_CODE,
@@ -43,16 +43,16 @@ import {
   LogEntry,
   CommandsConfig,
   ProductVariantItem,
-} from './types/bot.types.js';
+} from './types/bot.types.ts';
 
-import { loadCommandsConfig, saveCommandsConfig, DEFAULT_CONFIG } from './config/configManager.js';
-import { generateDaftarProdukText, getProductVariants } from './services/xavieraService.js';
-import { sendMenuInteractiveMessage } from './messages/menuMessage.js';
-import { sendListInteractiveMessage } from './messages/listMessage.js';
-import { sendProductVariantsCarousel } from './messages/carouselMessage.js';
-import { sendAdminContactMessage } from './messages/adminContactMessage.js';
-import { dispatchIncomingMessages, markMessageAsBotSent } from './handlers/messageDispatcher.js';
-import { GroupItem, loadGroupsConfig, setGroupToggle } from './services/groupService.js';
+import { loadCommandsConfig, saveCommandsConfig, DEFAULT_CONFIG } from './config/configManager.ts';
+import { generateDaftarProdukText, getProductVariants } from './services/xavieraService.ts';
+import { sendMenuInteractiveMessage } from './messages/menuMessage.ts';
+import { sendListInteractiveMessage } from './messages/listMessage.ts';
+import { sendProductVariantsCarousel } from './messages/carouselMessage.ts';
+import { sendAdminContactMessage } from './messages/adminContactMessage.ts';
+import { dispatchIncomingMessages, markMessageAsBotSent } from './handlers/messageDispatcher.ts';
+import { GroupItem, loadGroupsConfig, setGroupToggle } from './services/groupService.ts';
 
 class BotManager {
   public status: BotStatus = 'idle';

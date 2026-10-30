@@ -86,6 +86,11 @@ export interface InvoiceCommandConfig {
   invoiceFooterText: string;
 }
 
+export interface PricingConfig {
+  mode: 'rp' | 'percent';
+  value: number;
+}
+
 export interface ApiConfig {
   xavieraApiKey: string;
   xavieraBaseUrl: string;
@@ -96,6 +101,7 @@ export interface ApiConfig {
 
 export interface CommandsConfig {
   storeInfo: StoreInfoConfig;
+  pricingConfig?: PricingConfig;
   menuOutputText: string;
   menuFooterText?: string;
   menuButtons: WhatsAppButton[];
@@ -114,4 +120,5 @@ export interface CommandsConfig {
   lunasQrisSecretKey?: string;
   lunasQrisBaseUrl?: string;
 }
+
 

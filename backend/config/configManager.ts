@@ -1,5 +1,6 @@
-import fs from 'fs';
 import path from 'path';
+import fs from 'fs';
+import { db, getPricingConfig, savePricingConfig } from '../database/sqlite.ts';
 import {
   CommandsConfig,
   StoreInfoConfig,
@@ -8,8 +9,9 @@ import {
   CarouselCommandConfig,
   InvoiceCommandConfig,
   ApiConfig,
+  PricingConfig,
   CONFIG_FILE,
-} from '../types/bot.types.js';
+} from '../types/bot.types.ts';
 
 function resolveDbDir(): string {
   const localDb = path.join(process.cwd(), 'database');
@@ -20,15 +22,6 @@ function resolveDbDir(): string {
 }
 
 export const DB_DIR = resolveDbDir();
-
-export const DB_FILES = {
-  storeInfo: path.join(DB_DIR, 'store_info.json'),
-  menu: path.join(DB_DIR, 'command_menu.json'),
-  list: path.join(DB_DIR, 'command_list.json'),
-  carousel: path.join(DB_DIR, 'command_carousel.json'),
-  invoice: path.join(DB_DIR, 'command_invoice.json'),
-  api: path.join(DB_DIR, 'api_config.json'),
-};
 
 export const DEFAULT_STORE_INFO: StoreInfoConfig = {
   storeName: '',
@@ -51,266 +44,280 @@ export const DEFAULT_MENU_CONFIG: MenuCommandConfig = {
 };
 
 export const DEFAULT_LIST_CONFIG: ListCommandConfig = {
-  listOutputText:
-    'Halo kak! Berikut daftar produk aplikasi yang tersedia di {storeName}:\n\n{daftarProduk}\n\nKetik nama produk yang ingin Anda pesan.',
-  listFooterText: '{webLink} • Pilih Produk',
+  listOutputText: '📋 *DAFTAR LAYANAN & HARGA {storeName}*\n\nSilakan pilih produk yang tersedia:',
+  listFooterText: '{webLink} • Katalog Resmi',
 };
 
-export const DEFAULT_CAROUSEL_TEMPLATE = `*{storeName}*
-
-*{produkName} | {category}*
-
-Nikmati produk pilihanmu dengan harga terbaik di {storeName}.
-
-*Detail Produk:*
-- Varian: {varian}
-- Harga: {price}
-- Stok: {stock} tersedia
-
-Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk melanjutkan.`;
-
 export const DEFAULT_CAROUSEL_CONFIG: CarouselCommandConfig = {
-  carouselOutputText: DEFAULT_CAROUSEL_TEMPLATE,
-  carouselFooterText: '{storeName} Official',
+  carouselOutputText: '🛍️ *PRODUK TERSEDIA*\nSilakan geser kartu di bawah untuk memilih varian:',
+  carouselFooterText: '{webLink} • Geser Kartu',
   carouselPicture: 'snaptik-app-7690985506468908308-slide-2.jpg',
 };
 
-export const DEFAULT_INVOICE_TEMPLATE = `🧾 *INVOICE PEMBAYARAN*
-*{storeName}*
+export const DEFAULT_INVOICE_TEMPLATE = `🧾 *INVOICE PEMBAYARAN QRIS*
+Halo kak, pesanan varian *{varian}* untuk produk *{produkName}* telah diterbitkan!
 
-📦 *Produk:* {produkName}
-⚡ *Varian:* {varian}
-🆔 *Order ID:* \`{orderId}\`
+📌 *Detail Pesanan:*
+• *ID Order:* \`{orderId}\`
+• *Produk:* {produkName} ({varian})
+• *Harga Produk:* Rp {price}
+• *Kode Unik:* Rp {unikCode}
+----------------------------------------
+💰 *TOTAL BAYAR:* *Rp {total}*
+----------------------------------------
 
-💰 *Harga:* Rp {price}
-⚡ *Fee Gateway:* +Rp {unikCode}
-💳 *TOTAL BAYAR:* *Rp {total}*
+⚠️ *PANDUAN PEMBAYARAN:*
+1. Scan kode QRIS yang kami kirimkan di atas menggunakan BCA, Mandiri, BRI, BNI, GoPay, OVO, DANA, ShopeePay, atau aplikasi e-wallet lainnya.
+2. *PENTING:* Masukkan nominal *PERSIS Rp {total}* (jangan dibulatkan agar pembayaran otomatis diverifikasi sistem).
+3. Kode QRIS ini berlaku selama *15 menit*.
+4. Setelah saldo kami terima, akun/produk digital Anda akan *OTOMATIS* dikirimkan langsung ke chat pribadi ini!
 
-⚠️ *PENTING:* Transfer tepat *Rp {total}* hingga digit terakhir agar pembayaran terverifikasi otomatis.
-
-⏰ *Batas Waktu:* 15 Menit
-
-📌 *Cara Pembayaran:*
-1. Pindai (scan) kode QRIS di atas atau klik tombol *Web Checkout* di bawah.
-2. Pastikan nominal transfer sama persis dengan Total Bayar.
-3. Begitu transfer berhasil, detail akun akan langsung dikirimkan ke chat ini secara otomatis.
-
-_Harap selesaikan pembayaran sebelum batas waktu berakhir._`;
+Jika ada pertanyaan atau kendala pembayaran, silakan klik tombol *Hubungi Admin* di bawah.`;
 
 export const DEFAULT_INVOICE_CONFIG: InvoiceCommandConfig = {
   invoiceOutputText: DEFAULT_INVOICE_TEMPLATE,
-  invoiceFooterText: '{storeName} Official • Pembayaran Otomatis',
+  invoiceFooterText: '{webLink} • Verifikasi Otomatis',
 };
 
 export const DEFAULT_API_CONFIG: ApiConfig = {
-  xavieraApiKey: 'xvs_0726effe853aadea27bd6608ef98468cc3121b82e036e5f7',
-  xavieraBaseUrl: 'https://xavierastore.com/api/v1',
+  xavieraApiKey: '',
+  xavieraBaseUrl: 'https://xaviera.store/api',
   lunasQrisApiKey: '',
   lunasQrisSecretKey: '',
-  lunasQrisBaseUrl: 'https://lunasqris.com',
+  lunasQrisBaseUrl: 'https://lunasqris.com/api',
 };
 
 export const DEFAULT_CONFIG: CommandsConfig = {
   storeInfo: DEFAULT_STORE_INFO,
-  menuOutputText: DEFAULT_MENU_CONFIG.menuOutputText,
-  menuFooterText: DEFAULT_MENU_CONFIG.menuFooterText,
-  menuButtons: DEFAULT_MENU_CONFIG.menuButtons,
-  includeMedia: DEFAULT_MENU_CONFIG.includeMedia,
-  selectedPicture: DEFAULT_MENU_CONFIG.selectedPicture,
-  listOutputText: DEFAULT_LIST_CONFIG.listOutputText,
-  listFooterText: DEFAULT_LIST_CONFIG.listFooterText,
-  carouselOutputText: DEFAULT_CAROUSEL_CONFIG.carouselOutputText,
-  carouselFooterText: DEFAULT_CAROUSEL_CONFIG.carouselFooterText,
-  carouselPicture: DEFAULT_CAROUSEL_CONFIG.carouselPicture,
-  invoiceOutputText: DEFAULT_INVOICE_CONFIG.invoiceOutputText,
-  invoiceFooterText: DEFAULT_INVOICE_CONFIG.invoiceFooterText,
-  xavieraApiKey: DEFAULT_API_CONFIG.xavieraApiKey,
-  xavieraBaseUrl: DEFAULT_API_CONFIG.xavieraBaseUrl,
-  lunasQrisApiKey: DEFAULT_API_CONFIG.lunasQrisApiKey,
-  lunasQrisSecretKey: DEFAULT_API_CONFIG.lunasQrisSecretKey,
-  lunasQrisBaseUrl: DEFAULT_API_CONFIG.lunasQrisBaseUrl,
+  ...DEFAULT_MENU_CONFIG,
+  ...DEFAULT_LIST_CONFIG,
+  ...DEFAULT_CAROUSEL_CONFIG,
+  ...DEFAULT_INVOICE_CONFIG,
+  ...DEFAULT_API_CONFIG,
 };
 
-function ensureDbDir() {
-  if (!fs.existsSync(DB_DIR)) {
-    fs.mkdirSync(DB_DIR, { recursive: true });
-  }
-}
-
-function readJsonFile<T>(filePath: string, fallback: T): T {
-  try {
-    if (fs.existsSync(filePath)) {
-      const content = fs.readFileSync(filePath, 'utf-8');
-      return { ...fallback, ...JSON.parse(content) };
-    }
-  } catch (err) {
-    console.error(`Gagal membaca file database ${filePath}:`, err);
-  }
-  return fallback;
-}
-
-function writeJsonFile<T>(filePath: string, data: T) {
-  try {
-    ensureDbDir();
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
-  } catch (err) {
-    console.error(`Gagal menulis file database ${filePath}:`, err);
-  }
-}
-
-/**
- * Migrasi data dari commands_config.json lama (jika ada) ke database terpisah per fitur
- */
-function migrateLegacyConfigIfNeeded() {
-  ensureDbDir();
-  const hasStoreInfo = fs.existsSync(DB_FILES.storeInfo);
-  const hasMenu = fs.existsSync(DB_FILES.menu);
-  const hasList = fs.existsSync(DB_FILES.list);
-  const hasCarousel = fs.existsSync(DB_FILES.carousel);
-  const hasApi = fs.existsSync(DB_FILES.api);
-
-  if (hasStoreInfo && hasMenu && hasList && hasCarousel && hasApi) {
-    return;
-  }
-
-  let legacyData: any = {};
-  if (fs.existsSync(CONFIG_FILE)) {
-    try {
-      legacyData = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
-    } catch {}
-  }
-
-  if (!hasStoreInfo) {
-    const storeInfo: StoreInfoConfig = {
-      ...DEFAULT_STORE_INFO,
-      ...(legacyData.storeInfo || {}),
-    };
-    writeJsonFile(DB_FILES.storeInfo, storeInfo);
-  }
-
-  if (!hasMenu) {
-    const menuConfig: MenuCommandConfig = {
-      menuOutputText: legacyData.menuOutputText || DEFAULT_MENU_CONFIG.menuOutputText,
-      menuFooterText: legacyData.menuFooterText || DEFAULT_MENU_CONFIG.menuFooterText,
-      menuButtons: Array.isArray(legacyData.menuButtons) && legacyData.menuButtons.length > 0
-        ? legacyData.menuButtons
-        : DEFAULT_MENU_CONFIG.menuButtons,
-      includeMedia: legacyData.includeMedia !== undefined ? Boolean(legacyData.includeMedia) : DEFAULT_MENU_CONFIG.includeMedia,
-      selectedPicture: legacyData.selectedPicture || DEFAULT_MENU_CONFIG.selectedPicture,
-    };
-    writeJsonFile(DB_FILES.menu, menuConfig);
-  }
-
-  if (!hasList) {
-    const listConfig: ListCommandConfig = {
-      listOutputText: legacyData.listOutputText || DEFAULT_LIST_CONFIG.listOutputText,
-      listFooterText: legacyData.listFooterText || DEFAULT_LIST_CONFIG.listFooterText,
-    };
-    writeJsonFile(DB_FILES.list, listConfig);
-  }
-
-  if (!hasCarousel) {
-    const carouselConfig: CarouselCommandConfig = {
-      carouselOutputText: legacyData.carouselOutputText || DEFAULT_CAROUSEL_CONFIG.carouselOutputText,
-      carouselFooterText: legacyData.carouselFooterText || DEFAULT_CAROUSEL_CONFIG.carouselFooterText,
-      carouselPicture: legacyData.carouselPicture || DEFAULT_CAROUSEL_CONFIG.carouselPicture,
-    };
-    writeJsonFile(DB_FILES.carousel, carouselConfig);
-  }
-
-  if (!hasApi) {
-    const apiConfig: ApiConfig = {
-      xavieraApiKey: legacyData.xavieraApiKey !== undefined ? legacyData.xavieraApiKey : DEFAULT_API_CONFIG.xavieraApiKey,
-      xavieraBaseUrl: legacyData.xavieraBaseUrl || DEFAULT_API_CONFIG.xavieraBaseUrl,
-      lunasQrisApiKey: legacyData.lunasQrisApiKey !== undefined ? legacyData.lunasQrisApiKey : (legacyData.sairiApiKey || DEFAULT_API_CONFIG.lunasQrisApiKey),
-      lunasQrisSecretKey: legacyData.lunasQrisSecretKey !== undefined ? legacyData.lunasQrisSecretKey : DEFAULT_API_CONFIG.lunasQrisSecretKey,
-      lunasQrisBaseUrl: legacyData.lunasQrisBaseUrl || DEFAULT_API_CONFIG.lunasQrisBaseUrl,
-    };
-    writeJsonFile(DB_FILES.api, apiConfig);
-  }
-}
-
-// --- Individual getters and savers for modularity ---
+// --- SQLite Getters & Savers ---
 
 export function loadStoreInfo(): StoreInfoConfig {
-  ensureDbDir();
-  return readJsonFile<StoreInfoConfig>(DB_FILES.storeInfo, DEFAULT_STORE_INFO);
+  try {
+    const row = db.prepare('SELECT * FROM store_info WHERE id = 1').get() as any;
+    if (row) {
+      return {
+        storeName: row.store_name || '',
+        ownerName: row.owner_name || '',
+        ownerNumber: row.owner_number || '',
+        adminName: row.admin_name || '',
+        adminNumber: row.admin_number || '',
+        webLink: row.web_link || '',
+        telegramBot: row.telegram_bot || '',
+        waLink: row.wa_link || '',
+      };
+    }
+  } catch (err) {
+    console.error('Gagal membaca store_info dari SQLite:', err);
+  }
+  return { ...DEFAULT_STORE_INFO };
 }
 
 export function saveStoreInfo(update: Partial<StoreInfoConfig>): StoreInfoConfig {
   const current = loadStoreInfo();
   const merged = { ...current, ...update };
-  writeJsonFile(DB_FILES.storeInfo, merged);
+  const now = new Date().toISOString();
+
+  try {
+    db.prepare(`
+      INSERT OR REPLACE INTO store_info (
+        id, store_name, owner_name, owner_number, admin_name, admin_number,
+        web_link, telegram_bot, wa_link, updated_at
+      ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      merged.storeName,
+      merged.ownerName,
+      merged.ownerNumber,
+      merged.adminName || '',
+      merged.adminNumber || '',
+      merged.webLink || '',
+      merged.telegramBot || '',
+      merged.waLink || '',
+      now
+    );
+  } catch (err) {
+    console.error('Gagal menyimpan store_info ke SQLite:', err);
+  }
+
   return merged;
 }
 
 export function loadMenuConfig(): MenuCommandConfig {
-  ensureDbDir();
-  return readJsonFile<MenuCommandConfig>(DB_FILES.menu, DEFAULT_MENU_CONFIG);
+  try {
+    const row = db.prepare('SELECT config_data FROM commands_config WHERE command_type = ?').get('menu') as any;
+    if (row && row.config_data) {
+      const parsed = JSON.parse(row.config_data);
+      return { ...DEFAULT_MENU_CONFIG, ...parsed };
+    }
+  } catch (err) {
+    console.error('Gagal membaca menu config dari SQLite:', err);
+  }
+  return { ...DEFAULT_MENU_CONFIG };
 }
 
 export function saveMenuConfig(update: Partial<MenuCommandConfig>): MenuCommandConfig {
   const current = loadMenuConfig();
   const merged = { ...current, ...update };
-  writeJsonFile(DB_FILES.menu, merged);
+  const now = new Date().toISOString();
+
+  try {
+    db.prepare(`
+      INSERT OR REPLACE INTO commands_config (command_type, config_data, updated_at)
+      VALUES (?, ?, ?)
+    `).run('menu', JSON.stringify(merged), now);
+  } catch (err) {
+    console.error('Gagal menyimpan menu config ke SQLite:', err);
+  }
+
   return merged;
 }
 
 export function loadListConfig(): ListCommandConfig {
-  ensureDbDir();
-  return readJsonFile<ListCommandConfig>(DB_FILES.list, DEFAULT_LIST_CONFIG);
+  try {
+    const row = db.prepare('SELECT config_data FROM commands_config WHERE command_type = ?').get('list') as any;
+    if (row && row.config_data) {
+      const parsed = JSON.parse(row.config_data);
+      return { ...DEFAULT_LIST_CONFIG, ...parsed };
+    }
+  } catch (err) {
+    console.error('Gagal membaca list config dari SQLite:', err);
+  }
+  return { ...DEFAULT_LIST_CONFIG };
 }
 
 export function saveListConfig(update: Partial<ListCommandConfig>): ListCommandConfig {
   const current = loadListConfig();
   const merged = { ...current, ...update };
-  writeJsonFile(DB_FILES.list, merged);
+  const now = new Date().toISOString();
+
+  try {
+    db.prepare(`
+      INSERT OR REPLACE INTO commands_config (command_type, config_data, updated_at)
+      VALUES (?, ?, ?)
+    `).run('list', JSON.stringify(merged), now);
+  } catch (err) {
+    console.error('Gagal menyimpan list config ke SQLite:', err);
+  }
+
   return merged;
 }
 
 export function loadCarouselConfig(): CarouselCommandConfig {
-  ensureDbDir();
-  return readJsonFile<CarouselCommandConfig>(DB_FILES.carousel, DEFAULT_CAROUSEL_CONFIG);
+  try {
+    const row = db.prepare('SELECT config_data FROM commands_config WHERE command_type = ?').get('carousel') as any;
+    if (row && row.config_data) {
+      const parsed = JSON.parse(row.config_data);
+      return { ...DEFAULT_CAROUSEL_CONFIG, ...parsed };
+    }
+  } catch (err) {
+    console.error('Gagal membaca carousel config dari SQLite:', err);
+  }
+  return { ...DEFAULT_CAROUSEL_CONFIG };
 }
 
 export function saveCarouselConfig(update: Partial<CarouselCommandConfig>): CarouselCommandConfig {
   const current = loadCarouselConfig();
   const merged = { ...current, ...update };
-  writeJsonFile(DB_FILES.carousel, merged);
+  const now = new Date().toISOString();
+
+  try {
+    db.prepare(`
+      INSERT OR REPLACE INTO commands_config (command_type, config_data, updated_at)
+      VALUES (?, ?, ?)
+    `).run('carousel', JSON.stringify(merged), now);
+  } catch (err) {
+    console.error('Gagal menyimpan carousel config ke SQLite:', err);
+  }
+
   return merged;
 }
 
 export function loadInvoiceConfig(): InvoiceCommandConfig {
-  ensureDbDir();
-  return readJsonFile<InvoiceCommandConfig>(DB_FILES.invoice, DEFAULT_INVOICE_CONFIG);
+  try {
+    const row = db.prepare('SELECT config_data FROM commands_config WHERE command_type = ?').get('invoice') as any;
+    if (row && row.config_data) {
+      const parsed = JSON.parse(row.config_data);
+      return { ...DEFAULT_INVOICE_CONFIG, ...parsed };
+    }
+  } catch (err) {
+    console.error('Gagal membaca invoice config dari SQLite:', err);
+  }
+  return { ...DEFAULT_INVOICE_CONFIG };
 }
 
 export function saveInvoiceConfig(update: Partial<InvoiceCommandConfig>): InvoiceCommandConfig {
   const current = loadInvoiceConfig();
   const merged = { ...current, ...update };
-  writeJsonFile(DB_FILES.invoice, merged);
+  const now = new Date().toISOString();
+
+  try {
+    db.prepare(`
+      INSERT OR REPLACE INTO commands_config (command_type, config_data, updated_at)
+      VALUES (?, ?, ?)
+    `).run('invoice', JSON.stringify(merged), now);
+  } catch (err) {
+    console.error('Gagal menyimpan invoice config ke SQLite:', err);
+  }
+
   return merged;
 }
 
 export function loadApiConfig(): ApiConfig {
-  ensureDbDir();
-  return readJsonFile<ApiConfig>(DB_FILES.api, DEFAULT_API_CONFIG);
+  try {
+    const row = db.prepare('SELECT * FROM api_config WHERE id = 1').get() as any;
+    if (row) {
+      return {
+        lunasQrisApiKey: row.lunas_api_key || '',
+        lunasQrisSecretKey: row.lunas_secret_key || '',
+        lunasQrisBaseUrl: row.lunas_base_url || DEFAULT_API_CONFIG.lunasQrisBaseUrl,
+        xavieraApiKey: row.xaviera_api_key || '',
+        xavieraBaseUrl: row.xaviera_base_url || DEFAULT_API_CONFIG.xavieraBaseUrl,
+      };
+    }
+  } catch (err) {
+    console.error('Gagal membaca api_config dari SQLite:', err);
+  }
+  return { ...DEFAULT_API_CONFIG };
 }
 
 export function saveApiConfig(update: Partial<ApiConfig>): ApiConfig {
   const current = loadApiConfig();
   const merged = { ...current, ...update };
-  writeJsonFile(DB_FILES.api, merged);
+  const now = new Date().toISOString();
+
+  try {
+    db.prepare(`
+      INSERT OR REPLACE INTO api_config (
+        id, lunas_api_key, lunas_secret_key, lunas_base_url, lunas_default_fee,
+        xaviera_api_key, xaviera_base_url, xaviera_markup_percent, updated_at
+      ) VALUES (1, ?, ?, ?, 0, ?, ?, 10, ?)
+    `).run(
+      merged.lunasQrisApiKey || '',
+      merged.lunasQrisSecretKey || '',
+      merged.lunasQrisBaseUrl || DEFAULT_API_CONFIG.lunasQrisBaseUrl,
+      merged.xavieraApiKey || '',
+      merged.xavieraBaseUrl || DEFAULT_API_CONFIG.xavieraBaseUrl,
+      now
+    );
+  } catch (err) {
+    console.error('Gagal menyimpan api_config ke SQLite:', err);
+  }
+
   return merged;
 }
 
 /**
- * Memuat konfigurasi lengkap gabungan dari masing-masing file database
+ * Memuat konfigurasi lengkap gabungan dari SQLite
  */
 export function loadCommandsConfig(): CommandsConfig {
-  migrateLegacyConfigIfNeeded();
-
   const storeInfo = loadStoreInfo();
+  const pricing = getPricingConfig();
   const menu = loadMenuConfig();
   const list = loadListConfig();
   const carousel = loadCarouselConfig();
@@ -319,6 +326,10 @@ export function loadCommandsConfig(): CommandsConfig {
 
   return {
     storeInfo,
+    pricingConfig: {
+      mode: pricing.mode,
+      value: pricing.value,
+    },
     menuOutputText: menu.menuOutputText,
     menuFooterText: menu.menuFooterText,
     menuButtons: menu.menuButtons,
@@ -340,20 +351,20 @@ export function loadCommandsConfig(): CommandsConfig {
 }
 
 /**
- * Menyimpan konfigurasi ke file database terpisah yang sesuai
+ * Menyimpan konfigurasi ke SQLite database
  */
 export function saveCommandsConfig(
   currentConfig: CommandsConfig,
   newConfig: Partial<CommandsConfig>
 ): CommandsConfig {
-  ensureDbDir();
-
-  // 1. Simpan ke database/store_info.json jika ada data storeInfo
   if (newConfig.storeInfo) {
     saveStoreInfo(newConfig.storeInfo);
   }
 
-  // 2. Simpan ke database/command_menu.json jika ada data menu
+  if (newConfig.pricingConfig) {
+    savePricingConfig(newConfig.pricingConfig.mode, newConfig.pricingConfig.value);
+  }
+
   if (
     newConfig.menuOutputText !== undefined ||
     newConfig.menuFooterText !== undefined ||
@@ -370,7 +381,6 @@ export function saveCommandsConfig(
     });
   }
 
-  // 3. Simpan ke database/command_list.json jika ada data list
   if (newConfig.listOutputText !== undefined || newConfig.listFooterText !== undefined) {
     saveListConfig({
       ...(newConfig.listOutputText !== undefined && { listOutputText: newConfig.listOutputText }),
@@ -378,7 +388,6 @@ export function saveCommandsConfig(
     });
   }
 
-  // 4. Simpan ke database/command_carousel.json jika ada data carousel
   if (
     newConfig.carouselOutputText !== undefined ||
     newConfig.carouselFooterText !== undefined ||
@@ -391,7 +400,6 @@ export function saveCommandsConfig(
     });
   }
 
-  // 5. Simpan ke database/command_invoice.json jika ada data invoice
   if (newConfig.invoiceOutputText !== undefined || newConfig.invoiceFooterText !== undefined) {
     saveInvoiceConfig({
       ...(newConfig.invoiceOutputText !== undefined && { invoiceOutputText: newConfig.invoiceOutputText }),
@@ -399,7 +407,6 @@ export function saveCommandsConfig(
     });
   }
 
-  // 6. Simpan ke database/api_config.json jika ada data API
   if (
     newConfig.xavieraApiKey !== undefined ||
     newConfig.xavieraBaseUrl !== undefined ||

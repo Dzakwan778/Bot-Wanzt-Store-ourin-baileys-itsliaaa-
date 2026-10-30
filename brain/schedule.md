@@ -114,3 +114,59 @@ Setiap ada ide rencana baru dari hasil diskusi atau instruksi pengguna, daftarka
   - `command_templates`: Template teks & footer dinamis untuk menu, list, carousel, dan invoice.
   - `api_config`: Kredensial API LunasQRIS dan Xaviera.
 
+---
+
+## 🚀 Roadmap Resmi Selanjutnya (Kesepakatan Produk)
+
+Berikut adalah urutan roadmap bertahap yang telah disepakati untuk pengembangan selanjutnya:
+
+### 1. Tahap 1 (Fokus Besok): Pengaturan Harga, Diskon & Kode Promo
+- **Fitur Pengaturan Margin/Markup Harga Jual:** Pengaturan margin laba fleksibel (persentase atau nominal rupiah) per kategori atau per produk.
+- **Sistem Diskon:** Diskon global atau khusus produk tertentu (dalam bentuk Rupiah `Rp` atau Persentase `%`).
+- **Sistem Kode Promo / Kupon:** Pembuatan kode voucher (misal: `HEMAT10`, `DISKONMERDEKA`), kuota penggunaan, potongan harga, dan validasi otomatis saat pembeli memasukkan kode di chat WhatsApp.
+
+### 2. Tahap 2: Rombak Total Tampilan Dashboard (Anti AI-Slop & Desain Modern)
+- **Tujuan:** Desain ulang antarmuka dashboard agar tampil sangat premium, profesional, elegan, dan bersih dari kesan "AI Slop".
+- **Prinsip Utama:** Menjaga 100% fungsionalitas yang ada tanpa menghilangkan satu pun fitur (koneksi WhatsApp, pairing code, grup whitelist, tab produk, SMM, Top Up, dan LunasQRIS).
+- **Peningkatan:** Tipografi tegas, kontras warna yang nyaman di mata, transisi mikro yang halus, dan tata letak informasi yang lebih ergonomis.
+
+### 3. Tahap 0: Migrasi Database ke SQLite & Pembersihan Workspace [SELESAI (COMPLETED)]
+- **Status:** Selesai Diimplementasikan (100% Berhasil)
+- **Implementasi:**
+  - Database file tunggal di `database/bot.db` dengan mode WAL (*Write-Ahead Logging*).
+  - Skema tabel relasional: `auth`, `store_info`, `api_config`, `commands_config`, `group_whitelist`, `transactions`.
+  - Auto-migrasi otomatis dari file JSON lama tanpa kehilangan data sepeserpun.
+  - Seluruh service backend (`authManager`, `configManager`, `groupService`, `transactionManager`) terhubung murni ke SQLite.
+  - Pembersihan file usang di root folder: menghapus duplikat file `DESIGN (2).md`, `PROGRESS.md`, `Promt.md`, `commands_config.json`, dan folder duplikat `/server`. Seluruh dokumentasi terpusat di `/brain/`.
+
+### 4. Tahap Selanjutnya 1: Pengaturan Harga Produk (Markup Rp & %), Diskon & Kode Promo
+- **Fitur "Set Harga Produk" (SELESAI / COMPLETED):**
+  - Panel form "Set Harga Produk" berada di posisi paling atas tab Produk.
+  - Form input angka nominal/persentase dengan tombol toggle di samping kolom untuk berganti mode antara `Rp` dan `%`.
+  - Logika perhitungan dinamis:
+    - Mode `Rp`: Harga Jual = Harga Asli + Angka (misal: Rp 10.000 + 100 = Rp 10.100).
+    - Mode `%`: Harga Jual = Harga Asli + (Harga Asli * Angka / 100) (misal: Rp 10.000 + 10% = Rp 11.000).
+  - Terintegrasi penuh ke database SQLite (`bot.db` tabel `pricing_config`) dan sinkron ke bot WhatsApp (pesan carousel & checkout invoice QRIS).
+  - Tampilan tabel produk otomatis menampilkan Harga Asli modal supplier, Harga Jual terhitung, dan badge margin laba.
+- **Sistem Diskon (Next Sub-step):** Diskon global atau khusus produk tertentu (dalam bentuk Rupiah `Rp` atau Persentase `%`).
+- **Sistem Kode Promo / Kupon (Next Sub-step):** Pembuatan kode voucher (misal: `HEMAT10`, `DISKONMERDEKA`), kuota penggunaan, potongan harga, dan validasi otomatis saat pembeli memasukkan kode di chat WhatsApp.
+
+### 5. Tahap Selanjutnya 2: Rombak Total Tampilan Dashboard (Anti AI-Slop & Desain Modern)
+- **Tujuan:** Desain ulang antarmuka dashboard agar tampil sangat premium, profesional, elegan, dan bersih dari kesan "AI Slop".
+- **Prinsip Utama:** Menjaga 100% fungsionalitas yang ada tanpa menghilangkan satu pun fitur.
+
+### 6. Tahap Selanjutnya 3: Auto-Order Layanan SMM & Top Up Game
+- **Tujuan:** Mengembangkan alur order otomatis untuk kategori SMM (Followers, Likes, Views) dan Top Up Game langsung ke supplier Xaviera Store via WhatsApp, melengkapi fitur APK Premium yang sudah aktif saat ini.
+
+### 7. Tahap Selanjutnya 4: "Fitur Apartemen" (Multi-Tenant & Master Admin Dashboard)
+- **Dashboard Master / Super Admin (`/dashboard/adminutama`):**
+  - Panel kontrol khusus pemilik (Owner).
+  - Manajemen akun penyewa: Buat akun baru, atur durasi sewa, perpanjang masa sewa, dan tombol suspend/hapus akun.
+- **Penyewa (Tenant) Dashboard:**
+  - Login mandiri untuk tiap penyewa bot.
+  - Setiap penyewa mendapatkan bot WhatsApp mereka sendiri (*multi-session Baileys*).
+
+### 8. Tahap Selanjutnya 5: Fitur AI (Smart Customer Support & Auto-Reply)
+- **Tujuan:** Mengintegrasikan `@google/genai` untuk asisten CS cerdas yang memahami pertanyaan pembeli santai di WhatsApp dan otomatis merekomendasikan produk relevan.
+
+

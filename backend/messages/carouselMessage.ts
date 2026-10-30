@@ -2,10 +2,11 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { generateWAMessageFromContent, prepareWAMessageMedia } from '@itsliaaa/baileys';
-import { CommandsConfig } from '../types/bot.types.js';
-import { getProductVariants } from '../services/xavieraService.js';
-import { buildQuoteContextInfo } from '../services/quoteHelper.js';
-import { resolvePlaceholders } from '../services/placeholderHelper.js';
+import { CommandsConfig } from '../types/bot.types.ts';
+import { getProductVariants } from '../services/xavieraService.ts';
+import { buildQuoteContextInfo } from '../services/quoteHelper.ts';
+import { resolvePlaceholders } from '../services/placeholderHelper.ts';
+import { getPricingConfig, calculateSellingPrice, calculateSellingPriceForVariant } from '../database/sqlite.ts';
 
 export async function sendProductVariantsCarousel(
   sock: any,
@@ -87,15 +88,17 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
 
   const template = config.carouselOutputText?.trim() || defaultTemplate;
 
+  // Ambil pengaturan markup harga produk dari config / SQLite
+  const pricing = config.pricingConfig || getPricingConfig();
+
   // Bangun daftar kartu varian (dengan header media gambar valid agar dapat dirender oleh WhatsApp)
   const cards = variants.slice(0, 10).map((v) => {
     const cat = (v.category || 'Streaming').trim();
     const pName = v.name || productName;
 
-    // Tambahkan keuntungan 10% dari harga asli supplier Xaviera
+    // Hitung harga jual berdasarkan pengaturan markup varian (custom atau general)
     const rawPrice = Number(v.price) || 0;
-    const margin = Math.round(rawPrice * 0.1);
-    const sellingPrice = rawPrice + margin;
+    const { sellingPrice } = calculateSellingPriceForVariant(rawPrice, v.id, pName, v.variant);
 
     const captionText = resolvePlaceholders(template, config, {
       name: pName,
