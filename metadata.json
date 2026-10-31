@@ -1,6 +1,6 @@
 {
-  "name": "WhatsApp Bot Pair - Ourin Baileys",
-  "description": "Menghubungkan bot WhatsApp menggunakan ourin-baileys dengan custom pairing code WANZT888.",
+  "name": "WhatsApp Bot Pair - Itsliaaa Baileys",
+  "description": "Menghubungkan bot WhatsApp menggunakan @itsliaaa/baileys dengan custom pairing code WANZT888.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

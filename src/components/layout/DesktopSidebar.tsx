@@ -1,24 +1,21 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   Store,
+  Wallet,
+  Smartphone,
+  Server,
+  Users,
   MessageSquareCode,
   Package,
-  Tag,
   Share2,
   Gamepad2,
-  Users,
   Receipt,
-  QrCode,
-  ChevronDown,
-  ChevronRight,
   PanelLeftClose,
   PanelLeftOpen,
-  Wifi,
-  WifiOff,
-  Clock,
-  AlertCircle,
   Radio,
-  ExternalLink,
+  X,
+  LogOut,
 } from 'lucide-react';
 import { BotStatusResponse, StoreInfoConfig } from '../../types/dashboard.types';
 
@@ -33,6 +30,9 @@ interface DesktopSidebarProps {
   transactionsCount?: number;
   groupsCount?: number;
   username?: string;
+  isMobileOpen?: boolean;
+  onCloseMobile?: () => void;
+  onLogout?: () => void;
 }
 
 interface NavItem {
@@ -41,6 +41,7 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   badge?: string | number;
   badgeColor?: string;
+  aliases?: string[];
 }
 
 export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({
@@ -54,11 +55,14 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({
   transactionsCount = 0,
   groupsCount = 0,
   username = 'Admin',
+  isMobileOpen = false,
+  onCloseMobile,
+  onLogout,
 }) => {
-  // Collapsible category state (matching reference chevron)
-  const [isCatalogOpen, setIsCatalogOpen] = useState(true);
-  const [isActivityOpen, setIsActivityOpen] = useState(true);
-
+  const handleNavClick = (id: string) => {
+    setSelectedTab(id);
+    if (onCloseMobile) onCloseMobile();
+  };
   // Status Bot Helper
   const getBotStatusBadge = () => {
     switch (botData.status) {
@@ -78,90 +82,106 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({
 
   const statusBadge = getBotStatusBadge();
 
-  // Menu Definition
-  const mainNavItems: NavItem[] = [
+  // 10 Menu Navigasi dalam URUTAN PERSIS yang diminta oleh Pengguna:
+  // 1. Info Profil (Paling atas)
+  // 2. Saldo (Di bawah Info Profil)
+  // 3. Connection
+  // 4. Koneksi Layanan
+  // 5. Management group
+  // 6. Respon Bot
+  // 7. Aplikasi Premium
+  // 8. SMM
+  // 9. TopUp
+  // 10. Transaksi
+  const navItems: NavItem[] = [
+    {
+      id: 'Info Profil',
+      label: 'Info Profil',
+      icon: Store,
+      aliases: ['Store Info'],
+    },
+    {
+      id: 'Saldo',
+      label: 'Saldo',
+      icon: Wallet,
+      aliases: ['tabSaldo'],
+    },
     {
       id: 'Connection',
-      label: 'Koneksi Bot',
-      icon: QrCode,
+      label: 'Connection',
+      icon: Smartphone,
       badge: statusBadge.label,
       badgeColor: botData.status === 'connected' ? 'bg-emerald-600' : 'bg-[#0084D1]',
+      aliases: ['tab06'],
     },
     {
-      id: 'Store Info',
-      label: 'Store Info',
-      icon: Store,
+      id: 'Koneksi Layanan',
+      label: 'Koneksi Layanan',
+      icon: Server,
+      aliases: ['Layanan', 'API'],
     },
     {
-      id: 'Command',
-      label: 'Command Bot',
+      id: 'Management group',
+      label: 'Management group',
+      icon: Users,
+      badge: groupsCount > 0 ? groupsCount : undefined,
+      aliases: ['Grup', 'tab04'],
+    },
+    {
+      id: 'Respon Bot',
+      label: 'Respon Bot',
       icon: MessageSquareCode,
+      aliases: ['Command'],
     },
-  ];
-
-  const catalogNavItems: NavItem[] = [
     {
-      id: 'Produk',
-      label: 'Produk APK',
+      id: 'Aplikasi Premium',
+      label: 'Aplikasi Premium',
       icon: Package,
-    },
-    {
-      id: 'Kupon Promo',
-      label: 'Kupon Promo',
-      icon: Tag,
-      badge: promosCount > 0 ? promosCount : undefined,
-      badgeColor: 'bg-[#0084D1]',
+      badge: promosCount > 0 ? `${promosCount} Promo` : undefined,
+      aliases: ['Produk', 'Kupon Promo', 'Promo', 'tabPromo'],
     },
     {
       id: 'SMM',
-      label: 'Layanan SMM',
+      label: 'SMM',
       icon: Share2,
+      aliases: ['SSM', 'tab02'],
     },
     {
-      id: 'Top Up',
-      label: 'Top Up Game',
+      id: 'TopUp',
+      label: 'TopUp',
       icon: Gamepad2,
-    },
-  ];
-
-  const activityNavItems: NavItem[] = [
-    {
-      id: 'Grup',
-      label: 'Grup Whitelist',
-      icon: Users,
-      badge: groupsCount > 0 ? groupsCount : undefined,
+      aliases: ['Top Up', 'tab03'],
     },
     {
       id: 'Transaksi',
-      label: 'Riwayat Transaksi',
+      label: 'Transaksi',
       icon: Receipt,
       badge: transactionsCount > 0 ? transactionsCount : undefined,
+      aliases: ['tab05'],
     },
   ];
 
-  const renderNavItem = (item: NavItem) => {
-    const isActive =
-      selectedTab === item.id ||
-      (item.id === 'SMM' && (selectedTab === 'SSM' || selectedTab === 'tab02')) ||
-      (item.id === 'Top Up' && selectedTab === 'tab03') ||
-      (item.id === 'Grup' && (selectedTab === 'tab04' || selectedTab === 'Grup')) ||
-      (item.id === 'Transaksi' && (selectedTab === 'tab05' || selectedTab === 'Transaksi')) ||
-      (item.id === 'Connection' && (selectedTab === 'tab06' || selectedTab === 'Connection')) ||
-      (item.id === 'Kupon Promo' && (selectedTab === 'Promo' || selectedTab === 'tabPromo'));
+  const checkIsActive = (item: NavItem) => {
+    if (selectedTab === item.id) return true;
+    if (item.aliases && item.aliases.includes(selectedTab)) return true;
+    return false;
+  };
 
+  const renderNavItem = (item: NavItem, collapsed: boolean) => {
+    const isActive = checkIsActive(item);
     const Icon = item.icon;
 
-    if (isCollapsed) {
+    if (collapsed) {
       return (
         <div key={item.id} className="relative group flex items-center justify-center my-1">
-          {/* Active indicator line on the very left border */}
+          {/* Garis aktif di sisi paling kiri */}
           {isActive && (
-            <div className="absolute left-0 w-1 h-7 rounded-r-full bg-[#0084D1]" />
+            <div className="absolute left-0 w-1.25 h-7 rounded-r-full bg-[#0084D1]" />
           )}
 
           <button
             type="button"
-            onClick={() => setSelectedTab(item.id)}
+            onClick={() => handleNavClick(item.id)}
             title={item.label}
             className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
               isActive
@@ -172,8 +192,8 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({
             <Icon className="w-5 h-5 stroke-[1.8]" />
           </button>
 
-          {/* Floating Tooltip for Collapsed State */}
-          <div className="absolute left-full ml-3 px-2.5 py-1.5 bg-slate-900 text-white text-xs font-medium rounded-md whitespace-nowrap shadow-lg pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 flex items-center gap-2">
+          {/* Floating Tooltip saat collapsed */}
+          <div className="absolute left-full ml-3 px-2.5 py-1.5 bg-slate-900 text-white text-xs font-semibold rounded-md whitespace-nowrap shadow-lg pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 flex items-center gap-2">
             <span>{item.label}</span>
             {item.badge !== undefined && (
               <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-[#0084D1] text-white">
@@ -187,14 +207,14 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({
 
     return (
       <div key={item.id} className="relative flex items-center my-0.5">
-        {/* Active indicator line on the very left border (reference style) */}
+        {/* Garis aktif di sisi paling kiri */}
         {isActive && (
           <div className="absolute left-0 w-1.25 h-7 rounded-r-full bg-[#0084D1]" />
         )}
 
         <button
           type="button"
-          onClick={() => setSelectedTab(item.id)}
+          onClick={() => handleNavClick(item.id)}
           className={`w-full flex items-center justify-between pl-4 pr-3 py-2.5 rounded-xl text-xs transition-all cursor-pointer ${
             isActive
               ? 'bg-[#0084D1]/10 text-[#0084D1] font-bold'
@@ -226,193 +246,234 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({
     );
   };
 
-  return (
-    <aside
-      className={`bg-white border-r border-slate-200 h-screen sticky top-0 flex flex-col justify-between transition-all duration-300 z-40 select-none ${
-        isCollapsed ? 'w-[72px]' : 'w-64'
-      }`}
-    >
-      {/* Bagian Atas: Mac Dots & Brand Header */}
-      <div className="flex flex-col flex-1 overflow-y-auto scrollbar-none">
-        {/* 1. macOS Style Traffic Light Dots */}
-        <div className="flex items-center justify-between px-4 pt-3.5 pb-2">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-400 hover:opacity-80 transition-opacity" />
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 hover:opacity-80 transition-opacity" />
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 hover:opacity-80 transition-opacity" />
-          </div>
+  const renderSidebarContent = (isMobileView: boolean) => {
+    const collapsed = !isMobileView && isCollapsed;
 
-          {/* Toggle Button in Header */}
-          <button
-            type="button"
-            onClick={() => setIsCollapsed((prev) => !prev)}
-            className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
-            title={isCollapsed ? 'Buka Sidebar' : 'Tutup Sidebar'}
-          >
-            {isCollapsed ? (
-              <PanelLeftOpen className="w-4 h-4" />
+    return (
+      <>
+        {/* Bagian Atas: Header & Brand */}
+        <div className="flex flex-col flex-1 overflow-y-auto scrollbar-none">
+          {/* Header Bersih */}
+          {collapsed ? (
+            <div className="flex flex-col items-center gap-2 pt-3 pb-2.5 px-2 border-b border-slate-100">
+              {/* Tombol Besar Expand Sidebar */}
+              <button
+                type="button"
+                onClick={() => setIsCollapsed(false)}
+                className="w-11 h-11 rounded-xl bg-slate-50 hover:bg-sky-50 text-slate-600 hover:text-[#0084D1] border border-slate-200 hover:border-sky-300 flex items-center justify-center transition-all cursor-pointer shadow-2xs group"
+                title="Buka Sidebar Navigasi"
+              >
+                <PanelLeftOpen className="w-5 h-5 transition-transform group-hover:scale-110" />
+              </button>
+
+              {/* Monogram Brand Avatar */}
+              <button
+                type="button"
+                onClick={() => handleNavClick('Info Profil')}
+                title={`Toko: ${storeInfo.storeName || 'Wanzt Store'}`}
+                className="w-11 h-11 rounded-xl bg-gradient-to-tr from-[#0084D1] to-sky-400 text-white flex items-center justify-center font-bold text-base shadow-sm shadow-[#0084D1]/20 cursor-pointer hover:opacity-95 transition"
+              >
+                {(storeInfo.storeName || 'W').trim().charAt(0).toUpperCase()}
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between px-3.5 pt-3.5 pb-3 border-b border-slate-100">
+              {/* Brand Avatar + Title */}
+              <button
+                type="button"
+                onClick={() => handleNavClick('Info Profil')}
+                className="flex items-center gap-2.5 min-w-0 text-left cursor-pointer group flex-1"
+              >
+                <div className="w-9.5 h-9.5 rounded-xl bg-gradient-to-tr from-[#0084D1] to-sky-400 text-white flex items-center justify-center font-bold text-sm shadow-sm shadow-[#0084D1]/20 shrink-0 group-hover:opacity-95 transition">
+                  {(storeInfo.storeName || 'W').trim().charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-sm font-bold text-slate-900 truncate leading-tight tracking-tight group-hover:text-[#0084D1] transition-colors">
+                    {storeInfo.storeName || 'Wanzt Store'}
+                  </h1>
+                  <p className="text-[11px] text-slate-500 truncate flex items-center gap-1.5 mt-0.5">
+                    <span className={`w-1.5 h-1.5 rounded-full ${statusBadge.bg}`} />
+                    <span>WhatsApp Bot</span>
+                  </p>
+                </div>
+              </button>
+
+              {/* Tombol Tutup Drawer khusus Mobile */}
+              {isMobileView && onCloseMobile && (
+                <button
+                  type="button"
+                  onClick={onCloseMobile}
+                  className="w-8.5 h-8.5 rounded-xl text-slate-400 hover:text-slate-800 hover:bg-slate-100 border border-transparent hover:border-slate-200 flex items-center justify-center transition cursor-pointer shrink-0 ml-1 active:scale-95"
+                  aria-label="Tutup Menu"
+                >
+                  <X className="w-4.5 h-4.5" />
+                </button>
+              )}
+
+              {/* Tombol Collapse Sidebar Desktop */}
+              {!isMobileView && (
+                <button
+                  type="button"
+                  onClick={() => setIsCollapsed(true)}
+                  className="hidden lg:flex w-8.5 h-8.5 rounded-xl text-slate-400 hover:text-slate-800 hover:bg-slate-100 border border-transparent hover:border-slate-200 items-center justify-center transition cursor-pointer shrink-0 ml-1"
+                  title="Tutup Sidebar"
+                >
+                  <PanelLeftClose className="w-4.5 h-4.5" />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* 3. Primary Connection Status Button */}
+          <div className="px-3 pt-3 pb-2">
+            {collapsed ? (
+              <button
+                type="button"
+                onClick={() => handleNavClick('Connection')}
+                title={`Status: ${statusBadge.label}`}
+                className={`w-full h-10 rounded-xl border flex items-center justify-center transition-all cursor-pointer shadow-2xs ${
+                  botData.status === 'connected'
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                    : 'border-sky-200 bg-sky-50 text-[#0084D1] hover:bg-sky-100'
+                }`}
+              >
+                <Radio className="w-4 h-4 animate-pulse" />
+              </button>
             ) : (
-              <PanelLeftClose className="w-4 h-4" />
-            )}
-          </button>
-        </div>
-
-        {/* 2. Brand / Store Identity */}
-        <div className="px-3 py-2 border-b border-slate-100">
-          {isCollapsed ? (
-            <div className="flex justify-center">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#0084D1] to-sky-400 text-white flex items-center justify-center font-bold text-base shadow-sm shadow-[#0084D1]/20">
-                W
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2.5 px-2 py-1">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#0084D1] to-sky-400 text-white flex items-center justify-center font-bold text-sm shadow-sm shadow-[#0084D1]/20 shrink-0">
-                W
-              </div>
-              <div className="min-w-0 flex-1">
-                <h1 className="text-sm font-bold text-slate-900 truncate leading-tight tracking-tight">
-                  {storeInfo.storeName || 'Wanzt Store'}
-                </h1>
-                <p className="text-[11px] text-slate-500 truncate flex items-center gap-1">
-                  <span className={`w-1.5 h-1.5 rounded-full ${statusBadge.bg}`} />
-                  <span>WhatsApp Bot</span>
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 3. Primary Action Button (Reference: "New Message" style) */}
-        <div className="px-3 pt-3 pb-2">
-          {isCollapsed ? (
-            <button
-              type="button"
-              onClick={() => setSelectedTab('Connection')}
-              title={`Status: ${statusBadge.label}`}
-              className={`w-full h-10 rounded-xl border flex items-center justify-center transition-all cursor-pointer shadow-2xs ${
-                botData.status === 'connected'
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                  : 'border-sky-200 bg-sky-50 text-[#0084D1] hover:bg-sky-100'
-              }`}
-            >
-              <Radio className="w-4 h-4 animate-pulse" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setSelectedTab('Connection')}
-              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border transition-all cursor-pointer shadow-2xs group ${
-                botData.status === 'connected'
-                  ? 'border-emerald-200 bg-emerald-50/70 text-emerald-800 hover:bg-emerald-100/70'
-                  : 'border-sky-200 bg-sky-50/70 text-[#0084D1] hover:bg-sky-100/70'
-              }`}
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <span
-                  className={`w-2 h-2 rounded-full ${statusBadge.bg} ${
-                    botData.status === 'connected' ? 'animate-ping' : ''
-                  }`}
-                />
-                <span className="text-xs font-semibold tracking-tight truncate">
-                  {botData.status === 'connected' ? 'Bot Terhubung' : 'Hubungkan Bot'}
+              <button
+                type="button"
+                onClick={() => handleNavClick('Connection')}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border transition-all cursor-pointer shadow-2xs group ${
+                  botData.status === 'connected'
+                    ? 'border-emerald-200 bg-emerald-50/70 text-emerald-800 hover:bg-emerald-100/70'
+                    : 'border-sky-200 bg-sky-50/70 text-[#0084D1] hover:bg-sky-100/70'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span
+                    className={`w-2 h-2 rounded-full ${statusBadge.bg} ${
+                      botData.status === 'connected' ? 'animate-ping' : ''
+                    }`}
+                  />
+                  <span className="text-xs font-semibold tracking-tight truncate">
+                    {botData.status === 'connected' ? 'Bot Terhubung' : 'Hubungkan Bot'}
+                  </span>
+                </div>
+                <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-700">
+                  {statusBadge.label}
                 </span>
-              </div>
-              <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-700">
-                {statusBadge.label}
-              </span>
-            </button>
-          )}
-        </div>
-
-        {/* 4. Menu Utama */}
-        <div className="px-2 py-1 space-y-0.5">
-          {mainNavItems.map(renderNavItem)}
-        </div>
-
-        {/* 5. Section: KATALOG PRODUK */}
-        <div className="px-2 pt-3">
-          {!isCollapsed && (
-            <button
-              type="button"
-              onClick={() => setIsCatalogOpen((prev) => !prev)}
-              className="w-full flex items-center justify-between px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider hover:text-slate-600 transition cursor-pointer"
-            >
-              <span>Katalog &amp; Penjualan</span>
-              {isCatalogOpen ? (
-                <ChevronDown className="w-3.5 h-3.5" />
-              ) : (
-                <ChevronRight className="w-3.5 h-3.5" />
-              )}
-            </button>
-          )}
-
-          {(!isCollapsed ? isCatalogOpen : true) && (
-            <div className="space-y-0.5 mt-0.5">
-              {catalogNavItems.map(renderNavItem)}
-            </div>
-          )}
-        </div>
-
-        {/* 6. Section: AKTIVITAS & SISTEM */}
-        <div className="px-2 pt-3 pb-4">
-          {!isCollapsed && (
-            <button
-              type="button"
-              onClick={() => setIsActivityOpen((prev) => !prev)}
-              className="w-full flex items-center justify-between px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider hover:text-slate-600 transition cursor-pointer"
-            >
-              <span>Aktivitas &amp; Log</span>
-              {isActivityOpen ? (
-                <ChevronDown className="w-3.5 h-3.5" />
-              ) : (
-                <ChevronRight className="w-3.5 h-3.5" />
-              )}
-            </button>
-          )}
-
-          {(!isCollapsed ? isActivityOpen : true) && (
-            <div className="space-y-0.5 mt-0.5">
-              {activityNavItems.map(renderNavItem)}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Bagian Bawah: Profile Card / Quick Status */}
-      <div className="border-t border-slate-100 p-2.5 bg-slate-50/50">
-        {isCollapsed ? (
-          <div className="flex justify-center">
-            <div className="relative">
-              <div className="w-9 h-9 rounded-xl bg-sky-100 text-[#0084D1] font-bold flex items-center justify-center text-xs border border-sky-200">
-                {username.slice(0, 2).toUpperCase()}
-              </div>
-              <span
-                className={`w-2.5 h-2.5 rounded-full border-2 border-white absolute -bottom-0.5 -right-0.5 ${statusBadge.bg}`}
-              />
-            </div>
+              </button>
+            )}
           </div>
-        ) : (
-          <div className="flex items-center gap-2.5 p-1.5 rounded-xl hover:bg-slate-100/60 transition">
-            <div className="relative shrink-0">
-              <div className="w-8.5 h-8.5 rounded-xl bg-sky-100 text-[#0084D1] font-bold flex items-center justify-center text-xs border border-sky-200">
-                {username.slice(0, 2).toUpperCase()}
+
+          {/* 4. Daftar 10 Menu Navigasi Utama */}
+          <div className="px-2 py-1 space-y-0.5">
+            {navItems.map((item) => renderNavItem(item, collapsed))}
+          </div>
+        </div>
+
+        {/* Bagian Bawah: Profile Card / Quick Status */}
+        <div className="border-t border-slate-100 p-2.5 bg-slate-50/50">
+          {collapsed ? (
+            <div className="flex justify-center">
+              <div className="relative">
+                <div className="w-9 h-9 rounded-xl bg-sky-100 text-[#0084D1] font-bold flex items-center justify-center text-xs border border-sky-200">
+                  {username.slice(0, 2).toUpperCase()}
+                </div>
+                <span
+                  className={`w-2.5 h-2.5 rounded-full border-2 border-white absolute -bottom-0.5 -right-0.5 ${statusBadge.bg}`}
+                />
               </div>
-              <span
-                className={`w-2.5 h-2.5 rounded-full border-2 border-white absolute -bottom-0.5 -right-0.5 ${statusBadge.bg}`}
-              />
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-bold text-slate-900 truncate">
-                {storeInfo.ownerName || username}
-              </p>
-              <p className="text-[10px] text-slate-500 truncate">
-                Admin Store · {statusBadge.label}
-              </p>
+          ) : (
+            <div className="flex items-center justify-between p-1.5 rounded-xl hover:bg-slate-100/60 transition">
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                <div className="relative shrink-0">
+                  <div className="w-8.5 h-8.5 rounded-xl bg-sky-100 text-[#0084D1] font-bold flex items-center justify-center text-xs border border-sky-200">
+                    {username.slice(0, 2).toUpperCase()}
+                  </div>
+                  <span
+                    className={`w-2.5 h-2.5 rounded-full border-2 border-white absolute -bottom-0.5 -right-0.5 ${statusBadge.bg}`}
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-slate-900 truncate">
+                    {storeInfo.ownerName || username}
+                  </p>
+                  <p className="text-[10px] text-slate-500 truncate">
+                    Admin Store · {statusBadge.label}
+                  </p>
+                </div>
+              </div>
+
+              {/* Tombol Logout khusus Mobile Drawer */}
+              {isMobileView && onLogout && (
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="p-2 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition cursor-pointer"
+                  title="Keluar"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              )}
             </div>
+          )}
+        </div>
+      </>
+    );
+  };
+
+  return (
+    <>
+      {/* 1. Desktop Persistent Sidebar (>= lg) */}
+      <aside
+        className={`hidden lg:flex bg-white border-r border-slate-200 h-screen flex-col justify-between select-none lg:sticky lg:top-0 lg:z-30 transition-all duration-300 ${
+          isCollapsed ? 'lg:w-[72px]' : 'lg:w-64'
+        }`}
+      >
+        {renderSidebarContent(false)}
+      </aside>
+
+      {/* 2. Mobile Drawer Navbar (< lg) dengan Animasi Masuk & Keluar yang Mulus */}
+      <AnimatePresence>
+        {isMobileOpen && (
+          <div className="lg:hidden fixed inset-0 z-50 pointer-events-auto">
+            {/* Backdrop dengan animasi fade in / fade out */}
+            <motion.div
+              key="mobile-nav-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+              className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs"
+              onClick={onCloseMobile}
+              aria-hidden="true"
+            />
+
+            {/* Mobile Sidebar Drawer dengan animasi slide in / slide out & swipe-to-close */}
+            <motion.aside
+              key="mobile-nav-drawer"
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300, mass: 0.8 }}
+              drag="x"
+              dragConstraints={{ left: -320, right: 0 }}
+              dragElastic={0.05}
+              onDragEnd={(_e, info) => {
+                if (info.offset.x < -60 || info.velocity.x < -200) {
+                  if (onCloseMobile) onCloseMobile();
+                }
+              }}
+              className="fixed inset-y-0 left-0 w-[285px] sm:w-80 bg-white border-r border-slate-200 min-h-[100dvh] flex flex-col justify-between shadow-2xl select-none"
+            >
+              {renderSidebarContent(true)}
+            </motion.aside>
           </div>
         )}
-      </div>
-    </aside>
+      </AnimatePresence>
+    </>
   );
 };
+

@@ -62,39 +62,75 @@ export const TabTopUp: React.FC<TabTopUpProps> = ({
   handleToggleTopupMode,
   calculateTopupPrice,
 }) => {
+  const filtered = topUpList.filter((item) => {
+    const matchesSearch =
+      item.item.toLowerCase().includes(topUpSearch.toLowerCase()) ||
+      item.game.toLowerCase().includes(topUpSearch.toLowerCase()) ||
+      String(item.id).toLowerCase().includes(topUpSearch.toLowerCase());
+    const matchesCategory =
+      selectedTopUpCategory === 'Semua' || item.category === selectedTopUpCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / topUpItemsPerPage));
+  const currentPage = Math.min(topUpPage, totalPages);
+  const startIndex = (currentPage - 1) * topUpItemsPerPage;
+  const paginated = filtered.slice(startIndex, startIndex + topUpItemsPerPage);
+
+  const getGameBadge = (game: string) => {
+    const g = game.toLowerCase();
+    if (g.includes('mobile legends') || g.includes('mlbb')) {
+      return 'bg-blue-50 text-blue-700 border-blue-200';
+    }
+    if (g.includes('free fire') || g.includes('ff')) {
+      return 'bg-amber-50 text-amber-700 border-amber-200';
+    }
+    if (g.includes('pubg')) {
+      return 'bg-orange-50 text-orange-700 border-orange-200';
+    }
+    if (g.includes('genshin') || g.includes('honkai')) {
+      return 'bg-purple-50 text-purple-700 border-purple-200';
+    }
+    if (g.includes('valorant')) {
+      return 'bg-rose-50 text-rose-700 border-rose-200';
+    }
+    return 'bg-slate-100 text-slate-700 border-slate-200';
+  };
+
   return (
     <div className="space-y-6">
-      {/* 1. Panel Paling Atas: SET HARGA PRODUK TOP UP */}
-      <div className="bg-white border border-slate-200/90 rounded-xl p-4 sm:p-5 shadow-xs space-y-4">
+      {/* 1. Panel Atas: SET HARGA PRODUK TOP UP */}
+      <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
           <div>
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-sky-50 border border-sky-100 flex items-center justify-center text-sky-600">
-                <Tag className="w-3.5 h-3.5" />
+              <div className="w-8 h-8 rounded-xl bg-sky-50 border border-sky-100 flex items-center justify-center text-[#0084D1]">
+                <Tag className="w-4 h-4" />
               </div>
               <h3 className="text-sm font-bold text-slate-900 tracking-tight">
-                Set Harga Produk Top Up
+                Set Harga Produk Top Up Game
               </h3>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Atur keuntungan margin penjualan seluruh katalog game, voucher, diamond, dan pulsa. Pilih penambahan nominal tetap (Rp) atau persentase (%).
+              Atur keuntungan margin penjualan seluruh katalog game, voucher, diamond, dan pulsa.
             </p>
           </div>
 
-          {/* Badge Mode Aktif */}
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200 self-start sm:self-auto">
-            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
             <span>
-              Aktif: {topupPricingMode === 'rp' ? `+Rp ${topupPricingValue.toLocaleString('id-ID')}` : `+${topupPricingValue}%`}
+              Aktif:{' '}
+              {topupPricingMode === 'rp'
+                ? `+Rp ${topupPricingValue.toLocaleString('id-ID')}`
+                : `+${topupPricingValue}%`}
             </span>
           </div>
         </div>
 
-        {/* Kolom Form Input Angka & Tombol Toggle Mode di Sampingnya */}
+        {/* Input Margin Top Up */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-          {/* Kolom Input Angka dengan Prefix dan Tombol Toggle Mode */}
-          <div className="flex-1 flex items-center bg-slate-50 border border-slate-200 rounded-lg overflow-hidden focus-within:border-sky-600 focus-within:ring-2 focus-within:ring-sky-600/20 focus-within:bg-white transition shadow-2xs">
-            <div className="px-3 text-xs font-bold text-slate-400 select-none border-r border-slate-200/80 bg-slate-100/60 py-2.5">
+          <div className="flex-1 flex items-center bg-slate-50 border border-slate-200 rounded-xl overflow-hidden focus-within:border-[#0084D1] focus-within:ring-2 focus-within:ring-[#0084D1]/20 focus-within:bg-white transition shadow-2xs">
+            <div className="px-3.5 text-xs font-bold text-slate-500 border-r border-slate-200 bg-slate-100 py-2.5">
               {topupPricingMode === 'rp' ? 'Rp' : '%'}
             </div>
             <input
@@ -109,33 +145,35 @@ export const TabTopUp: React.FC<TabTopUpProps> = ({
               }}
               placeholder={
                 topupPricingMode === 'rp'
-                  ? 'Masukkan nominal angka markup (contoh: 1000)'
-                  : 'Masukkan angka persentase markup (contoh: 5)'
+                  ? 'Masukkan angka markup (contoh: 1000)'
+                  : 'Masukkan persentase markup (contoh: 10)'
               }
               className="w-full bg-transparent px-3 py-2.5 text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none"
             />
-            {/* Tombol di samping kolom untuk berganti mode antara Rp atau % */}
             <div className="flex items-center pr-1.5 py-1">
               <button
                 type="button"
                 onClick={handleToggleTopupMode}
-                title="Klik untuk berganti mode antara Rp dan %"
-                className="px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1.5 cursor-pointer bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 shadow-2xs active:scale-[0.98]"
+                className="px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 shadow-2xs active:scale-[0.98]"
               >
-                <ArrowLeftRight className="w-3.5 h-3.5 text-sky-600" />
+                <ArrowLeftRight className="w-3.5 h-3.5 text-[#0084D1]" />
                 <span>
-                  Mode: <strong className="text-sky-700 font-extrabold">{topupPricingMode === 'rp' ? 'Rp' : '%'}</strong>
+                  Mode:{' '}
+                  <strong className="text-[#0084D1]">
+                    {topupPricingMode === 'rp' ? 'Rp' : '%'}
+                  </strong>
                 </span>
               </button>
             </div>
           </div>
 
-          {/* Tombol Simpan Pengaturan */}
           <button
             type="button"
-            onClick={() => saveTopupPricing && saveTopupPricing(topupPricingMode, Number(topupInputVal))}
+            onClick={() =>
+              saveTopupPricing && saveTopupPricing(topupPricingMode, Number(topupInputVal))
+            }
             disabled={isSavingTopupPricing}
-            className="px-4 py-2.5 rounded-lg bg-sky-600 hover:bg-sky-700 active:scale-[0.98] text-white text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap disabled:opacity-60"
+            className="px-4 py-2.5 rounded-xl bg-[#0084D1] hover:bg-[#0073B7] active:scale-[0.98] text-white text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap disabled:opacity-60"
           >
             {isSavingTopupPricing ? (
               <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -145,124 +183,38 @@ export const TabTopUp: React.FC<TabTopUpProps> = ({
             <span>Simpan Pengaturan</span>
           </button>
         </div>
-
-        {/* Ringkasan Simulasi Perhitungan Real-Time */}
-        <div className="bg-slate-50/90 border border-slate-200/70 rounded-lg px-3 py-2 text-xs text-slate-600 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-          <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-slate-700">Formula Aktif:</span>
-            {topupPricingMode === 'rp' ? (
-              <span className="text-slate-800 font-medium">Harga Asli + Rp {Number(topupInputVal || 0).toLocaleString('id-ID')}</span>
-            ) : (
-              <span className="text-slate-800 font-medium">Harga Asli + {Number(topupInputVal || 0)}%</span>
-            )}
-          </div>
-          <div className="flex items-center gap-1.5 text-slate-500 text-[11px]">
-            <span>Contoh: Modal Rp 20.000</span>
-            <span className="text-slate-400">→</span>
-            {(() => {
-              const demo = calculateTopupPrice
-                ? calculateTopupPrice(20000)
-                : { sellingPrice: 20100, margin: 100 };
-              return (
-                <strong className="text-slate-800 font-mono font-semibold">
-                  Rp {demo.sellingPrice.toLocaleString('id-ID')} (+Rp {demo.margin.toLocaleString('id-ID')})
-                </strong>
-              );
-            })()}
-          </div>
-        </div>
       </div>
 
-      {/* Header Tab Top Up (Games & Digital Services) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <Gamepad2 className="w-4 h-4 text-sky-600" />
-            <h3 className="text-sm font-bold text-slate-900 tracking-tight">
-              Katalog Layanan Top Up Game & Digital
-            </h3>
-          </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Daftar seluruh paket voucher, diamond game, saldo e-wallet, pulsa, dan transaksi instan 24 jam nonstop.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              fetchXavieraGames();
-              showToast('Menyinkronkan data katalog Top Up Game...');
+      {/* 2. Filter & Pencarian Game */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="relative flex-1 max-w-md">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            value={topUpSearch}
+            onChange={(e) => {
+              setTopUpSearch(e.target.value);
+              setTopUpPage(1);
             }}
-            disabled={loadingTopUp}
-            className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loadingTopUp ? 'animate-spin text-sky-600' : 'text-slate-500'}`} />
-            <span>Sinkronkan Top Up</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Filter Kategori Game / Top Up & Search Bar */}
-      <div className="flex flex-col gap-3">
-        {/* Search Bar Input */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <div className="relative flex-1 max-w-md">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="text"
-              value={topUpSearch}
-              onChange={(e) => {
-                setTopUpSearch(e.target.value);
+            placeholder="Cari judul game, nominal, atau kode item (MLBB, Diamond)..."
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-[#0084D1] focus:ring-2 focus:ring-[#0084D1]/20 transition shadow-2xs"
+          />
+          {topUpSearch && (
+            <button
+              type="button"
+              onClick={() => {
+                setTopUpSearch('');
                 setTopUpPage(1);
               }}
-              placeholder="Cari game, diamond, atau denominasi (contoh: Mobile Legends, Free Fire, Valorant, DANA)..."
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-8 py-2 text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20 transition shadow-2xs"
-            />
-            {topUpSearch && (
-              <button
-                type="button"
-                onClick={() => {
-                  setTopUpSearch('');
-                  setTopUpPage(1);
-                }}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-
-          {/* Dropdown Jumlah Data Per Halaman */}
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <span>Tampilkan:</span>
-            <select
-              value={topUpItemsPerPage}
-              onChange={(e) => {
-                setTopUpItemsPerPage(Number(e.target.value));
-                setTopUpPage(1);
-              }}
-              className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-700 focus:outline-none focus:bg-white focus:border-sky-600 cursor-pointer shadow-2xs"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
             >
-              <option value={25}>25 / hal</option>
-              <option value={50}>50 / hal</option>
-              <option value={100}>100 / hal</option>
-            </select>
-          </div>
+              ✕
+            </button>
+          )}
         </div>
 
-        {/* Filter Kategori Top Up (Mobile Legends, Free Fire, Valorant, dll.) */}
-        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-1">
-          {[
-            'Semua',
-            'Mobile Legends',
-            'Free Fire',
-            'PUBG Mobile',
-            'Valorant',
-            'Genshin Impact',
-            'Honor of Kings',
-            'Roblox',
-            'E-Wallet & Pulsa',
-          ].map((cat) => {
+        <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
+          {['Semua', 'Games', 'Pulsa & Data', 'E-Money', 'Voucher'].map((cat) => {
             const isActive = selectedTopUpCategory === cat;
             return (
               <button
@@ -272,83 +224,68 @@ export const TabTopUp: React.FC<TabTopUpProps> = ({
                   setSelectedTopUpCategory(cat);
                   setTopUpPage(1);
                 }}
-                className={`px-3 py-1.5 text-xs rounded-md transition cursor-pointer whitespace-nowrap font-medium flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 text-xs rounded-xl transition cursor-pointer whitespace-nowrap font-semibold ${
                   isActive
-                    ? 'bg-sky-600 text-white shadow-2xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70'
+                    ? 'bg-[#0084D1] text-white shadow-2xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
-                <span>{cat}</span>
+                {cat}
               </button>
             );
           })}
+
+          <button
+            type="button"
+            onClick={() => {
+              fetchXavieraGames();
+              showToast('Menyinkronkan katalog Top Up game...');
+            }}
+            disabled={loadingTopUp}
+            className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0"
+          >
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${
+                loadingTopUp ? 'animate-spin text-[#0084D1]' : 'text-slate-500'
+              }`}
+            />
+            <span>Sync</span>
+          </button>
         </div>
       </div>
 
-      {/* Tabel Layanan Top Up */}
-      <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+      {/* 3. Tabel Top Up Game yang Rapi & Jelas */}
+      <div className="bg-white border border-slate-200/90 rounded-2xl overflow-hidden shadow-2xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                <th className="py-3 px-5 w-48">Game & Server</th>
-                <th className="py-3 px-4">Denominasi / Paket Item</th>
-                <th className="py-3 px-4 text-center w-36">Status / Stok</th>
-                <th className="py-3 px-4 text-right w-36">Harga Asli</th>
-                <th className="py-3 px-5 text-right w-48">
-                  <div className="flex items-center justify-end gap-1.5">
-                    <span>Harga Jual</span>
-                    <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-sky-100 text-sky-800">
-                      {topupPricingMode === 'rp'
-                        ? `+Rp ${topupPricingValue.toLocaleString('id-ID')}`
-                        : `+${topupPricingValue}%`}
-                    </span>
-                  </div>
-                </th>
+              <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                <th className="py-3 px-4 w-44 text-left">Game / Layanan</th>
+                <th className="py-3 px-4 text-left">Nama Nominal / Item</th>
+                <th className="py-3 px-4 text-center w-28">Status</th>
+                <th className="py-3 px-4 text-right w-36">Harga Modal</th>
+                <th className="py-3 px-4 text-right w-48">Harga Jual &amp; Margin</th>
               </tr>
             </thead>
-            <tbody className="text-xs">
-              {(() => {
-                const filtered = topUpList.filter((item) => {
-                  const matchesSearch =
-                    item.game.toLowerCase().includes(topUpSearch.toLowerCase()) ||
-                    item.item.toLowerCase().includes(topUpSearch.toLowerCase()) ||
-                    item.category.toLowerCase().includes(topUpSearch.toLowerCase()) ||
-                    item.server.toLowerCase().includes(topUpSearch.toLowerCase());
-                  const matchesCategory =
-                    selectedTopUpCategory === 'Semua' || item.category === selectedTopUpCategory;
-                  return matchesSearch && matchesCategory;
-                });
-
-                if (filtered.length === 0) {
-                  return (
-                    <tr>
-                      <td colSpan={5} className="py-12 text-center text-slate-500 space-y-1">
-                        <Gamepad2 className="w-8 h-8 mx-auto text-slate-400" />
-                        <div className="font-medium text-slate-700">
-                          {topUpList.length === 0
-                            ? 'Daftar Top Up Game Kosong'
-                            : 'Tidak ada paket Top Up ditemukan'}
-                        </div>
-                        <div className="text-[11px] text-slate-400 max-w-sm mx-auto">
-                          {topUpList.length === 0
-                            ? 'Data game dan voucher murni diambil dari API Xaviera. API Key belum diisi atau tidak valid di tab Connection.'
-                            : 'Coba ubah kata kunci pencarian atau ganti filter kategori game.'}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                }
-
-                const totalPages = Math.max(1, Math.ceil(filtered.length / topUpItemsPerPage));
-                const currentPage = Math.min(topUpPage, totalPages);
-                const startIndex = (currentPage - 1) * topUpItemsPerPage;
-                const paginated = filtered.slice(startIndex, startIndex + topUpItemsPerPage);
-
-                return paginated.map((item, index) => {
-                  const prevItem = index > 0 ? paginated[index - 1] : null;
-                  const isNewGroup = !prevItem || prevItem.game !== item.game;
-
+            <tbody className="text-xs divide-y divide-slate-100">
+              {paginated.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-12 text-center text-slate-500 space-y-2">
+                    <Gamepad2 className="w-8 h-8 mx-auto text-slate-400 stroke-[1.5]" />
+                    <div className="font-bold text-slate-800 text-sm">
+                      {topUpList.length === 0
+                        ? 'Katalog Top Up Kosong'
+                        : 'Tidak Ada Item Sesuai Filter'}
+                    </div>
+                    <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                      {topUpList.length === 0
+                        ? 'Pastikan API Key Xaviera Store sudah terhubung di menu Koneksi Layanan.'
+                        : 'Coba ubah kata kunci pencarian atau kategori di atas.'}
+                    </p>
+                  </td>
+                </tr>
+              ) : (
+                paginated.map((item, index) => {
                   const originalPrice = Number(item.originalPrice) || 0;
                   const calc = calculateTopupPrice
                     ? calculateTopupPrice(originalPrice)
@@ -356,192 +293,129 @@ export const TabTopUp: React.FC<TabTopUpProps> = ({
                         margin: Math.round(originalPrice * 0.1),
                         sellingPrice: originalPrice + Math.round(originalPrice * 0.1),
                       };
-                  const margin = calc.margin;
-                  const sellingPrice = calc.sellingPrice;
-
-                  const getGameBadgeStyle = (game: string) => {
-                    switch (game) {
-                      case 'Mobile Legends':
-                        return 'bg-blue-50 text-blue-700 border-blue-200';
-                      case 'Free Fire':
-                        return 'bg-amber-50 text-amber-700 border-amber-200';
-                      case 'PUBG Mobile':
-                        return 'bg-orange-50 text-orange-700 border-orange-200';
-                      case 'Valorant':
-                        return 'bg-rose-50 text-rose-700 border-rose-200';
-                      case 'Genshin Impact':
-                        return 'bg-purple-50 text-purple-700 border-purple-200';
-                      case 'Honor of Kings':
-                        return 'bg-red-50 text-red-700 border-red-200';
-                      case 'Roblox':
-                        return 'bg-slate-900 text-white border-slate-800';
-                      default:
-                        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-                    }
-                  };
 
                   return (
                     <tr
-                      key={item.id}
-                      className={`transition-colors hover:bg-sky-50/30 ${
-                        isNewGroup
-                          ? index === 0
-                            ? 'bg-slate-50/50'
-                            : 'border-t-2 border-slate-200 bg-slate-50/50'
-                          : 'border-t border-slate-100 bg-white'
-                      }`}
+                      key={`${item.id}-${index}`}
+                      className="hover:bg-sky-50/30 transition-colors"
                     >
-                      {/* 1. Kolom Game & Server */}
-                      <td className="py-3 px-5 align-middle whitespace-nowrap">
-                        {isNewGroup ? (
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <div className="w-6 h-6 rounded-md bg-white border border-slate-200 text-sky-600 flex items-center justify-center shrink-0 shadow-2xs font-bold text-[11px]">
-                                <Gamepad2 className="w-3.5 h-3.5" />
-                              </div>
-                              <span className="font-bold text-slate-900 text-sm tracking-tight">
-                                {item.game}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1.5 pl-8">
-                              <span
-                                className={`text-[10px] font-semibold px-1.5 py-0.2 rounded border ${getGameBadgeStyle(
-                                  item.game
-                                )}`}
-                              >
-                                {item.server}
-                              </span>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex items-center pl-8 text-slate-400 select-none">
-                            <span className="inline-block w-4 h-px bg-slate-300 mr-2"></span>
-                            <span className="font-mono text-slate-400 text-xs">-</span>
-                          </div>
-                        )}
-                      </td>
-
-                      {/* 2. Kolom Denominasi / Paket Item */}
-                      <td className="py-3 px-4 align-middle">
+                      {/* Game / Brand */}
+                      <td className="py-3 px-4 align-middle whitespace-nowrap">
                         <div className="space-y-1">
-                          <div className="font-semibold text-slate-900 text-xs">
-                            {item.item}
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            {item.badge ? (
-                              <span
-                                className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
-                                  item.badge.includes('Terlaris')
-                                    ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                    : item.badge.includes('Best Value')
-                                    ? 'bg-sky-50 text-sky-700 border-sky-200'
-                                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                }`}
-                              >
-                                {item.badge}
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                                ⚡ Instant Top-Up
-                              </span>
-                            )}
+                          <span
+                            className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full border ${getGameBadge(
+                              item.game
+                            )}`}
+                          >
+                            {item.game}
+                          </span>
+                          <div className="font-mono text-[10px] text-slate-400">
+                            ID: #{item.id}
                           </div>
                         </div>
                       </td>
 
-                      {/* 3. Kolom Status / Stok */}
+                      {/* Nama Nominal Item */}
+                      <td className="py-3 px-4 align-middle">
+                        <div className="font-bold text-slate-900 text-xs">
+                          {item.item}
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          {item.category || 'Top Up'}
+                        </div>
+                      </td>
+
+                      {/* Status Ketersediaan */}
                       <td className="py-3 px-4 text-center align-middle whitespace-nowrap">
-                        <span className="inline-flex items-center justify-center gap-1 font-mono font-semibold text-slate-700 bg-slate-100 px-2.5 py-0.5 rounded text-xs border border-slate-200/60">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                          <span>Ready {item.stock}</span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          Tersedia
                         </span>
                       </td>
 
-                      {/* 4. Kolom Harga Asli */}
+                      {/* Harga Modal Asli */}
+                      <td className="py-3 px-4 text-right align-middle whitespace-nowrap font-mono text-slate-500">
+                        Rp {originalPrice.toLocaleString('id-ID')}
+                      </td>
+
+                      {/* Harga Jual */}
                       <td className="py-3 px-4 text-right align-middle whitespace-nowrap">
-                        <span className="font-mono text-xs text-slate-600">
-                          Rp{originalPrice.toLocaleString('id-ID')}
-                        </span>
-                      </td>
-
-                      {/* 5. Kolom Harga Jual (+10%) & Margin */}
-                      <td className="py-3 px-5 text-right align-middle whitespace-nowrap">
-                        <div className="inline-flex items-baseline gap-1.5 font-mono">
-                          <span className="font-bold text-sm text-slate-900 tracking-tight">
-                            Rp{sellingPrice.toLocaleString('id-ID')}
-                          </span>
-                          <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/60">
-                            (+{margin.toLocaleString('id-ID')})
-                          </span>
+                        <div className="font-bold font-mono text-slate-900 text-xs">
+                          Rp {calc.sellingPrice.toLocaleString('id-ID')}
+                        </div>
+                        <div className="text-[10px] font-mono text-emerald-700">
+                          +Rp {calc.margin.toLocaleString('id-ID')}
                         </div>
                       </td>
                     </tr>
                   );
-                });
-              })()}
+                })
+              )}
             </tbody>
           </table>
         </div>
 
-        {/* Footer Tabel: Pagination & Info Sinkronisasi */}
-        {(() => {
-          const filtered = topUpList.filter((item) => {
-            const matchesSearch =
-              item.game.toLowerCase().includes(topUpSearch.toLowerCase()) ||
-              item.item.toLowerCase().includes(topUpSearch.toLowerCase()) ||
-              item.category.toLowerCase().includes(topUpSearch.toLowerCase()) ||
-              item.server.toLowerCase().includes(topUpSearch.toLowerCase());
-            const matchesCategory =
-              selectedTopUpCategory === 'Semua' || item.category === selectedTopUpCategory;
-            return matchesSearch && matchesCategory;
-          });
-
-          const totalPages = Math.max(1, Math.ceil(filtered.length / topUpItemsPerPage));
-          const currentPage = Math.min(topUpPage, totalPages);
-          const startIndex = (currentPage - 1) * topUpItemsPerPage;
-
-          return (
-            <div className="bg-slate-50 px-5 py-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-500">
-              <div>
+        {/* Pagination Bar */}
+        {filtered.length > 0 && (
+          <div className="bg-slate-50/80 border-t border-slate-200 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-3 text-slate-600">
+              <span>
                 Menampilkan{' '}
-                <strong className="text-slate-800 font-mono">
-                  {filtered.length === 0 ? 0 : startIndex + 1} - {Math.min(startIndex + topUpItemsPerPage, filtered.length)}
+                <strong className="text-slate-900 font-mono">
+                  {startIndex + 1}
+                </strong>
+                -
+                <strong className="text-slate-900 font-mono">
+                  {Math.min(startIndex + topUpItemsPerPage, filtered.length)}
                 </strong>{' '}
-                dari <strong className="text-slate-800 font-mono">{filtered.length}</strong> paket Top Up{' '}
-                <span className="text-slate-400 font-mono">(Total: {topUpList.length} item Top Up)</span>
+                dari{' '}
+                <strong className="text-slate-900 font-mono">
+                  {filtered.length}
+                </strong>{' '}
+                item
+              </span>
+
+              <div className="flex items-center gap-1.5 pl-2 border-l border-slate-300">
+                <span className="text-[11px] text-slate-500">Per halaman:</span>
+                <select
+                  value={topUpItemsPerPage}
+                  onChange={(e) => {
+                    setTopUpItemsPerPage(Number(e.target.value));
+                    setTopUpPage(1);
+                  }}
+                  className="bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-mono font-bold text-slate-700 focus:outline-none focus:border-[#0084D1]"
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
               </div>
-
-              {/* Pagination Buttons */}
-              {totalPages > 1 && (
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setTopUpPage((p) => Math.max(1, p - 1))}
-                    disabled={currentPage <= 1}
-                    className="px-2.5 py-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed font-medium text-xs flex items-center gap-1 cursor-pointer transition shadow-2xs"
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                    <span>Sebelumnya</span>
-                  </button>
-
-                  <span className="px-2 font-mono text-xs font-semibold text-slate-700">
-                    {currentPage} / {totalPages}
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={() => setTopUpPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={currentPage >= totalPages}
-                    className="px-2.5 py-1 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed font-medium text-xs flex items-center gap-1 cursor-pointer transition shadow-2xs"
-                  >
-                    <span>Berikutnya</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
             </div>
-          );
-        })()}
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setTopUpPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 transition cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
+              <span className="px-3 py-1 rounded-lg bg-white border border-slate-200 font-mono font-bold text-slate-800">
+                {currentPage} / {totalPages}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setTopUpPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 transition cursor-pointer"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

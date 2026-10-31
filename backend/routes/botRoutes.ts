@@ -70,6 +70,7 @@ botRouter.post('/save-config', (req: Request, res: Response) => {
     botManager.saveConfig(req.body);
     return res.json({ success: true, config: botManager.config });
   } catch (err: any) {
+    console.error('Error saat menyimpan konfigurasi bot:', err);
     return res.status(500).json({ error: err?.message || 'Gagal menyimpan konfigurasi' });
   }
 });

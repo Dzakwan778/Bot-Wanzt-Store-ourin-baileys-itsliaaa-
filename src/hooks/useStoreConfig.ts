@@ -131,7 +131,10 @@ export function useStoreConfig(
       };
 
       if (firstArg && typeof firstArg === 'object' && !Array.isArray(firstArg)) {
-        payload = { ...payload, ...firstArg };
+        const isEvent = Boolean(firstArg.nativeEvent || firstArg._reactName || firstArg.target);
+        if (!isEvent) {
+          payload = { ...payload, ...firstArg };
+        }
       } else {
         if (firstArg !== undefined && typeof firstArg === 'string') payload.menuOutputText = firstArg;
         if (newButtons !== undefined) payload.menuButtons = newButtons;

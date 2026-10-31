@@ -9,6 +9,9 @@ import {
   Clock,
   AlertCircle,
   ExternalLink,
+  PanelLeftOpen,
+  PanelLeftClose,
+  Menu,
 } from 'lucide-react';
 import {
   BotStatusResponse,
@@ -27,6 +30,10 @@ interface DesktopTopNavProps {
   username?: string;
   onLogout?: () => void;
   showToast: (msg: string) => void;
+  isSidebarCollapsed?: boolean;
+  onToggleSidebar?: () => void;
+  onOpenMobileMenu?: () => void;
+  storeName?: string;
 }
 
 export const DesktopTopNav: React.FC<DesktopTopNavProps> = ({
@@ -40,43 +47,47 @@ export const DesktopTopNav: React.FC<DesktopTopNavProps> = ({
   username = 'Admin',
   onLogout,
   showToast,
+  isSidebarCollapsed,
+  onToggleSidebar,
+  onOpenMobileMenu,
+  storeName = 'Wanzt Store',
 }) => {
   const getStatusBadge = () => {
     switch (botData.status) {
       case 'connected':
         return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
-            <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
-            CONNECTED
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap shadow-2xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>Online</span>
           </span>
         );
       case 'waiting_code':
       case 'code_ready':
         return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-sky-50 text-[#0084D1] border border-sky-200 shadow-2xs">
-            <Clock className="w-3.5 h-3.5 animate-spin text-[#0084D1]" />
-            MENUNGGU VERIFIKASI
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-sky-50 text-[#0084D1] border border-sky-200 whitespace-nowrap shadow-2xs">
+            <Clock className="w-3 h-3 animate-spin text-[#0084D1]" />
+            <span>Pairing</span>
           </span>
         );
       case 'connecting':
         return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 shadow-2xs">
-            <Clock className="w-3.5 h-3.5 animate-spin text-amber-600" />
-            CONNECTING...
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap shadow-2xs">
+            <Clock className="w-3 h-3 animate-spin text-amber-600" />
+            <span>Menghubungkan</span>
           </span>
         );
       case 'error':
         return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs">
-            <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
-            ERROR
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap shadow-2xs">
+            <AlertCircle className="w-3 h-3 text-rose-600" />
+            <span>Error</span>
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs">
-            <span className="w-2 h-2 rounded-full bg-slate-400"></span>
-            IDLE / DISCONNECTED
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200/90 whitespace-nowrap shadow-2xs hover:bg-slate-200/60 transition-colors">
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+            <span>Offline</span>
           </span>
         );
     }
@@ -88,10 +99,53 @@ export const DesktopTopNav: React.FC<DesktopTopNavProps> = ({
   };
 
   return (
-    <header className="bg-white border-b border-slate-200 sticky top-0 z-30 h-16 px-6 flex items-center justify-between shadow-2xs">
-      {/* Kiri: Judul Halaman / Breadcrumb */}
-      <div className="flex items-center gap-3">
-        <div>
+    <header className="bg-white border-b border-slate-200 sticky top-0 z-30 h-14 sm:h-16 px-3.5 sm:px-6 flex items-center justify-between shadow-2xs">
+      {/* Kiri: Tombol Hamburger Mobile / Toggle Sidebar Desktop + Breadcrumb */}
+      <div className="flex items-center gap-2.5 sm:gap-3">
+        {/* Tombol Menu Hamburger khusus Mobile (< lg) */}
+        {onOpenMobileMenu && (
+          <button
+            type="button"
+            onClick={onOpenMobileMenu}
+            className="lg:hidden w-9 h-9 rounded-xl bg-slate-50 hover:bg-sky-50 text-slate-700 hover:text-[#0084D1] border border-slate-200 flex items-center justify-center transition cursor-pointer active:scale-95"
+            aria-label="Buka Menu Navigasi"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+        )}
+
+        {/* Brand Monogram & Judul Toko Mobile */}
+        <div className="flex items-center gap-2 lg:hidden">
+          <div className="w-7.5 h-7.5 rounded-lg bg-gradient-to-tr from-[#0084D1] to-sky-400 text-white font-bold text-xs flex items-center justify-center shadow-xs">
+            {(storeName || 'W').trim().charAt(0).toUpperCase()}
+          </div>
+          <div className="flex flex-col">
+            <h1 className="text-xs font-bold text-slate-900 leading-tight truncate max-w-[130px] sm:max-w-[200px]">
+              {storeName || 'Wanzt Store'}
+            </h1>
+            <span className="text-[10px] text-slate-400 leading-tight truncate">
+              {selectedTab === 'tab02' ? 'SMM' : selectedTab === 'tab03' ? 'Top Up' : selectedTab}
+            </span>
+          </div>
+        </div>
+
+        {/* Tombol Toggle Sidebar Desktop (>= lg) */}
+        {onToggleSidebar && (
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            className="hidden lg:flex w-9 h-9 rounded-xl bg-slate-50 hover:bg-sky-50 text-slate-600 hover:text-[#0084D1] border border-slate-200 hover:border-sky-300 items-center justify-center transition cursor-pointer shadow-2xs group"
+            title={isSidebarCollapsed ? 'Buka Sidebar' : 'Tutup Sidebar'}
+          >
+            {isSidebarCollapsed ? (
+              <PanelLeftOpen className="w-4.5 h-4.5 transition-transform group-hover:scale-110" />
+            ) : (
+              <PanelLeftClose className="w-4.5 h-4.5 transition-transform group-hover:scale-110" />
+            )}
+          </button>
+        )}
+
+        <div className="hidden lg:block">
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-slate-400">Dashboard</span>
             <span className="text-xs text-slate-300">/</span>

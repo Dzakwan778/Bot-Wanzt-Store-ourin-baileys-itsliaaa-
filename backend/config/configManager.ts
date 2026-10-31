@@ -131,9 +131,9 @@ export function saveStoreInfo(update: Partial<StoreInfoConfig>): StoreInfoConfig
         web_link, telegram_bot, wa_link, updated_at
       ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      merged.storeName,
-      merged.ownerName,
-      merged.ownerNumber,
+      merged.storeName || '',
+      merged.ownerName || '',
+      merged.ownerNumber || '',
       merged.adminName || '',
       merged.adminNumber || '',
       merged.webLink || '',

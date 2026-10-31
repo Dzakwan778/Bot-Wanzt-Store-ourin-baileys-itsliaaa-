@@ -14,7 +14,6 @@
     "axios": "^1.20.0",
     "cors": "^2.8.5",
     "express": "^4.21.2",
-    "ourin-baileys": "^9.0.21",
     "pino": "^10.4.0",
     "qrcode": "^1.5.4",
     "better-sqlite3": "^11.8.1"

@@ -32,8 +32,9 @@ import { LiveTerminal } from './components/terminal/LiveTerminal';
 import { TabContentRenderer } from './components/tabs/TabContentRenderer';
 
 export default function App() {
-  const [selectedTab, setSelectedTab] = useState<string>('Store Info');
+  const [selectedTab, setSelectedTab] = useState<string>('Info Profil');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -70,12 +71,9 @@ export default function App() {
   const buttonModal = useButtonModal(
     storeConfig.menuButtons,
     storeConfig.setMenuButtons,
-    (updatedButtons) =>
-      storeConfig.syncConfigToServer(
-        storeConfig.menuOutputText,
-        updatedButtons,
-        storeConfig.listOutputText
-      ),
+    (_updatedButtons) => {
+      // Tidak disimpan otomatis ke server; konfigurasi hanya disimpan ketika pengguna menekan tombol simpan
+    },
     showToast
   );
 
@@ -118,7 +116,10 @@ export default function App() {
       {/* 1. Desktop Sidebar (Left) */}
       <DesktopSidebar
         selectedTab={selectedTab}
-        setSelectedTab={setSelectedTab}
+        setSelectedTab={(tab) => {
+          setSelectedTab(tab);
+          setIsMobileMenuOpen(false);
+        }}
         isCollapsed={isSidebarCollapsed}
         setIsCollapsed={setIsSidebarCollapsed}
         botData={botConn.botData}
@@ -127,6 +128,9 @@ export default function App() {
         transactionsCount={transactionsState.transactions.length}
         groupsCount={groupsData.groups.filter((g) => g.enabled).length}
         username={auth.user?.username}
+        isMobileOpen={isMobileMenuOpen}
+        onCloseMobile={() => setIsMobileMenuOpen(false)}
+        onLogout={auth.logout}
       />
 
       {/* 2. Main Content Area (Right) */}
@@ -139,92 +143,37 @@ export default function App() {
           lunasQrisBalance={lunasQrisData.lunasQrisBalance}
           onRefreshProfile={xaviera.fetchXavieraProfile}
           onRefreshLunasQris={() => lunasQrisData.fetchLunasQrisBalance(true)}
-          onNavigateToConnection={() => setSelectedTab('Connection')}
+          onNavigateToConnection={() => {
+            setSelectedTab('Connection');
+            setIsMobileMenuOpen(false);
+          }}
           username={auth.user?.username}
           onLogout={auth.logout}
           showToast={showToast}
+          isSidebarCollapsed={isSidebarCollapsed}
+          onToggleSidebar={() => setIsSidebarCollapsed((prev) => !prev)}
+          onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
+          storeName={storeConfig.storeInfo?.storeName}
         />
 
         {/* Main Workspace */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
-          {/* Tampilan Khusus Tab Connection: Panel Koneksi + Live Terminal + Pengaturan API */}
-          {selectedTab === 'Connection' || selectedTab === 'tab06' ? (
-            <div className="space-y-6">
-              <StoreProfileHeader
-                storeInfo={storeConfig.storeInfo}
-                xavieraProfile={xaviera.xavieraProfile}
-                lunasQrisBalance={lunasQrisData.lunasQrisBalance}
-                onRefreshProfile={xaviera.fetchXavieraProfile}
-                onRefreshLunasQris={() => lunasQrisData.fetchLunasQrisBalance(true)}
-                onNavigateToConnection={() => setSelectedTab('Connection')}
-                showToast={showToast}
-              />
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                <div className="lg:col-span-5 space-y-6">
-                  <WhatsAppConnectionPanel
-                    botData={botConn.botData}
-                    phone={botConn.phone}
-                    setPhone={botConn.setPhone}
-                    customCode={botConn.customCode}
-                    setCustomCode={botConn.setCustomCode}
-                    loading={botConn.loading}
-                    copied={botConn.copied}
-                    onStartPairing={botConn.handleStartPairing}
-                    onStop={botConn.handleStop}
-                    onReset={botConn.handleReset}
-                    onCopyCode={botConn.handleCopyCode}
-                  />
-                </div>
-                <div className="lg:col-span-7 space-y-6">
-                  <LiveTerminal logs={botConn.botData.logs} />
-                  <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
-                    <TabContentRenderer
-                      selectedTab="Connection"
-                      storeConfig={storeConfig}
-                      xaviera={xaviera}
-                      groupsData={groupsData}
-                      buttonModal={buttonModal}
-                      botConn={botConn}
-                      transactionsState={transactionsState}
-                      pricingState={pricingState}
-                      promosState={promosState}
-                      showToast={showToast}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            /* Tampilan Tab Lainnya: Luas, Nyaman, dan Modern */
-            <div className="space-y-6">
-              {selectedTab === 'Store Info' && (
-                <StoreProfileHeader
-                  storeInfo={storeConfig.storeInfo}
-                  xavieraProfile={xaviera.xavieraProfile}
-                  lunasQrisBalance={lunasQrisData.lunasQrisBalance}
-                  onRefreshProfile={xaviera.fetchXavieraProfile}
-                  onRefreshLunasQris={() => lunasQrisData.fetchLunasQrisBalance(true)}
-                  onNavigateToConnection={() => setSelectedTab('Connection')}
-                  showToast={showToast}
-                />
-              )}
-
-              <div className="bg-white border border-slate-200/90 rounded-2xl p-5 sm:p-6 shadow-2xs">
-                <TabContentRenderer
-                  selectedTab={selectedTab}
-                  storeConfig={storeConfig}
-                  xaviera={xaviera}
-                  groupsData={groupsData}
-                  buttonModal={buttonModal}
-                  botConn={botConn}
-                  transactionsState={transactionsState}
-                  pricingState={pricingState}
-                  promosState={promosState}
-                  showToast={showToast}
-                />
-              </div>
-            </div>
-          )}
+        <main className="flex-1 p-3 sm:p-5 lg:p-8 max-w-7xl w-full mx-auto space-y-4 sm:space-y-6">
+          <div className="bg-white border border-slate-200/90 rounded-2xl p-3.5 sm:p-6 shadow-2xs">
+            <TabContentRenderer
+              selectedTab={selectedTab}
+              setSelectedTab={setSelectedTab}
+              storeConfig={storeConfig}
+              xaviera={xaviera}
+              groupsData={groupsData}
+              buttonModal={buttonModal}
+              botConn={botConn}
+              transactionsState={transactionsState}
+              pricingState={pricingState}
+              promosState={promosState}
+              lunasQrisData={lunasQrisData}
+              showToast={showToast}
+            />
+          </div>
         </main>
 
         {/* 5. Modal Popup: Add & Edit Button */}
