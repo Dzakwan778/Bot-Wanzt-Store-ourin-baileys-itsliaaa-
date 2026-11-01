@@ -44,7 +44,7 @@ export const Navbar: React.FC<NavbarProps> = ({ botData, username, onLogout }) =
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
             <span className="w-2 h-2 rounded-full bg-slate-400"></span>
-            IDLE / DISCONNECTED
+            OFFLINE
           </span>
         );
     }

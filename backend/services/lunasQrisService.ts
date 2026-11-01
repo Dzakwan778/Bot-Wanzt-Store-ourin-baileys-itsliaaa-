@@ -63,7 +63,10 @@ export async function getLunasQrisBalance(
     return { success: false, balance: 0, balanceHold: 0, error: 'API Key LunasQRIS belum diisi' };
   }
 
-  const cleanBase = (baseUrl?.trim() || DEFAULT_LUNASQRIS_BASE_URL).replace(/\/+$/, '');
+  const cleanBase = (baseUrl?.trim() || DEFAULT_LUNASQRIS_BASE_URL)
+    .replace(/\/+$/, '')
+    .replace(/\/api\/v1\/?$/, '')
+    .replace(/\/api\/?$/, '');
   const url = `${cleanBase}/api/v1/balance`;
 
   try {
@@ -123,7 +126,10 @@ export async function createLunasQrisTransaction(
     throw new Error('Nominal amount transaksi harus lebih besar dari 0.');
   }
 
-  const cleanBase = (baseUrl?.trim() || DEFAULT_LUNASQRIS_BASE_URL).replace(/\/+$/, '');
+  const cleanBase = (baseUrl?.trim() || DEFAULT_LUNASQRIS_BASE_URL)
+    .replace(/\/+$/, '')
+    .replace(/\/api\/v1\/?$/, '')
+    .replace(/\/api\/?$/, '');
   const url = `${cleanBase}/api/v1/transaction/create`;
 
   const payload: any = {
@@ -188,7 +194,10 @@ export async function checkLunasQrisStatus(
     throw new Error('API Key LunasQRIS belum dikonfigurasi.');
   }
 
-  const cleanBase = (baseUrl?.trim() || DEFAULT_LUNASQRIS_BASE_URL).replace(/\/+$/, '');
+  const cleanBase = (baseUrl?.trim() || DEFAULT_LUNASQRIS_BASE_URL)
+    .replace(/\/+$/, '')
+    .replace(/\/api\/v1\/?$/, '')
+    .replace(/\/api\/?$/, '');
   let url = '';
   if (identifier.trxId) {
     url = `${cleanBase}/api/v1/transaction/${encodeURIComponent(identifier.trxId)}`;
@@ -245,7 +254,10 @@ export async function cancelLunasQrisTransaction(
   const cleanKey = apiKey?.trim();
   if (!cleanKey) return { success: false, message: 'API Key tidak valid' };
 
-  const cleanBase = (baseUrl?.trim() || DEFAULT_LUNASQRIS_BASE_URL).replace(/\/+$/, '');
+  const cleanBase = (baseUrl?.trim() || DEFAULT_LUNASQRIS_BASE_URL)
+    .replace(/\/+$/, '')
+    .replace(/\/api\/v1\/?$/, '')
+    .replace(/\/api\/?$/, '');
   const url = `${cleanBase}/api/v1/transaction/cancel`;
 
   try {

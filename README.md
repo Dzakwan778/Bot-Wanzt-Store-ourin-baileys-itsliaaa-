@@ -112,90 +112,64 @@ Wanzt Store menyediakan sistem klaim otomatis untuk refund maupun klaim garansi 
 
 ---
 
-## 📁 Struktur Direktori & Arsitektur Modular
+### 📁 Struktur Direktori & Arsitektur Modular
 
-Untuk mempermudah pemeliharaan (*maintenance*) dan mencegah penumpukan ribuan baris kode, seluruh komponen backend dipecah menjadi modul-modul terpisah dengan tanggung jawab tunggal (*Single Responsibility Principle*):
+Untuk mempermudah pemeliharaan (*maintenance*) dan mencegah penumpukan ribuan baris kode, aplikasi ini menggunakan arsitektur full-stack modular dengan pembagian tanggung jawab yang jelas:
 
 ```text
-├── server/
-│   ├── types/
-│   │   └── bot.types.ts           # Definisi tipe TypeScript, interface data, konstanta prefix & status
-│   ├── config/
-│   │   └── configManager.ts       # Logika pembacaan & penyimpanan berkas konfigurasi database
-│   ├── services/
-│   │   ├── quoteHelper.ts         # Pembangun contextInfo untuk reply / quote pesan pemicu di grup & private
-│   │   ├── xavieraService.ts      # Integrasi API Xaviera Store, katalog produk, dan mapper varian
-│   │   ├── sairiService.ts        # Integrasi API SairiPedia, pembuatan QRIS, cek status, dan auto-polling
-│   │   ├── groupService.ts        # Layanan whitelist grup WhatsApp
-│   │   └── placeholderHelper.ts   # Resolver placeholder variabel teks dinamis ({storeName}, dll.)
-│   ├── messages/
-│   │   ├── menuMessage.ts         # Builder pesan Menu interaktif (tombol quick_reply, URL, Call, Copy, Media)
-│   │   ├── listMessage.ts         # Builder pesan List interaktif (single-select dropdown kategori)
-│   │   ├── carouselMessage.ts     # Builder pesan Carousel kartu horizontal varian (@itsliaaa/baileys)
-│   │   └── adminContactMessage.ts # Builder pesan kontak tunggal vCard Owner & Admin Wanzt Store
-│   ├── handlers/
-│   │   └── messageDispatcher.ts   # Pengurai pesan masuk, routing order QRIS, tombol, dan command
-│   └── botManager.ts              # Core controller / fasad soket (koneksi, auth, auto-reconnect, log)
-├── src/
-│   ├── components/tabs/
-│   │   ├── TabProduk.tsx          # Tampilan katalog produk premium presisi tabel (nama, varian —— -, stok, harga asli, harga jual)
-│   │   └── TabConnection.tsx      # Form konfigurasi API Xaviera Store & Sairi Payment Gateway (QRIS)
-│   ├── App.tsx                    # Dashboard antarmuka web admin (React + Tailwind CSS)
-│   ├── main.tsx                   # Entry point aplikasi frontend
-│   └── media/
-
-│       └── picture/               # Direktori asset gambar thumbnail & menu
-├── commands_config.json           # Konfigurasi pesan, tombol, dan asset media
-├── vite.config.ts                 # Konfigurasi bundler Vite & API middleware server
-├── package.json                   # Dependensi runtime & library engine
-└── tsconfig.json                  # Konfigurasi TypeScript
+├── backend/                # Core logic WhatsApp Bot Engine
+│   ├── types/              # Definisi tipe TypeScript & interface
+│   ├── config/             # Pengelola konfigurasi database JSON
+│   ├── services/           # Layanan integrasi (Xaviera, SairiPedia, WhatsApp)
+│   ├── messages/           # Builder pesan interaktif (Menu, Carousel, List)
+│   ├── handlers/           # Dispatcher event & command pemicu
+│   ├── routes/             # API Endpoints untuk Dashboard Frontend
+│   ├── botManager.ts       # Controller utama siklus hidup bot (Auth, Reconnect)
+│   └── app.ts              # Inisialisasi Express Server
+├── src/                    # Frontend Dashboard (React + Vite)
+│   ├── components/
+│   │   ├── layout/         # Sidebar, TopNav, dan struktur responsif
+│   │   ├── tabs/           # Konten modular per kategori dashboard
+│   │   ├── modals/         # Modal setup toko & interaksi tombol
+│   │   ├── auth/           # Halaman Login & Keamanan
+│   │   ├── connection/     # Panel kontrol koneksi WhatsApp
+│   │   └── terminal/       # Live Log Stream dari backend
+│   ├── hooks/              # Custom hooks untuk state & data fetching
+│   ├── types/              # Interface data frontend
+│   └── App.tsx             # Root component & state management
+├── database/               # Berkas penyimpanan data JSON (Commands, Transaksi, Sesi)
+├── server.ts               # Entry point utama (Vite Middleware + Express)
+├── commands_config.json    # Konfigurasi pesan & tombol dinamis
+└── vite.config.ts          # Konfigurasi bundler & proxy API
 ```
 
-### 🧩 Penjelasan Setiap Modul di `server/`:
+### 📱 Optimasi Responsif & Tablet
 
-1. **`server/types/bot.types.ts`**
-   - Berisi semua deklarasi `interface` (`CommandsConfig`, `WhatsAppButton`, `ProductVariantItem`, `LogEntry`) dan `type` (`BotStatus`, `WhatsAppButtonType`).
-   - Menyimpan konstanta global seperti `ALLOWED_PREFIXES` (`/`, `.`, `!`, `?`, `#`, `$`, `%`, `&`), `DEFAULT_CUSTOM_CODE` (string kosong), dan nama direktori sesi.
+Dashboard ini telah dioptimalkan untuk berbagai ukuran layar dengan strategi breakpoint berikut:
 
-2. **`server/config/configManager.ts`**
-   - Menangani pembacaan dan penulisan konfigurasi bot ke `commands_config.json`.
-   - Menggabungkan konfigurasi default (`DEFAULT_CONFIG`) jika berkas konfigurasi belum ada atau rusak.
+- **Mobile (< 768px)**: Menggunakan navigasi *Drawer Overlay* yang dapat ditarik (*swipe-to-close*) untuk memaksimalkan area kerja.
+- **Tablet (768px - 1279px)**: Menggunakan layout *Desktop Sidebar* namun dalam status **Collapsed** (hanya ikon) secara default untuk memberikan ruang konten yang lebih luas pada layar medium.
+- **Desktop (>= 1280px)**: Sidebar dalam status **Expanded** (Ikon + Teks) secara default untuk aksesibilitas penuh.
+- **Touch-Friendly**: Ukuran ikon dan target klik (CTA) telah disesuaikan agar mudah dioperasikan menggunakan jari pada perangkat tablet dan smartphone.
 
-3. **`server/services/quoteHelper.ts`**
-   - Menyusun objek `contextInfo` resmi WhatsApp untuk *quoted message / reply*.
-   - Mengambil identitas pemicu dari `m.key.participant` (pada grup) atau `m.key.remoteJid` (pada chat pribadi) serta menambahkan `mentionedJid` agar pengguna pemicu di dalam grup mendapatkan notifikasi langsung.
+### 🧩 Penjelasan Setiap Modul di `backend/`:
 
-4. **`server/services/xavieraService.ts`**
-   - Mengelola pengambilan data produk dan varian dari API Xaviera Store.
-   - Menyediakan katalog cadangan (*fallback catalog*) jika API sedang offline.
-   - Mengonversi teks `{daftarProduk}` menjadi daftar kategori berpenomoran rapi.
+1. **`backend/botManager.ts`**
+   - Orkestrator utama koneksi WhatsApp menggunakan Baileys.
+   - Menangani sinkronisasi pairing code, auto-reconnect, dan pengiriman status bot ke frontend via API.
 
-5. **`server/messages/menuMessage.ts`**
-   - Khusus memproses dan mengirimkan pesan `.menu`.
-   - Mendukung pengiriman pesan murni (gambar + teks atau teks saja) tanpa tombol jika daftar tombol kosong (0 tombol).
-   - Memetakan berbagai tipe tombol native flow (`quick_reply`, `cta_url`, `cta_call`, `cta_copy`) jika tombol dikonfigurasi.
-   - Melampirkan media gambar header jika fitur media diaktifkan.
+2. **`backend/services/`**
+   - **xavieraService.ts**: Integrasi produk & stok dari supplier Xaviera.
+   - **sairiService.ts**: Integrasi QRIS Payment Gateway & auto-polling status lunas.
+   - **placeholderHelper.ts**: Mengolah variabel dinamis seperti `{storeName}` dalam pesan bot.
 
-6. **`server/messages/listMessage.ts`**
-   - Khusus menangani pengiriman menu kategori produk dengan format interaktif *single-select dropdown list*.
+3. **`backend/messages/`**
+   - **carouselMessage.ts**: Menyusun kartu produk horizontal interaktif (Carousel) yang eksklusif untuk platform WhatsApp.
+   - **menuMessage.ts**: Builder pesan menu dengan dukungan berbagai tipe tombol native.
 
-7. **`server/messages/carouselMessage.ts`**
-   - Mengombinasikan `@itsliaaa/baileys` (untuk menyusun kartu-kartu varian secara horizontal) dengan relay node `<biz>` native flow `ourin-baileys`.
-   - Menghasilkan thumbnail SVG jika produk belum memiliki gambar spesifik.
+4. **`backend/handlers/messageDispatcher.ts`**
+   - Pusat kendali pesan masuk. Mengenali command, klik tombol, dan navigasi dropdown list.
 
-8. **`server/messages/adminContactMessage.ts`**
-   - Mengirimkan kontak vCard resmi Owner toko (`sendOwnerContactMessage`) berdasarkan data nama dan nomor di tab Store Info.
-   - Mengirimkan kontak vCard resmi Admin toko (`sendAdminContactMessage`). Dilengkapi validasi form opsional: jika nomor admin belum diisi di Store Info, bot secara otomatis membalas dengan pesan informatif `"Informasi tentang admin belum di set pada toko ini"`.
-
-9. **`server/handlers/messageDispatcher.ts`**
-   - Titik masuk penanganan event `messages.upsert`.
-   - Mendeteksi respon klik tombol interaktif, respon dropdown list, maupun ketikan teks biasa.
-   - Menerapkan aturan prefix ketat untuk pesan teks manual dan pengecualian otomatis untuk respon tombol.
-   - Meneruskan setiap perintah ke modul pesan yang bersangkutan dengan menyertakan pesan asli `m` untuk dikutip (*quoted*).
-
-10. **`server/botManager.ts`**
-    - Berfungsi sebagai orkestrator utama (*facade controller*).
-    - Bertanggung jawab atas siklus hidup soket (`start`, `stop`, `reset`), manajemen sesi kredensial (`session_ourin`), auto-reconnect saat status 515 (`restartRequired`), dan streaming log.
 
 ---
 

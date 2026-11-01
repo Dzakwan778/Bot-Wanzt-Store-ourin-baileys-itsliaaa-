@@ -209,3 +209,94 @@ Aplikasi ini mengatur bot WhatsApp toko otomatis dengan fitur:
 - `src/hooks/useXavieraData.ts`: Hook pengambil data produk, SMM, dan game dari Xaviera API.
 - `src/types/dashboard.types.ts`: Definisi interface tipe data dan helper fungsi `detectSmmPlatform`.
 
+
+
+---
+
+[14.0] - PERBAIKAN FORMATTING NOMOR VCARD, COMMAND LIST, DAN HEADER CAROUSEL
+
+- Tanggal: 2026-11-01 18:57
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 1.0
+
+Pekerjaan yang Dilakukan:
+1. Menambahkan fungsi helper `normalizeIndonesianPhone` pada `backend/services/placeholderHelper.ts` untuk menormalisasi seluruh format nomor telepon lokal Indonesia (08..., 8..., +628..., 628...) menjadi format kode negara standar `628...`.
+2. Menerapkan `normalizeIndonesianPhone` pada vCard Owner, Admin, dan Invoice Admin di `backend/messages/adminContactMessage.ts`, serta tombol interaksi kontak vCard di `backend/handlers/messageDispatcher.ts`.
+3. Memperbaiki logika `backend/messages/listMessage.ts` agar pesan command List 100% mengikuti template pengguna:
+   - Jika template kustom tidak menyertakan tag `{daftarProduk}`, bot tidak lagi memaksakan penggabungan teks daftar produk panjang dan kalimat instruksi bawah.
+   - Menghapus judul hardcode `"{storeName} - Katalog Produk"` dari field `title` sehingga WhatsApp tidak lagi memunculkan teks judul paksaan di atas template pengguna.
+4. Memperbaiki `backend/messages/carouselMessage.ts` dengan mengosongkan properti `title` dan `subtitle` pada `cardHeader`, sehingga WhatsApp tidak lagi menampilkan nama varian dan kategori di atas baris pertama template teks pengguna.
+
+File yang Diubah:
+- "backend/services/placeholderHelper.ts" - Menambahkan helper `normalizeIndonesianPhone`.
+- "backend/messages/adminContactMessage.ts" - Normalisasi nomor telepon vCard owner, admin, dan invoice admin.
+- "backend/handlers/messageDispatcher.ts" - Normalisasi nomor telepon tombol vCard menu interaktif.
+- "backend/messages/listMessage.ts" - Penyesuaian output template kustom dan penghapusan title hardcode.
+- "backend/messages/carouselMessage.ts" - Pengosongan title & subtitle header kartu carousel.
+
+Alasan Perubahan:
+Menghilangkan ketidaksesuaian respon bot WhatsApp dengan preferensi pengguna pada dashboard: vCard tanpa awalan negara +62, teks sisipan judul dan daftar produk yang tidak diminta pada command List, dan duplikasi nama varian/kategori di atas template kartu Carousel.
+
+Hasil:
+1. vCard nomor admin yang diinput sebagai `82173515807` kini otomatis terkirim dengan format nomor `+6282173515807` (`waid=6282173515807`).
+2. Command List merespon persis sesuai template teks pengguna tanpa judul paksaan dan tanpa daftar produk jika `{daftarProduk}` tidak dicantumkan.
+3. Kartu Carousel menampilkan teks langsung dimulai dari `*{storeName}*` sesuai konfigurasi dashboard.
+4. Kompilasi TypeScript dan linting lulus 100% tanpa error.
+
+Kendala:
+Tidak ada.
+
+---
+
+[15.0] - PENGHAPUSAN FILE DATABASE JSON USANG DAN CLEANUP KONFIGURASI
+
+- Tanggal: 2026-11-01 19:25
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 2.0
+
+Pekerjaan yang Dilakukan:
+1. Melakukan audit komprehensif pada folder `/database/` dan `/backend/database/` untuk memverifikasi apakah ada service yang masih menggunakan file JSON.
+2. Memastikan seluruh pembacaan dan penulisan data (`auth`, `store_info`, `api_config`, `commands_config`, `group_whitelist`, `transactions`, `pricing_config`, `variant_pricing`, `category_pricing`, `promo_codes`) telah 100% menggunakan SQLite di `/database/bot.db` (WAL mode).
+3. Menghapus seluruh file JSON database usang di `/database/`:
+   - `api_config.json`
+   - `command_carousel.json`
+   - `command_invoice.json`
+   - `command_list.json`
+   - `command_menu.json`
+   - `groups_config.json`
+   - `store_info.json`
+   - `transactions.json`
+4. Menghapus seluruh file JSON database usang di `/backend/database/`:
+   - `api_config.json`
+   - `auth.json`
+   - `command_carousel.json`
+   - `command_invoice.json`
+   - `command_list.json`
+   - `command_menu.json`
+   - `groups_config.json`
+   - `store_info.json`
+   - `transactions.json`
+5. Mempertahankan file aktif utama:
+   - `/database/bot.db` beserta WAL index (`bot.db-shm`, `bot.db-wal`) sebagai database aktif SQLite.
+   - `/backend/database/sqlite.ts` sebagai modul TypeScript driver SQLite.
+6. Menghapus export konstanta lama `CONFIG_FILE = 'commands_config.json'` di `backend/types/bot.types.ts` dan import-nya di `backend/config/configManager.ts`.
+7. Menjalankan `compile_applet` dan `lint_applet` untuk memastikan tidak ada import rusak atau runtime error.
+
+File yang Diubah:
+- "backend/types/bot.types.ts" - Menghapus export konstanta usang CONFIG_FILE.
+- "backend/config/configManager.ts" - Menghapus import CONFIG_FILE.
+- "backend/handlers/messageDispatcher.ts" - Memperbarui komentar keterangan database ke SQLite tabel group_whitelist.
+- "database/*.json" - 8 file JSON usang dihapus.
+- "backend/database/*.json" - 9 file JSON usang dihapus.
+
+Alasan Perubahan:
+File JSON tersebut adalah peninggalan sebelum migrasi ke SQLite. Menghapusnya membersihkan folder, mencegah redundansi, dan memastikan tidak ada kebingungan antara data aktif di SQLite dan file statis usang.
+
+Hasil:
+1. Folder `/database/` kini bersih dan hanya berisi database aktif: `bot.db`, `bot.db-shm`, dan `bot.db-wal`.
+2. Folder `/backend/database/` kini hanya berisi file kode aktif: `sqlite.ts`.
+3. Seluruh fitur dashboard dan bot WhatsApp tetap beroperasi normal menggunakan SQLite.
+4. Build dan typecheck lulus 100% tanpa error.
+
+Kendala:
+Tidak ada.

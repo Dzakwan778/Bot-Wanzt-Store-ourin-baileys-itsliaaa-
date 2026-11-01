@@ -6,7 +6,7 @@ import { sendListInteractiveMessage } from '../messages/listMessage.ts';
 import { sendProductVariantsCarousel } from '../messages/carouselMessage.ts';
 import { sendAdminContactMessage, sendOwnerContactMessage, sendInvoiceAdminContactMessage } from '../messages/adminContactMessage.ts';
 import { isKnownProduct, checkXavieraBalance, DEFAULT_CATALOG } from '../services/xavieraService.ts';
-import { resolvePlaceholders } from '../services/placeholderHelper.ts';
+import { resolvePlaceholders, normalizeIndonesianPhone } from '../services/placeholderHelper.ts';
 import { loadGroupsConfig } from '../services/groupService.ts';
 import { createLunasQrisTransaction, startLunasQrisPolling } from '../services/lunasQrisService.ts';
 import { recordTransaction, updateTransactionStatus } from '../services/transactionManager.ts';
@@ -88,7 +88,7 @@ export async function dispatchIncomingMessages(
     remoteJid = deps.resolveTargetJid(remoteJid);
 
     // Sistem Whitelist Grup: Jika pesan berasal dari grup WhatsApp (@g.us),
-    // periksa apakah grup ini aktif di toggle whitelist database/groups_config.json
+    // periksa apakah grup ini aktif di toggle whitelist SQLite (tabel group_whitelist)
     const isGroup = remoteJid.endsWith('@g.us');
     if (isGroup) {
       const toggledGroups = loadGroupsConfig();
@@ -587,7 +587,7 @@ export async function dispatchIncomingMessages(
           ((b.callPhoneNumber && b.callPhoneNumber.replace(/[^0-9]/g, '') === rawNum) || b.id === rawNum)
       );
       const targetName = matchedBtn?.callTargetName || 'Admin Wanzt Store';
-      const cleanNum = (matchedBtn?.callPhoneNumber || rawNum).replace(/[^0-9]/g, '') || '6283861276608';
+      const cleanNum = normalizeIndonesianPhone(matchedBtn?.callPhoneNumber || rawNum) || '6283861276608';
 
       deps.addLog('info', `📇 Tombol vCard ditekan oleh ${senderName}. Mengirim kartu kontak ${targetName} (${cleanNum})...`);
 

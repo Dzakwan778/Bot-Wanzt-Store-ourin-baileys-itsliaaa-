@@ -12,6 +12,21 @@ export interface VariantPlaceholderContext {
 }
 
 /**
+ * Normalisasi nomor telepon Indonesia menjadi format kode negara standar tanpa '+' (contoh: 6282173515807)
+ */
+export function normalizeIndonesianPhone(raw: string | number | undefined | null): string {
+  if (!raw) return '';
+  let clean = String(raw).replace(/[^0-9]/g, '');
+  if (!clean) return '';
+  if (clean.startsWith('08')) {
+    clean = '62' + clean.slice(1);
+  } else if (clean.startsWith('8')) {
+    clean = '62' + clean;
+  }
+  return clean;
+}
+
+/**
  * Menggantikan seluruh placeholder dinamis dari data Store Info, Varian Produk, dan Transaksi Invoice.
  * Kompatibel dengan semua jenis output teks, tombol, maupun footer di seluruh command.
  */

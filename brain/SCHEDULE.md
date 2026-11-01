@@ -170,3 +170,80 @@ Berikut adalah urutan roadmap bertahap yang telah disepakati untuk pengembangan 
 - **Tujuan:** Mengintegrasikan `@google/genai` untuk asisten CS cerdas yang memahami pertanyaan pembeli santai di WhatsApp dan otomatis merekomendasikan produk relevan.
 
 
+
+
+---
+
+[2.0] - PERBAIKAN FORMATTING PESAN BOT WHATSAPP (VCARD, COMMAND LIST, DAN CAROUSEL)
+
+- Tanggal: 2026-11-01 18:55
+- Status: Completed
+
+Tujuan:
+Menyelesaikan 3 permasalahan teknis terkait formatting respon bot WhatsApp:
+1. Normalisasi otomatis nomor telepon admin/owner (+62) pada vCard.
+2. Penyesuaian output teks command List agar 100% menghormati template kustom pengguna tanpa teks hardcode atau pemaksaan daftar produk.
+3. Penyesuaian header kartu Carousel agar nama varian dan kategori tidak muncul mendahului template teks pengguna.
+
+Rencana:
+1. Menyiapkan catatan implementasi lengkap di `brain/LANGKAH_IMPLEMENTASI.md`.
+2. Membuat fungsi pembantu normalisasi nomor telepon Indonesia di backend.
+3. Memperbaiki penyusunan vCard di `/backend/messages/adminContactMessage.ts` untuk owner, admin, dan invoice admin.
+4. Memperbaiki logika `listMessage.ts` agar tidak memaksakan `{daftarProduk}`, teks instruksi, dan title hardcode.
+5. Memperbaiki `cardHeader` di `/backend/messages/carouselMessage.ts` agar `title` dan `subtitle` tidak menimpa bagian atas template teks pengguna.
+6. Menguji kompilasi dengan `compile_applet` dan mencatat hasil di `brain/PROGRESS.md`.
+
+Hasil yang Diharapkan:
+Seluruh respon bot WhatsApp tampil rapi, konsisten, dan 100% sesuai dengan konfigurasi yang diatur pengguna di dashboard.
+
+---
+
+[3.0] - PEMBERSIHAN FILE DATABASE JSON USANG PASCA MIGRASI SQLITE
+
+- Tanggal: 2026-11-01 19:16
+- Status: Completed
+
+Tujuan:
+Menghapus seluruh file database `.json` usang pada folder `/database/` dan `/backend/database/` yang sudah tidak lagi digunakan setelah migrasi penuh ke SQLite (`bot.db`).
+
+Rencana:
+1. Menyiapkan catatan implementasi teknis di `brain/LANGKAH_IMPLEMENTASI.md`.
+2. Menghapus file JSON usang di `/database/` (`api_config.json`, `command_carousel.json`, `command_invoice.json`, `command_list.json`, `command_menu.json`, `groups_config.json`, `store_info.json`, `transactions.json`).
+3. Menghapus file JSON usang di `/backend/database/` (`api_config.json`, `auth.json`, `command_carousel.json`, `command_invoice.json`, `command_list.json`, `command_menu.json`, `groups_config.json`, `store_info.json`, `transactions.json`).
+4. Memastikan file aktif tetap utuh: `/backend/database/sqlite.ts` dan `/database/bot.db` (beserta WAL file).
+5. Membersihkan unused export konstanta `CONFIG_FILE` di `backend/types/bot.types.ts` dan import di `backend/config/configManager.ts`.
+6. Melakukan verifikasi kompilasi dan linting (`compile_applet` dan `lint_applet`).
+7. Mencatat hasil akhir di `brain/PROGRESS.md` dan memperbarui status rencana.
+
+Hasil yang Diharapkan:
+Folder database rapi dan bersih dari artefak legacy tanpa mempengaruhi integritas data dan fungsionalitas aplikasi.
+
+---
+
+[4.0] - PERANCANGAN ALUR CHECKOUT BOT DENGAN DUKUNGAN KODE PROMO
+
+- Tanggal: 2026-11-01 21:45
+- Status: Planned (Disepakati & Disimpan)
+
+Tujuan:
+Menerapkan alur checkout interaktif berbasis sesi di Chat Pribadi (DM) WhatsApp agar pelanggan dapat memanfaatkan kupon diskon/kode promo sebelum invoice QRIS diterbitkan, tanpa menghambat pembeli yang ingin langsung membayar dengan harga normal.
+
+Rencana yang Disepakati (Opsi 1):
+1. **Trigger Order**: Pelanggan menekan tombol `Order` pada kartu Carousel di Grup atau DM.
+2. **Notifikasi Grup**: Jika order dipicu di grup, bot merespon dengan pemberitahuan singkat bahwa konfirmasi pesanan telah dikirim ke DM pelanggan (menjaga privasi).
+3. **Pesan Ringkasan di DM**: Bot mengirimkan rincian pesanan (Nama Produk, Varian, Harga Normal) disertai 2 Tombol Interaktif Native Flow:
+   - Tombol 1: `[🎟️ Pakai Kode Promo]`
+   - Tombol 2: `[⚡ Lanjut Bayar (Normal)]`
+4. **Sesi Input Kode Promo**:
+   - Jika pembeli memilih `[🎟️ Pakai Kode Promo]`, bot membuka sesi tunggu selama **1 menit 30 detik (90 detik)**.
+   - Pembeli mengetik kode promo di DM.
+   - Bot memvalidasi kode promo menggunakan `validateAndApplyPromo()` di SQLite (memeriksa masa aktif, kuota, kesesuaian varian, minimal transaksi, dan proteksi margin agar tidak memotong modal dasar supplier).
+   - Jika valid: Bot menampilkan rincian potongan diskon lalu membuat invoice QRIS LunasQRIS dengan nominal hemat.
+   - Jika tidak valid / timeout: Bot memberi pesan penjelasan dan opsi coba lagi atau lanjut bayar normal.
+5. **Bayar Langsung**:
+   - Jika pembeli memilih `[⚡ Lanjut Bayar (Normal)]` atau sesi timeout, bot langsung menerbitkan invoice QRIS harga normal.
+
+Hasil yang Diharapkan:
+Alur checkout berjalan interaktif, fleksibel, ramah pengguna, aman dari segi privasi kode kupon di grup, dan siap dieksekusi kapan pun pengguna menginstruksikan.
+
+

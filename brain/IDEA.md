@@ -612,3 +612,56 @@ Jika nanti pengguna menyetujui migrasi, alur teknis penerapannya adalah sebagai 
    - Memanfaatkan `qris_string` untuk membuat gambar QR code beresolusi tinggi langsung di memory, atau mengirim `qr_url` ke chat pribadi pembeli (DM).
    - Memanfaatkan `payment_url` sebagai tombol tautan alternatif (*Native Flow button `cta_url`*) agar pembeli dapat membuka halaman bayar di browser jika ingin melihat timer hitung mundur.
    - Menggunakan sistem polling berkala (tiap 4-5 detik) atau webhook instan untuk mendeteksi `status: "paid"`, lalu mengeksekusi order produk ke Xaviera API dan mengirimkan akun ke DM pembeli.
+
+
+---
+
+[3.0] - ANALISIS FORMAT PROTOKOL PESAN BAILEYS WHATSAPP (VCARD, LIST TITLE, CAROUSEL HEADER)
+
+- Tanggal: 2026-11-01 18:54
+- Sumber: Eksplorasi & Kode Sumber Baileys WhatsApp
+
+Informasi yang Dipelajari:
+1. Normalisasi Nomor Telepon Indonesia untuk vCard:
+   vCard versi 3.0 pada WhatsApp membutuhkan format internasional penuh pada parameter `waid` dan `TEL` (contoh: `waid=6282173515807:+6282173515807`). Jika pengguna menginput nomor lokal (contoh: `82173515807` atau `082173515807`), sistem harus otomatis mengonversi awalan menjadi `628...` agar tautan kartu kontak dapat diklik langsung di WhatsApp.
+
+2. Atribut Judul dan Body pada Pesan Interaktif List WhatsApp:
+   Pada pengiriman pesan `sock.sendMessage(jid, { text, title, footer, buttonText, sections })`, field `title` selalu ditampilkan WhatsApp di posisi paling atas mendahului `text`. Jika `title` diisi statis dengan "{storeName} - Katalog Produk", WhatsApp akan selalu menampilkannya di paling atas terlepas dari isi template teks kustom pengguna. Selain itu, daftar teks produk (`daftarProdukText`) hanya boleh disubstitusikan jika tag `{daftarProduk}` ada dalam template.
+
+3. Atribut Header pada Kartu Pesan Interaktif Carousel WhatsApp:
+   Setiap kartu dalam `carouselMessage.cards` merupakan objek `InteractiveMessage` yang memiliki `header` (`title`, `subtitle`, `imageMessage`) dan `body` (`text`). WhatsApp merender `header.title` dan `header.subtitle` tepat di atas `body.text`. Jika `header.title` diisi `variant` dan `header.subtitle` diisi `category`, maka teks tersebut akan terpampang di atas template body kustom pengguna.
+
+Pemahaman:
+Memisahkan kontrol antara metadata teknis WhatsApp dengan teks kustom pengguna. Field yang tidak diminta oleh pengguna tidak boleh di-hardcode dengan teks buatan sistem.
+
+Potensi Penerapan:
+1. Membuat fungsi pembantu `normalizePhoneNumber(rawNumber)` untuk digunakan pada seluruh pembuatan vCard (Owner, Admin, Invoice Admin).
+2. Memperbarui `listMessage.ts` agar hanya mengisi daftar produk jika tag `{daftarProduk}` ada, serta tidak memaksakan teks title jika pengguna tidak mengaturnya.
+3. Memperbarui `carouselMessage.ts` agar mengosongkan `cardHeader.title` dan `cardHeader.subtitle` jika media gambar telah terpasang, sehingga urutan tampilan murni mengikuti template teks pengguna.
+
+Catatan Tambahan:
+Pastikan pengujian build dan typecheck tetap valid.
+
+---
+
+[4.0] - ANALISIS STATUS FILE DATABASE JSON PASCA MIGRASI SQLITE
+
+- Tanggal: 2026-11-01 19:15
+- Sumber: Eksplorasi & Audit Kode Sumber Backend
+
+Informasi yang Dipelajari:
+1. Status File Database JSON:
+   Seluruh file `.json` di dalam folder `/database/` dan `/backend/database/` (`api_config.json`, `auth.json`, `command_*.json`, `groups_config.json`, `store_info.json`, `transactions.json`) merupakan artefak database lama sebelum sistem dimigrasikan ke SQLite.
+2. Arsitektur Aktif Saat Ini:
+   Seluruh modul backend (`authManager.ts`, `configManager.ts`, `groupService.ts`, `transactionManager.ts`, `sqlite.ts`) membaca dan menulis langsung ke SQLite file tunggal `/database/bot.db` (dengan mode WAL: `bot.db-shm` dan `bot.db-wal`).
+3. File JSON Tidak Lagi Digunakan:
+   Fungsi auto-migrasi `migrateExistingJsonData()` pada `backend/database/sqlite.ts` hanya memeriksa keberadaan file JSON secara aman (`fs.existsSync`) sebagai fallback jika tabel SQLite masih kosong. Mengingat tabel SQLite sudah terisi data lengkap dan berjalan aktif, file-file JSON tersebut sudah 100% usang (stale) dan aman untuk dihapus.
+
+Pemahaman:
+Menghapus file-file JSON lama akan mencegah redundansi data dan menghindari kebingungan antara data aktif di SQLite dengan snapshot statis lama di JSON.
+
+Potensi Penerapan:
+File-file JSON lama dapat dihapus tanpa mengganggu jalannya aplikasi, dengan tetap mempertahankan file kode `backend/database/sqlite.ts` dan database aktif `/database/bot.db*`.
+
+Catatan Tambahan:
+Jangan menghapus `backend/database/sqlite.ts` karena file tersebut adalah modul koneksi dan operasi database SQLite utama.

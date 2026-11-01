@@ -198,8 +198,8 @@ export const TabTransaksi: React.FC<TabTransaksiProps> = ({
           )}
         </div>
 
-        {/* Filter Pills - Responsive Grid Segmented Control on Mobile, Inline Flex on Desktop */}
-        <div className="w-full md:w-auto grid grid-cols-4 md:flex items-center p-1 bg-slate-100/90 rounded-xl border border-slate-200/80 gap-1">
+        {/* Filter Pills - Responsive Scrollable Bar */}
+        <div className="w-full md:w-auto flex items-center p-1 bg-slate-100/90 rounded-xl border border-slate-200/80 gap-1 overflow-x-auto scrollbar-none">
           {(
             [
               { id: 'all', label: 'Semua', count: summary.totalCount },

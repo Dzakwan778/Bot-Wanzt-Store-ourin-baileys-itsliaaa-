@@ -10,7 +10,6 @@ import {
   InvoiceCommandConfig,
   ApiConfig,
   PricingConfig,
-  CONFIG_FILE,
 } from '../types/bot.types.ts';
 
 function resolveDbDir(): string {
@@ -84,7 +83,7 @@ export const DEFAULT_API_CONFIG: ApiConfig = {
   xavieraBaseUrl: 'https://xaviera.store/api',
   lunasQrisApiKey: '',
   lunasQrisSecretKey: '',
-  lunasQrisBaseUrl: 'https://lunasqris.com/api',
+  lunasQrisBaseUrl: 'https://lunasqris.com',
 };
 
 export const DEFAULT_CONFIG: CommandsConfig = {

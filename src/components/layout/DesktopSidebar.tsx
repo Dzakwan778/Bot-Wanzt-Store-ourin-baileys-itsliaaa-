@@ -183,13 +183,13 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({
             type="button"
             onClick={() => handleNavClick(item.id)}
             title={item.label}
-            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+            className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
               isActive
                 ? 'bg-[#0084D1]/12 text-[#0084D1] font-bold shadow-xs'
                 : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
             }`}
           >
-            <Icon className="w-5 h-5 stroke-[1.8]" />
+            <Icon className="w-5.5 h-5.5 stroke-[1.8]" />
           </button>
 
           {/* Floating Tooltip saat collapsed */}
@@ -315,7 +315,7 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsCollapsed(true)}
-                  className="hidden lg:flex w-8.5 h-8.5 rounded-xl text-slate-400 hover:text-slate-800 hover:bg-slate-100 border border-transparent hover:border-slate-200 items-center justify-center transition cursor-pointer shrink-0 ml-1"
+                  className="hidden md:flex w-8.5 h-8.5 rounded-xl text-slate-400 hover:text-slate-800 hover:bg-slate-100 border border-transparent hover:border-slate-200 items-center justify-center transition cursor-pointer shrink-0 ml-1"
                   title="Tutup Sidebar"
                 >
                   <PanelLeftClose className="w-4.5 h-4.5" />
@@ -331,13 +331,13 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({
                 type="button"
                 onClick={() => handleNavClick('Connection')}
                 title={`Status: ${statusBadge.label}`}
-                className={`w-full h-10 rounded-xl border flex items-center justify-center transition-all cursor-pointer shadow-2xs ${
+                className={`w-full h-11 rounded-xl border flex items-center justify-center transition-all cursor-pointer shadow-2xs ${
                   botData.status === 'connected'
                     ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
                     : 'border-sky-200 bg-sky-50 text-[#0084D1] hover:bg-sky-100'
                 }`}
               >
-                <Radio className="w-4 h-4 animate-pulse" />
+                <Radio className="w-5 h-5 animate-pulse" />
               </button>
             ) : (
               <button
@@ -426,19 +426,19 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({
 
   return (
     <>
-      {/* 1. Desktop Persistent Sidebar (>= lg) */}
+      {/* 1. Desktop Persistent Sidebar (>= md) */}
       <aside
-        className={`hidden lg:flex bg-white border-r border-slate-200 h-screen flex-col justify-between select-none lg:sticky lg:top-0 lg:z-30 transition-all duration-300 ${
-          isCollapsed ? 'lg:w-[72px]' : 'lg:w-64'
+        className={`hidden md:flex bg-white border-r border-slate-200 h-screen flex-col justify-between select-none md:sticky md:top-0 md:z-30 transition-all duration-300 ${
+          isCollapsed ? 'md:w-[72px]' : 'md:w-64'
         }`}
       >
         {renderSidebarContent(false)}
       </aside>
 
-      {/* 2. Mobile Drawer Navbar (< lg) dengan Animasi Masuk & Keluar yang Mulus */}
+      {/* 2. Mobile Drawer Navbar (< md) dengan Animasi Masuk & Keluar yang Mulus */}
       <AnimatePresence>
         {isMobileOpen && (
-          <div className="lg:hidden fixed inset-0 z-50 pointer-events-auto">
+          <div className="md:hidden fixed inset-0 z-50 pointer-events-auto">
             {/* Backdrop dengan animasi fade in / fade out */}
             <motion.div
               key="mobile-nav-backdrop"

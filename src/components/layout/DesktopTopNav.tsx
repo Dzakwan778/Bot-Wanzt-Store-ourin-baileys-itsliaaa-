@@ -102,21 +102,21 @@ export const DesktopTopNav: React.FC<DesktopTopNavProps> = ({
     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 h-14 sm:h-16 px-3.5 sm:px-6 flex items-center justify-between shadow-2xs">
       {/* Kiri: Tombol Hamburger Mobile / Toggle Sidebar Desktop + Breadcrumb */}
       <div className="flex items-center gap-2.5 sm:gap-3">
-        {/* Tombol Menu Hamburger khusus Mobile (< lg) */}
+        {/* Tombol Menu Hamburger khusus Mobile (< md) */}
         {onOpenMobileMenu && (
           <button
             type="button"
             onClick={onOpenMobileMenu}
-            className="lg:hidden w-9 h-9 rounded-xl bg-slate-50 hover:bg-sky-50 text-slate-700 hover:text-[#0084D1] border border-slate-200 flex items-center justify-center transition cursor-pointer active:scale-95"
+            className="md:hidden w-10 h-10 rounded-xl bg-slate-50 hover:bg-sky-50 text-slate-700 hover:text-[#0084D1] border border-slate-200 flex items-center justify-center transition cursor-pointer active:scale-95"
             aria-label="Buka Menu Navigasi"
           >
-            <Menu className="w-5 h-5" />
+            <Menu className="w-5.5 h-5.5" />
           </button>
         )}
 
         {/* Brand Monogram & Judul Toko Mobile */}
-        <div className="flex items-center gap-2 lg:hidden">
-          <div className="w-7.5 h-7.5 rounded-lg bg-gradient-to-tr from-[#0084D1] to-sky-400 text-white font-bold text-xs flex items-center justify-center shadow-xs">
+        <div className="flex items-center gap-2 md:hidden">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#0084D1] to-sky-400 text-white font-bold text-xs flex items-center justify-center shadow-xs">
             {(storeName || 'W').trim().charAt(0).toUpperCase()}
           </div>
           <div className="flex flex-col">
@@ -129,23 +129,27 @@ export const DesktopTopNav: React.FC<DesktopTopNavProps> = ({
           </div>
         </div>
 
-        {/* Tombol Toggle Sidebar Desktop (>= lg) */}
+        {/* Tombol Toggle Sidebar Desktop (>= md) */}
         {onToggleSidebar && (
           <button
             type="button"
             onClick={onToggleSidebar}
-            className="hidden lg:flex w-9 h-9 rounded-xl bg-slate-50 hover:bg-sky-50 text-slate-600 hover:text-[#0084D1] border border-slate-200 hover:border-sky-300 items-center justify-center transition cursor-pointer shadow-2xs group"
+            className="hidden md:flex w-10 h-10 rounded-xl bg-slate-50 hover:bg-sky-50 text-slate-600 hover:text-[#0084D1] border border-slate-200 hover:border-sky-300 items-center justify-center transition cursor-pointer shadow-2xs group"
             title={isSidebarCollapsed ? 'Buka Sidebar' : 'Tutup Sidebar'}
           >
             {isSidebarCollapsed ? (
-              <PanelLeftOpen className="w-4.5 h-4.5 transition-transform group-hover:scale-110" />
+              <span className="relative">
+                <PanelLeftOpen className="w-5 h-5 transition-transform group-hover:scale-110" />
+                {/* Dot indicator for bot status on collapsed sidebar toggle */}
+                <span className={`absolute -top-1 -right-1 w-2 h-2 rounded-full border border-white ${botData.status === 'connected' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+              </span>
             ) : (
-              <PanelLeftClose className="w-4.5 h-4.5 transition-transform group-hover:scale-110" />
+              <PanelLeftClose className="w-5 h-5 transition-transform group-hover:scale-110" />
             )}
           </button>
         )}
 
-        <div className="hidden lg:block">
+        <div className="hidden md:block">
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-slate-400">Dashboard</span>
             <span className="text-xs text-slate-300">/</span>

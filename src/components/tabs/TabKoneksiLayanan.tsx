@@ -117,12 +117,17 @@ export const TabKoneksiLayanan: React.FC<TabKoneksiLayananProps> = ({
       showToast('Silakan masukkan API Key LunasQRIS terlebih dahulu.');
       return;
     }
-    setLunasBalance((prev) => ({ ...prev, loading: true, error: null }));
+    const rawBase = localLunasBaseUrl?.trim() || 'https://lunasqris.com';
+    const cleanBase = rawBase
+      .replace(/\/+$/, '')
+      .replace(/\/api\/v1\/?$/, '')
+      .replace(/\/api\/?$/, '');
+
     try {
       const res = await fetch(
         `/api/lunasqris/balance?apikey=${encodeURIComponent(
           keyToCheck
-        )}&baseurl=${encodeURIComponent(localLunasBaseUrl || 'https://lunasqris.com')}`
+        )}&baseurl=${encodeURIComponent(cleanBase)}`
       );
       const data = await res.json();
       if (data.success) {

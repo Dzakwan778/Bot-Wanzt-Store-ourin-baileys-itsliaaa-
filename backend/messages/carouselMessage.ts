@@ -73,7 +73,7 @@ export async function sendProductVariantsCarousel(
     }
   }
 
-  const defaultTemplate = `*Wanzt Store*
+  const defaultTemplate = `*{storeName}*
 
 *{produkName} | {category}*
 
@@ -119,8 +119,8 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
     );
 
     const cardHeader: any = {
-      title: v.variant || productName,
-      subtitle: cat,
+      title: '',
+      subtitle: '',
       hasMediaAttachment: Boolean(uploadedMedia?.imageMessage),
     };
 

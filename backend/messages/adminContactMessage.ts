@@ -1,5 +1,5 @@
 import { CommandsConfig } from '../types/bot.types.ts';
-import { resolvePlaceholders } from '../services/placeholderHelper.ts';
+import { resolvePlaceholders, normalizeIndonesianPhone } from '../services/placeholderHelper.ts';
 
 /**
  * Mengirimkan vCard kontak Owner Toko dari data Store Info
@@ -22,7 +22,7 @@ export async function sendOwnerContactMessage(
   const displayName = resolvePlaceholders(store.ownerName || '{ownerName}', config) || 'Owner Store';
   const orgName = resolvePlaceholders(store.storeName || '{storeName}', config) || 'Wanzt Store';
   const rawNumber = resolvePlaceholders(store.ownerNumber || '{ownerNumber}', config);
-  const cleanNumber = (rawNumber || '').replace(/[^0-9]/g, '');
+  const cleanNumber = normalizeIndonesianPhone(rawNumber);
 
   if (!cleanNumber) {
     try {
@@ -86,7 +86,7 @@ export async function sendAdminContactMessage(
 
   const store = config.storeInfo;
   const rawNumber = store?.adminNumber ? String(store.adminNumber).trim() : '';
-  const cleanNumber = rawNumber.replace(/[^0-9]/g, '');
+  const cleanNumber = normalizeIndonesianPhone(rawNumber);
 
   // Pengecekan form opsional admin: jika form kosong / belum diatur
   if (!cleanNumber) {
@@ -156,7 +156,7 @@ export async function sendInvoiceAdminContactMessage(
 
   const store = config.storeInfo;
   const adminRaw = store?.adminNumber ? String(store.adminNumber).trim() : '';
-  const adminClean = adminRaw.replace(/[^0-9]/g, '');
+  const adminClean = normalizeIndonesianPhone(adminRaw);
 
   // 1. Jika nomor admin diisi di dashboard, kirim vCard Admin
   if (adminClean) {

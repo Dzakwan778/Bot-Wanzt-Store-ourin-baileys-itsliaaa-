@@ -29,10 +29,10 @@ export async function sendListInteractiveMessage(
 
   let rawResponseText = config.listOutputText?.trim() || '';
 
-  if (rawResponseText.includes('{daftarProduk}')) {
-    rawResponseText = rawResponseText.replace(/\{daftarProduk\}/g, daftarProdukText);
-  } else if (rawResponseText) {
-    rawResponseText = `${rawResponseText}\n\n${daftarProdukText}\n\nKetik nama produk yang ingin Anda pesan.`;
+  if (rawResponseText) {
+    if (rawResponseText.includes('{daftarProduk}')) {
+      rawResponseText = rawResponseText.replace(/\{daftarProduk\}/g, daftarProdukText);
+    }
   } else {
     rawResponseText = `Halo kak! Berikut daftar produk aplikasi yang tersedia di {storeName}:\n\n${daftarProdukText}\n\nKetik nama produk yang ingin Anda pesan.`;
   }
@@ -41,7 +41,6 @@ export async function sendListInteractiveMessage(
   const responseText = resolvePlaceholders(rawResponseText, config);
   const rawFooter = config.listFooterText || '{webLink} • Pilih Produk';
   const footerText = resolvePlaceholders(rawFooter, config);
-  const titleText = resolvePlaceholders('{storeName} - Katalog Produk', config);
 
   try {
     const mappedSections = sectionsData.map((sec) => ({
@@ -57,7 +56,6 @@ export async function sendListInteractiveMessage(
       remoteJid,
       {
         text: responseText,
-        title: titleText,
         footer: footerText,
         buttonText: '📋 Pilih Produk',
         sections: mappedSections,

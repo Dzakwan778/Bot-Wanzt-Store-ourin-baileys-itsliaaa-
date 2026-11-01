@@ -33,7 +33,13 @@ import { TabContentRenderer } from './components/tabs/TabContentRenderer';
 
 export default function App() {
   const [selectedTab, setSelectedTab] = useState<string>('Info Profil');
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    // Default collapsed on tablet/small desktop, open on large desktop
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 1280;
+    }
+    return false;
+  });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -157,8 +163,8 @@ export default function App() {
         />
 
         {/* Main Workspace */}
-        <main className="flex-1 p-3 sm:p-5 lg:p-8 max-w-7xl w-full mx-auto space-y-4 sm:space-y-6">
-          <div className="bg-white border border-slate-200/90 rounded-2xl p-3.5 sm:p-6 shadow-2xs">
+        <main className="flex-1 p-4 sm:p-5 md:p-8 max-w-7xl w-full mx-auto space-y-4 sm:space-y-6">
+          <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-6 shadow-2xs">
             <TabContentRenderer
               selectedTab={selectedTab}
               setSelectedTab={setSelectedTab}
