@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 
 function resolveDatabasePath(): string {
   const rootDbDir = path.resolve(process.cwd(), 'database');
@@ -203,6 +204,67 @@ export function initDatabase(): void {
     CREATE INDEX IF NOT EXISTS idx_promo_code ON promo_codes(code);
     CREATE INDEX IF NOT EXISTS idx_promo_variants ON promo_code_variants(promo_id);
   `);
+
+  // 10. Tabel Apartemen (Multi-Tenant Units)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tenants (
+      id TEXT PRIMARY KEY,
+      unit_number TEXT NOT NULL,
+      name TEXT NOT NULL,
+      username TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      salt TEXT NOT NULL,
+      phone_number TEXT DEFAULT '',
+      plan_name TEXT NOT NULL DEFAULT 'Standard',
+      status TEXT NOT NULL DEFAULT 'active',
+      start_date TEXT NOT NULL,
+      expired_date TEXT NOT NULL,
+      max_groups INTEGER NOT NULL DEFAULT 10,
+      notes TEXT DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tenants_status ON tenants(status);
+    CREATE INDEX IF NOT EXISTS idx_tenants_username ON tenants(username);
+    CREATE INDEX IF NOT EXISTS idx_tenants_unit ON tenants(unit_number);
+  `);
+
+  // 11. Tabel Master Admin (Super Admin Pengelola Apartemen)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS master_admin (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      username TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      salt TEXT NOT NULL,
+      iterations INTEGER NOT NULL DEFAULT 100000,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
+  // Inisialisasi unit pertama (Unit 101) jika tabel tenants masih kosong
+  const tenantCount = db.prepare('SELECT COUNT(*) as count FROM tenants').get() as { count: number };
+  if (tenantCount.count === 0) {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = crypto.pbkdf2Sync('admin123', salt, 100000, 64, 'sha512').toString('hex');
+    const now = new Date();
+    const expired = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
+    db.prepare(`
+      INSERT INTO tenants (id, unit_number, name, username, password_hash, salt, phone_number, plan_name, status, start_date, expired_date, max_groups, notes, created_at, updated_at)
+      VALUES ('unit-101', 'Unit 101', 'Wanzt Store Utama', 'admin', ?, ?, '082173515807', 'Enterprise', 'active', ?, ?, 50, 'Unit apartemen utama toko official', ?, ?)
+    `).run(hash, salt, now.toISOString(), expired.toISOString(), now.toISOString(), now.toISOString());
+  }
+
+  // Inisialisasi akun Master Admin default jika belum ada
+  const masterAdminRow = db.prepare('SELECT id FROM master_admin WHERE id = 1').get();
+  if (!masterAdminRow) {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = crypto.pbkdf2Sync('masterwanzt888', salt, 100000, 64, 'sha512').toString('hex');
+    db.prepare(`
+      INSERT INTO master_admin (id, username, password_hash, salt, iterations, updated_at)
+      VALUES (1, 'superadmin', ?, ?, 100000, ?)
+    `).run(hash, salt, new Date().toISOString());
+  }
 
   // Jalankan migrasi data otomatis dari file JSON yang sudah ada
   migrateExistingJsonData();

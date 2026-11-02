@@ -8,11 +8,17 @@ import { transactionRouter } from './routes/transactionRoutes.ts';
 import { mediaRouter } from './routes/mediaRoutes.ts';
 import { pricingRouter } from './routes/pricingRoutes.ts';
 import { promoRouter } from './routes/promoRoutes.ts';
+import { apartmentRouter } from './routes/apartmentRoutes.ts';
+import { adminRouter } from '../admin-backend/routes/adminRoutes.ts';
+import { initMasterDatabase } from '../admin-backend/database/masterSqlite.ts';
+import { initTenantDb } from './database/tenantDbManager.ts';
 import { initDatabase } from './database/sqlite.ts';
 
 export function createServerApp(): Express {
   // Pastikan database SQLite siap
   initDatabase();
+  initMasterDatabase();
+  initTenantDb('t_wanzt');
 
   const app = express();
 
@@ -42,6 +48,8 @@ export function createServerApp(): Express {
   app.use('/api/lunasqris', lunasQrisRouter);
   app.use('/api/transactions', transactionRouter);
   app.use('/api/media', mediaRouter);
+  app.use('/api/apartment', apartmentRouter);
+  app.use('/api/admin', adminRouter);
 
   return app;
 }

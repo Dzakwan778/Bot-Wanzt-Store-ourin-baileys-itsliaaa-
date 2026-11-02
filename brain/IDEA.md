@@ -665,3 +665,93 @@ File-file JSON lama dapat dihapus tanpa mengganggu jalannya aplikasi, dengan tet
 
 Catatan Tambahan:
 Jangan menghapus `backend/database/sqlite.ts` karena file tersebut adalah modul koneksi dan operasi database SQLite utama.
+
+---
+
+[5.0] - ANALISIS & ARSITEKTUR FITUR APARTEMEN (MULTI-TENANT & MASTER ADMIN SAAS)
+
+- Tanggal: 2026-11-01 19:38
+- Sumber: Pengguna & Roadmap Proyek (Tahap 4)
+
+Informasi yang Dipelajari:
+1. Konsep "Fitur Apartemen":
+   Sistem arsitektur Multi-Tenant berbasis analogi apartemen:
+   - Super Admin / Pengelola Apartemen: Memiliki portal Master Admin khusus (`/adminutama` atau portal terproteksi) untuk mengontrol seluruh unit penyewa (tenants).
+   - Unit Apartemen (Tenant): Penyewa bot yang menyewa layanan bot WhatsApp dalam durasi tertentu (misal: 30 hari, 90 hari, 365 hari).
+2. Peran & Hak Akses:
+   - Master Admin:
+     - Membuat unit apartemen / tenant baru (Nama Toko/Penyewa, Username, Password, No WhatsApp, Paket, Durasi Hari Sewa).
+     - Memantau status sewa: Aktif (Active), Kedaluwarsa (Expired), Dibekukan (Suspended).
+     - Menambah / memperpanjang masa sewa (+7 hari, +30 hari, +90 hari, atau tanggal kustom).
+     - Mengubah status suspend / aktifkan kembali.
+     - Reset password akun penyewa atau hapus unit apartemen.
+     - Melihat statistik sewa global (Total Unit, Unit Aktif, Unit Expired, Unit Suspended).
+   - Penyewa (Tenant):
+     - Memiliki portal login sendiri.
+     - Mengelola toko mereka sendiri (Profil Toko, Respon Bot, Harga Produk, Saldo LunasQRIS/Xaviera, Whitelist Grup).
+     - Memiliki sesi WhatsApp tersendiri (*multi-session isolation*).
+     - Jika masa sewa kedaluwarsa atau disuspend oleh Master Admin, dashboard penyewa otomatis terkunci dengan notifikasi "Masa Sewa Unit Apartemen Telah Berakhir - Hubungi Admin Utama untuk Perpanjangan".
+3. Struktur Data SQLite:
+   - Tabel `tenants`: Menyimpan id unit, nama, username, password_hash, salt, no_wa, paket, durasi, tanggal_mulai, tanggal_kedaluwarsa, status, max_groups.
+   - Tabel `master_admin`: Menyimpan kredensial otentikasi aman akun Super Admin.
+   - Data tenant tersinkronisasi dan backward-compatible dengan tenant default (`tenant-default` / unit utama Wanzt Store).
+
+Pemahaman:
+Model ini mengubah bot toko tunggal menjadi platform Multi-Tenant (Software as a Service) siap jual. Pemilik server dapat menyewakan bot WhatsApp ke banyak pedagang lain sekaligus dengan sistem manajemen sewa otomatis.
+
+Potensi Penerapan:
+1. Menyiapkan skema database relasional di SQLite (`tenants` dan `master_admin`).
+2. Membuat backend service & controller untuk autentikasi master admin dan manajemen CRUD tenant.
+3. Menyediakan portal UI Master Admin (`/adminutama` atau tombol akses Super Admin di Dashboard) dengan antarmuka modern, kartu ringkasan sewa, tabel unit apartemen, modal tambah unit, modal perpanjang masa sewa, dan tombol aksi suspend/delete.
+4. Menerapkan middleware validasi masa sewa pada setiap request tenant.
+
+Catatan Tambahan:
+Desain antarmuka harus tetap mematuhi prinsip anti-AI slop (kontras tinggi, WCAG AA, bebas em-dash, tanpa gradient ungu berlebihan, dan responsif di desktop maupun mobile).
+
+---
+
+[6.0] - DESAIN ARSITEKTUR TAHAP 4: MULTI-DOMAIN, STRUKTUR FOLDER TERISOLASI, DAN DATABASE-PER-TENANT (FITUR APARTEMEN)
+
+- Tanggal: 2026-11-01 23:45
+- Sumber: Diskusi Pengguna & Konsensus Arsitektur Perangkat Lunak
+
+Informasi yang Dipelajari:
+1. Pemisahan Domain Mandiri (Multi-Domain / Subdomain Separation):
+   - Dashboard Pengguna / Toko: Berjalan di domain `dashboard.wanma2.my.id`.
+   - Dashboard Master Admin: Berjalan di domain `admin.wanma2.my.id`.
+   - Di server VPS, Nginx Reverse Proxy memisahkan lalu lintas berdasarkan `server_name` menuju antarmuka dan port/layanan masing-masing.
+2. Pemisahan Struktur Folder (Monorepo Multi-App Workspace):
+   - Folder `frontend/` & `backend/`: Khusus melayani logika, handler bot WhatsApp, dan antarmuka web toko penyewa (tenant).
+   - Folder `admin-frontend/` & `admin-backend/`: Khusus melayani logika Super Admin, manajemen lisensi sewa, kontrol proses bot, dan antarmuka Master Admin.
+   - Pemisahan ini menjamin tidak ada kebocoran kode internal/rahasia Master Admin ke dalam bundling JavaScript publik pengguna.
+3. Arsitektur Database-per-Tenant (Isolasi SQLite per Toko):
+   - Tidak menggabungkan data seluruh tenant ke dalam 1 file database tunggal karena berisiko memicu antrean write-lock dan memperlambat pembacaan saat tenant bertambah banyak.
+   - Model Hub-and-Spoke:
+     - `database/master.db`: Database pusat platform yang hanya diakses oleh `admin-backend/`. Berisi tabel `tenants`, `super_admins`, `subscription_logs`, dan `packages`.
+     - `database/tenants/tenant_{tenant_id}.db`: Database fisik mandiri untuk tiap toko penyewa. Berisi tabel operasional toko (`store_config`, `commands_config`, `transactions`, `promo_codes`, `whitelisted_groups`, `pricing_rules`).
+     - `auth_info_baileys/tenant_{tenant_id}/`: Folder kredensial sesi WhatsApp Baileys terisolasi per bot toko.
+4. Fitur Wajib & Alur Kerja Dashboard Master Admin:
+   - Manajemen Tenant: Tabel seluruh penyewa, tambah tenant baru, tombol suspend/bekukan, aktifkan kembali, dan hapus tenant bersih.
+   - Fitur Impersonation ("Login sebagai Tenant"): Akses 1-klik ke dashboard toko penyewa tanpa memerlukan password mereka untuk kebutuhan troubleshooting.
+   - Kontrol Durasi Sewa & Billing: Hitung mundur sisa hari aktif, perpanjangan masa sewa (+7, +30, +365 hari), otomasi auto-expire (bot berhenti jika expired), dan notifikasi penagihan otomatis H-3 via WhatsApp Bot Master.
+   - Multi-Session Bot Manager: Monitoring status koneksi masing-masing bot WhatsApp penyewa, restart instance per-bot, dan reset auth session per-bot tanpa mengganggu tenant lain.
+   - Global Overview Metrics: Total tenant aktif/expired, total volume transaksi platform, dan rekap pendapatan sewa.
+
+Pemahaman:
+Pola Database-per-Tenant pada SQLite merupakan arsitektur kelas industri yang sangat optimal:
+- Zero Concurrency Bottleneck: Masing-masing bot menulis dan membaca database miliknya sendiri tanpa antrean file-lock bersama.
+- Isolasi Keamanan 100%: Secara fisik tidak ada kemungkinan kebocoran data antar penyewa toko.
+- Kemudahan Pemeliharaan: Backup data, migrasi, perbaikan kerusakan, maupun penghapusan tenant dapat dilakukan pada level file (.db) tunggal tanpa risiko mempengaruhi tenant lainnya.
+- Pemisahan subdomain `admin.` dan `dashboard.` mempermudah penerapan lapisan keamanan tambahan (seperti Cloudflare Zero Trust, 2FA, atau IP Whitelist pada portal master).
+
+Potensi Penerapan:
+1. Menyiapkan struktur direktori `admin-frontend/` dan `admin-backend/` berdampingan dengan `frontend/` dan `backend/`.
+2. Membuat database `database/master.db` beserta helper koneksi dinamis `getTenantDb(tenantId)`.
+3. Mengembangkan `botManager` multi-session di backend yang mampu memanajemen lifecycle banyak koneksi Baileys secara paralel.
+4. Menyiapkan template Virtual Host Nginx ganda di `deploy-vps.sh` untuk routing `dashboard.wanma2.my.id` dan `admin.wanma2.my.id`.
+
+Catatan Tambahan:
+- Setiap pembuatan database tenant baru wajib mengaktifkan mode SQLite WAL (`PRAGMA journal_mode = WAL;`) dan `PRAGMA busy_timeout = 5000;`.
+- Middleware autentikasi pada backend tenant wajib memeriksa status `is_active` dan tanggal `expires_at` dari `master.db` sebelum memproses pesan WhatsApp atau akses dashboard.
+
+

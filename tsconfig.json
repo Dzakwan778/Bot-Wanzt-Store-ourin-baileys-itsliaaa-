@@ -17,8 +17,8 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./frontend/src/*"]
     }
   },
-  "include": ["src", "frontend/src", "backend", "server.ts", "vite.config.ts"]
+  "include": ["frontend/src", "admin-frontend/src", "backend", "admin-backend", "server.ts", "vite.config.ts"]
 }

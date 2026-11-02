@@ -15,8 +15,14 @@ export default defineConfig(() => {
         '@': path.resolve(__dirname, 'src'),
       },
     },
+    build: {
+      outDir: path.resolve(__dirname, '../dist'),
+      emptyOutDir: true,
+    },
     server: {
       port: 3000,
+      host: '0.0.0.0',
+      hmr: false,
       watch: {
         ignored: [
           '**/database/**',

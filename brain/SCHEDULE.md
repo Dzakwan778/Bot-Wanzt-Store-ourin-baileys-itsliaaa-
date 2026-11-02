@@ -246,4 +246,72 @@ Rencana yang Disepakati (Opsi 1):
 Hasil yang Diharapkan:
 Alur checkout berjalan interaktif, fleksibel, ramah pengguna, aman dari segi privasi kode kupon di grup, dan siap dieksekusi kapan pun pengguna menginstruksikan.
 
+---
+
+[5.0] - PERSIAPAN & IMPLEMENTASI FITUR APARTEMEN (MULTI-TENANT & PORTAL MASTER ADMIN)
+
+- Tanggal: 2026-11-01 19:39
+- Status: In Progress
+
+Tujuan:
+Mempersiapkan dan mengimplementasikan arsitektur "Fitur Apartemen" (Multi-Tenant & Master Admin Dashboard) agar platform bot WhatsApp dapat menyewakan unit-unit bot ke berbagai pemilik toko/penyewa secara terisolasi, terukur, dan aman.
+
+Rencana:
+1. Skema Database SQLite untuk Apartemen:
+   - Tabel `tenants`: Menyimpan identitas unit, nama toko, username, hash password, salt, no WA penyewa, paket langganan, durasi hari, tanggal mulai, tanggal kedaluwarsa, status (`active`, `expired`, `suspended`), dan kuota grup.
+   - Tabel `master_admin`: Kredensial akun Super Admin pengelola apartemen dengan salt & hash PBKDF2 aman.
+   - Migrasi dan inisialisasi unit awal (Unit 101 - Wanzt Store) agar kompatibel dengan data yang ada.
+2. Backend Apartemen (Service & API Routes):
+   - `backend/services/apartmentManager.ts`: Mengelola validasi status sewa (auto-expire check), CRUD unit tenant, perpanjangan masa sewa, suspensi, dan autentikasi master admin.
+   - `backend/routes/apartmentRoutes.ts`: Endpoint terproteksi untuk master admin login, ambil daftar unit, tambah unit baru, perpanjang masa sewa, toggle suspend, reset password, dan statistik.
+   - Sambungkan route ke `backend/app.ts` (`/api/apartment/*`).
+3. Frontend Master Admin Dashboard ("Portal Apartemen / Kelola Gedung"):
+   - Komponen `src/components/apartment/MasterAdminApartmentPanel.tsx` dan `src/components/apartment/MasterAdminLoginModal.tsx`.
+   - Akses mudah via URL `/adminutama` atau tombol "Portal Apartemen" pada navbar/login page.
+   - Desain UI Anti-AI Slop:
+     - 4 Kartu Metrik Apartemen: Total Unit, Unit Aktif, Unit Kedaluwarsa, Unit Suspended.
+     - Tabel daftar unit apartemen dengan rincian: No Unit, Nama Toko/Penyewa, Username, Kontak WhatsApp, Paket, Masa Berlaku, Sisa Hari, dan Status.
+     - Modal Tambah Unit Apartemen Baru dengan pilihan durasi (30, 60, 90, 365 hari atau custom).
+     - Modal Perpanjang Masa Sewa (+7 hari, +30 hari, +90 hari, +1 tahun).
+     - Tombol Aksi Cepat: Suspend/Aktifkan, Reset Password, Hapus Unit.
+4. Tenant Banner & Layar Masa Sewa:
+   - Banner indikator status masa sewa pada header dashboard penyewa (menampilkan sisa hari sewa).
+   - Layar kunci ramah jika status sewa expired atau suspended, memandu penyewa menghubungi Admin Utama.
+5. Verifikasi:
+   - Uji kompilasi dengan `compile_applet`.
+   - Uji linting dengan `lint_applet`.
+   - Dokumentasi lengkap di `brain/LANGKAH_IMPLEMENTASI.md` dan `brain/PROGRESS.md`.
+
+Hasil yang Diharapkan:
+Platform memiliki sistem manajemen multi-tenant apartemen yang siap pakai, aman, dan mudah dikelola langsung oleh Master Admin tanpa perlu menyentuh database manual.
+
+---
+
+[6.0] - IMPLEMENTASI TAHAP 4: ARSITEKTUR MONOREPO, MULTI-DOMAIN, DAN DATABASE-PER-TENANT
+
+- Tanggal: 2026-11-01 23:48
+- Status: Planned
+
+Tujuan:
+Menerapkan arsitektur lengkap Tahap 4 (Fitur Apartemen Multi-Tenant) sesuai hasil kesepakatan:
+1. Pemisahan folder: `admin-frontend/` & `admin-backend/` (untuk Master Admin) terpisah dari `frontend/` & `backend/` (untuk Toko Pengguna).
+2. Routing multi-domain: `admin.wanma2.my.id` ➔ `admin-frontend/`, `dashboard.wanma2.my.id` ➔ `frontend/` (didukung di development mode via path `/admin` dan deteksi hostname).
+3. Database-per-Tenant: `database/master.db` (Master DB) + `database/tenants/{tenant_id}.db` (Tenant DBs).
+4. Multi-Session Baileys Bot Manager: Setiap tenant memiliki sesi bot independen di `auth_info_baileys/tenant_{tenant_id}/`.
+5. Fitur Lengkap Master Admin: CRUD tenant, perpanjang sewa, suspend/activate, impersonation (1-klik buka toko tenant), kontrol restart/reset bot, dan statistik platform.
+
+Rencana:
+1. Menyiapkan database `database/master.db` dan `admin-backend/database/masterSqlite.ts`.
+2. Menyiapkan database dinamis per-tenant di `backend/database/tenantDbManager.ts`.
+3. Menyiapkan service dan router Master Admin di `admin-backend/`.
+4. Mengembangkan multi-session Baileys manager di `backend/services/multiBotManager.ts`.
+5. Membangun UI Dashboard Master Admin di `admin-frontend/` (React + Tailwind + Lucide).
+6. Mengonfigurasi `server.ts` untuk melayani dua aplikasi (admin & tenant) berdasarkan hostname / path `/admin`.
+7. Menguji kompilasi dan linting, serta mencatat kemajuan di `brain/PROGRESS.md`.
+
+Hasil yang Diharapkan:
+Sistem multi-tenant apartemen beroperasi penuh dengan isolasi database, sesi bot, dan antarmuka mandiri.
+
+
+
 
