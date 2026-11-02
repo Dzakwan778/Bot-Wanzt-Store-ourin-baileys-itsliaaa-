@@ -10,6 +10,8 @@ import { useStoreConfig } from './hooks/useStoreConfig';
 import { useButtonModal } from './hooks/useButtonModal';
 import { useLunasQrisData } from './hooks/useLunasQrisData';
 import { useTransactions } from './hooks/useTransactions';
+import { usePricingConfig } from './hooks/usePricingConfig';
+import { usePromos } from './hooks/usePromos';
 
 // Auth & Modals
 import { LoginPage } from './components/auth/LoginPage';
@@ -19,6 +21,8 @@ import { AddEditButtonModal } from './components/modals/AddEditButtonModal';
 // Layout components
 import { Navbar } from './components/layout/Navbar';
 import { StoreProfileHeader } from './components/layout/StoreProfileHeader';
+import { DesktopSidebar } from './components/layout/DesktopSidebar';
+import { DesktopTopNav } from './components/layout/DesktopTopNav';
 
 // Connection & Terminal components
 import { WhatsAppConnectionPanel } from './components/connection/WhatsAppConnectionPanel';
@@ -28,7 +32,15 @@ import { LiveTerminal } from './components/terminal/LiveTerminal';
 import { TabContentRenderer } from './components/tabs/TabContentRenderer';
 
 export default function App() {
-  const [selectedTab, setSelectedTab] = useState<string>('Store Info');
+  const [selectedTab, setSelectedTab] = useState<string>('Info Profil');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    // Default collapsed on tablet/small desktop, open on large desktop
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 1280;
+    }
+    return false;
+  });
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -65,18 +77,23 @@ export default function App() {
   const buttonModal = useButtonModal(
     storeConfig.menuButtons,
     storeConfig.setMenuButtons,
-    (updatedButtons) =>
-      storeConfig.syncConfigToServer(
-        storeConfig.menuOutputText,
-        updatedButtons,
-        storeConfig.listOutputText
-      ),
+    (_updatedButtons) => {
+      // Tidak disimpan otomatis ke server; konfigurasi hanya disimpan ketika pengguna menekan tombol simpan
+    },
     showToast
   );
 
   // 7. Riwayat Transaksi LunasQRIS
   const transactionsState = useTransactions(showToast);
 
+  // 8. Pengaturan Harga Produk (Markup Margin Rp atau %)
+  const pricingState = usePricingConfig(showToast);
+
+  // 9. Pengaturan Kupon Promo (Diskon Margin APK Premium)
+  const promosState = usePromos(showToast);
+
+  /*
+  // Dinonaktifkan sementara untuk mempermudah perombakan tampilan dashboard
   // Jika sedang memverifikasi sesi login awal dari server
   if (auth.authLoading) {
     return (
@@ -91,6 +108,7 @@ export default function App() {
   if (!auth.isAuthenticated) {
     return <LoginPage onLogin={auth.login} />;
   }
+  */
 
   // Cek apakah 3 data wajib Store Info sudah diisi lengkap
   const isStoreInfoComplete = Boolean(
@@ -100,148 +118,120 @@ export default function App() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-sky-500/20 antialiased flex flex-col">
-      {/* 1. Header & Live Status */}
-      <Navbar
+    <div className="min-h-screen bg-slate-50/70 text-slate-900 font-sans selection:bg-[#0084D1]/20 antialiased flex">
+      {/* 1. Desktop Sidebar (Left) */}
+      <DesktopSidebar
+        selectedTab={selectedTab}
+        setSelectedTab={(tab) => {
+          setSelectedTab(tab);
+          setIsMobileMenuOpen(false);
+        }}
+        isCollapsed={isSidebarCollapsed}
+        setIsCollapsed={setIsSidebarCollapsed}
         botData={botConn.botData}
+        storeInfo={storeConfig.storeInfo}
+        promosCount={promosState.promos.filter((p) => p.isActive).length}
+        transactionsCount={transactionsState.transactions.length}
+        groupsCount={groupsData.groups.filter((g) => g.enabled).length}
         username={auth.user?.username}
+        isMobileOpen={isMobileMenuOpen}
+        onCloseMobile={() => setIsMobileMenuOpen(false)}
         onLogout={auth.logout}
       />
 
-      {/* Main Workspace */}
-      <main className="max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 flex-1 space-y-6">
-        {/* 2. Profil Toko & Informasi Saldo (Xaviera & LunasQRIS Payment Gateway) */}
-        <StoreProfileHeader
-          storeInfo={storeConfig.storeInfo}
+      {/* 2. Main Content Area (Right) */}
+      <div className="flex-1 min-w-0 flex flex-col min-h-screen">
+        {/* Desktop Top Nav */}
+        <DesktopTopNav
+          selectedTab={selectedTab}
+          botData={botConn.botData}
           xavieraProfile={xaviera.xavieraProfile}
           lunasQrisBalance={lunasQrisData.lunasQrisBalance}
           onRefreshProfile={xaviera.fetchXavieraProfile}
           onRefreshLunasQris={() => lunasQrisData.fetchLunasQrisBalance(true)}
-          onNavigateToConnection={() => setSelectedTab('Connection')}
+          onNavigateToConnection={() => {
+            setSelectedTab('Connection');
+            setIsMobileMenuOpen(false);
+          }}
+          username={auth.user?.username}
+          onLogout={auth.logout}
           showToast={showToast}
+          isSidebarCollapsed={isSidebarCollapsed}
+          onToggleSidebar={() => setIsSidebarCollapsed((prev) => !prev)}
+          onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
+          storeName={storeConfig.storeInfo?.storeName}
         />
 
-        {/* 2-Column Grid Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Kolom Kiri: WhatsApp Connection Panel & Kode Display (5 Kolom) */}
-          <div className="lg:col-span-5 space-y-6">
-            <WhatsAppConnectionPanel
-              botData={botConn.botData}
-              phone={botConn.phone}
-              setPhone={botConn.setPhone}
-              customCode={botConn.customCode}
-              setCustomCode={botConn.setCustomCode}
-              loading={botConn.loading}
-              copied={botConn.copied}
-              onStartPairing={botConn.handleStartPairing}
-              onStop={botConn.handleStop}
-              onReset={botConn.handleReset}
-              onCopyCode={botConn.handleCopyCode}
+        {/* Main Workspace */}
+        <main className="flex-1 p-4 sm:p-5 md:p-8 max-w-7xl w-full mx-auto space-y-4 sm:space-y-6">
+          <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-6 shadow-2xs">
+            <TabContentRenderer
+              selectedTab={selectedTab}
+              setSelectedTab={setSelectedTab}
+              storeConfig={storeConfig}
+              xaviera={xaviera}
+              groupsData={groupsData}
+              buttonModal={buttonModal}
+              botConn={botConn}
+              transactionsState={transactionsState}
+              pricingState={pricingState}
+              promosState={promosState}
+              lunasQrisData={lunasQrisData}
+              showToast={showToast}
             />
           </div>
+        </main>
 
-          {/* Kolom Kanan: Live Socket Console & Tab Containers (7 Kolom) */}
-          <div className="lg:col-span-7 space-y-6">
-            {/* 3. Live Socket Terminal Stream */}
-            <LiveTerminal logs={botConn.botData.logs} />
-
-            {/* 4. Tab Container */}
-            <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
-              {/* Tab Navigation Bar */}
-              <div className="border-b border-slate-200 bg-slate-50/70 px-2 sm:px-4 flex items-center gap-1 overflow-x-auto scrollbar-none">
-                {['Store Info', 'Command', 'Produk', 'SMM', 'Top Up', 'Grup', 'Transaksi', 'Connection'].map(
-                  (tabName) => {
-                    const isActive =
-                      selectedTab === tabName ||
-                      (tabName === 'SMM' && selectedTab === 'tab02') ||
-                      (tabName === 'Top Up' && selectedTab === 'tab03') ||
-                      (tabName === 'Grup' && (selectedTab === 'tab04' || selectedTab === 'Grup')) ||
-                      (tabName === 'Transaksi' && (selectedTab === 'tab05' || selectedTab === 'Transaksi'));
-                    return (
-                      <button
-                        key={tabName}
-                        type="button"
-                        onClick={() => setSelectedTab(tabName)}
-                        className={`px-3.5 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 transition-all cursor-pointer ${
-                          isActive
-                            ? 'border-sky-600 text-sky-700 font-semibold bg-white -mb-px'
-                            : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100/60'
-                        }`}
-                      >
-                        {tabName}
-                      </button>
-                    );
-                  }
-                )}
-              </div>
-
-              {/* Tab Content Body */}
-              <div className="p-4 sm:p-5">
-                <TabContentRenderer
-                  selectedTab={selectedTab}
-                  storeConfig={storeConfig}
-                  xaviera={xaviera}
-                  groupsData={groupsData}
-                  buttonModal={buttonModal}
-                  botConn={botConn}
-                  transactionsState={transactionsState}
-                  showToast={showToast}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </main>
-
-      {/* 5. Modal Popup: Add & Edit Button */}
-      <AddEditButtonModal
-        isOpen={buttonModal.isAddButtonModalOpen}
-        onClose={() => {
-          buttonModal.setIsAddButtonModalOpen(false);
-          buttonModal.setEditingButtonId(null);
-        }}
-        editingButtonId={buttonModal.editingButtonId}
-        modalBtnType={buttonModal.modalBtnType}
-        setModalBtnType={buttonModal.setModalBtnType}
-        modalBtnName={buttonModal.modalBtnName}
-        setModalBtnName={buttonModal.setModalBtnName}
-        quickReplyAction={buttonModal.quickReplyAction}
-        setQuickReplyAction={buttonModal.setQuickReplyAction}
-        quickReplyOutput={buttonModal.quickReplyOutput}
-        setQuickReplyOutput={buttonModal.setQuickReplyOutput}
-        urlOutput={buttonModal.urlOutput}
-        setUrlOutput={buttonModal.setUrlOutput}
-        copyOutput={buttonModal.copyOutput}
-        setCopyOutput={buttonModal.setCopyOutput}
-        callTarget={buttonModal.callTarget}
-        setCallTarget={buttonModal.setCallTarget}
-        callPhone={buttonModal.callPhone}
-        setCallPhone={buttonModal.setCallPhone}
-        reminderOutput={buttonModal.reminderOutput}
-        setReminderOutput={buttonModal.setReminderOutput}
-        cancelReminderOutput={buttonModal.cancelReminderOutput}
-        setCancelReminderOutput={buttonModal.setCancelReminderOutput}
-        onSave={buttonModal.handleSaveButton}
-      />
-
-      {/* Pop-up Modal Wajib Isi Store Info (Non-dismissible) */}
-      {!isStoreInfoComplete && (
-        <MandatoryStoreSetupModal
-          initialStoreInfo={storeConfig.storeInfo}
-          onSuccess={(updated) => {
-            storeConfig.setStoreInfo((prev) => ({ ...prev, ...updated }));
-            showToast('Informasi toko berhasil disimpan! Bot siap digunakan.');
+        {/* 5. Modal Popup: Add & Edit Button */}
+        <AddEditButtonModal
+          isOpen={buttonModal.isAddButtonModalOpen}
+          onClose={() => {
+            buttonModal.setIsAddButtonModalOpen(false);
+            buttonModal.setEditingButtonId(null);
           }}
+          editingButtonId={buttonModal.editingButtonId}
+          modalBtnType={buttonModal.modalBtnType}
+          setModalBtnType={buttonModal.setModalBtnType}
+          modalBtnName={buttonModal.modalBtnName}
+          setModalBtnName={buttonModal.setModalBtnName}
+          quickReplyAction={buttonModal.quickReplyAction}
+          setQuickReplyAction={buttonModal.setQuickReplyAction}
+          quickReplyOutput={buttonModal.quickReplyOutput}
+          setQuickReplyOutput={buttonModal.setQuickReplyOutput}
+          urlOutput={buttonModal.urlOutput}
+          setUrlOutput={buttonModal.setUrlOutput}
+          copyOutput={buttonModal.copyOutput}
+          setCopyOutput={buttonModal.setCopyOutput}
+          callTarget={buttonModal.callTarget}
+          setCallTarget={buttonModal.setCallTarget}
+          callPhone={buttonModal.callPhone}
+          setCallPhone={buttonModal.setCallPhone}
+          reminderOutput={buttonModal.reminderOutput}
+          setReminderOutput={buttonModal.setReminderOutput}
+          cancelReminderOutput={buttonModal.cancelReminderOutput}
+          setCancelReminderOutput={buttonModal.setCancelReminderOutput}
+          onSave={buttonModal.handleSaveButton}
         />
-      )}
 
-      {/* Footer */}
-      <footer className="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>&copy; Bot WhatsApp Dashboard</span>
-          <span className="text-slate-400">Manage Your WhatsApp Bot &amp; Be Smart</span>
-        </div>
-      </footer>
+        {/* Pop-up Modal Wajib Isi Store Info (Non-dismissible) */}
+        {!isStoreInfoComplete && (
+          <MandatoryStoreSetupModal
+            initialStoreInfo={storeConfig.storeInfo}
+            onSuccess={(updated) => {
+              storeConfig.setStoreInfo((prev) => ({ ...prev, ...updated }));
+              showToast('Informasi toko berhasil disimpan! Bot siap digunakan.');
+            }}
+          />
+        )}
+
+        {/* Footer */}
+        <footer className="bg-white border-t border-slate-200 py-3.5 px-6 text-xs text-slate-500">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+            <span>&copy; Wanzt Store Dashboard</span>
+            <span className="text-slate-400">WhatsApp Bot Management System</span>
+          </div>
+        </footer>
+      </div>
 
       {/* Toast Notification */}
       {toastMessage && (

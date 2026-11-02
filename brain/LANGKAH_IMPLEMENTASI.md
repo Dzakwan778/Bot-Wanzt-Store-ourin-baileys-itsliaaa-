@@ -263,3 +263,216 @@ Rencana Pengujian:
 
 Hasil yang Diharapkan:
 Tab "Konfirmasi" tampil di Respon Bot, pengaturan tersimpan persisten ke database SQLite, dan bot WhatsApp menjalankan alur checkout interaktif 90 detik dengan dukungan penuh kupon diskon promo.
+
+---
+
+[4.0] - PERBAIKAN WEBSOCKET ERROR PORT 24678 & PENONAKTIFAN HMR VITE
+
+- Tanggal: 2026-11-01 19:28
+- Status: Completed
+Referensi SCHEDULE: 1.0
+
+Tujuan Implementasi:
+Mengatasi pesan error `WebSocket server error: Port 24678 is already in use` dengan menonaktifkan HMR WebSocket pada Vite dev server middleware dan konfigurasi Vite (`server.hmr = false`). Hal ini sesuai dengan batasan environment AI Studio ("HMR: Disabled. Ignore WebSocket errors").
+
+Bagian yang Akan Diubah:
+- "server.ts" - Menambahkan opsi `hmr: false` pada `createViteServer({ server: { middlewareMode: true, hmr: false }, appType: 'spa' })`.
+- "vite.config.ts" - Menambahkan konfigurasi `server.hmr = false`.
+- "frontend/vite.config.ts" - Menambahkan konfigurasi `server.hmr = false`.
+
+Alasan Perubahan:
+Secara default, Vite dev server middleware mencoba membuat server WebSocket untuk Hot Module Replacement (HMR) pada port 24678. Pada environment runtime AI Studio (dan iframe sandbox), HMR dinonaktifkan dan port 24678 seringkali terblokir atau sudah digunakan instance sebelumnya, memicu error log `WebSocket server error: Port 24678 is already in use`.
+
+Strategi Implementasi:
+1. Di `server.ts`:
+   Konfigurasikan instance `createViteServer` dengan `server: { middlewareMode: true, hmr: false }`.
+2. Di `vite.config.ts`:
+   Tambahkan `hmr: false` di dalam blok konfigurasi `server`.
+3. Di `frontend/vite.config.ts`:
+   Tambahkan `hmr: false` di dalam blok konfigurasi `server`.
+4. Jalankan validasi `compile_applet` dan `lint_applet` untuk memastikan sintaks bersih.
+5. Restart server dev agar konfigurasi baru aktif tanpa konflik port WebSocket.
+
+Urutan Pengerjaan:
+1. Perbarui `server.ts`.
+2. Perbarui `vite.config.ts`.
+3. Perbarui `frontend/vite.config.ts`.
+4. Uji kompilasi dengan `compile_applet` dan `lint_applet`.
+5. Restart dev server dengan `restart_dev_server`.
+6. Perbarui status di `brain/LANGKAH_IMPLEMENTASI.md` dan catat hasil di `brain/PROGRESS.md`.
+
+Dampak Perubahan:
+Vite tidak lagi memicu WebSocket server pada port 24678. Log server Express & Vite middleware berjalan bersih tanpa error binding port WebSocket.
+
+Rencana Pengujian:
+1. Menjalankan `compile_applet`.
+2. Menjalankan `lint_applet`.
+3. Menjalankan `restart_dev_server` dan memverifikasi server berjalan bersih di port 3000.
+
+Hasil yang Diharapkan:
+Pesan error `WebSocket server error: Port 24678 is already in use` hilang sepenuhnya dan server berjalan normal.
+
+---
+
+[5.0] - MIGRASI PENUH KE FRONTEND/SRC DAN PENGHAPUSAN FOLDER ROOT /SRC
+
+- Tanggal: 2026-11-01 22:20
+- Status: Completed
+Referensi SCHEDULE: 2.0
+
+Tujuan Implementasi:
+Memusatkan seluruh kode frontend ke direktori `frontend/src/` dan menghapus direktori root `/src/` secara permanen, sehingga struktur proyek bersih dan modular tanpa redundansi atau kebingungan lokasi kode aktif.
+
+Bagian yang Akan Diubah:
+- "frontend/src/**" - Menyinkronkan seluruh file mutakhir dari `/src` ke `/frontend/src`.
+- "frontend/index.html" - Memastikan sinkronisasi metadata title, description, dan entry point script `/src/main.tsx` (terkait root `frontend/`).
+- "vite.config.ts" - Mengatur root Vite ke `path.resolve(__dirname, 'frontend')` dan alias `@` mengarah ke `./frontend/src`.
+- "frontend/vite.config.ts" - Menyelaraskan plugin Tailwind & React serta setting port dan proxy.
+- "server.ts" - Mengatur `root: path.resolve(__dirname, 'frontend')` pada `createViteServer` saat mode development.
+- "package.json" - Memperbarui script `build` (`vite build frontend --outDir ../dist`) dan `lint` (`tsc --noEmit`).
+- "tsconfig.json" - Menghapus `"src"` dari array `"include"` dan mengarahkan path `@/*` ke `"frontend/src/*"`.
+- "/src/**" - Menghapus folder root `/src` setelah verifikasi sukses.
+
+Alasan Perubahan:
+Pengguna meminta agar aplikasi menggunakan `frontend/src` sebagai satu-satunya folder kode frontend, menghilangkan duplikasi `/src` di root, dan memastikan tidak ada fungsionalitas yang hilang atau rusak.
+
+Strategi Implementasi:
+1. Sinkronisasi seluruh file dari `src/` ke `frontend/src/` (termasuk komponen baru `DesktopSidebar`, `DesktopTopNav`, `TabKuponPromo`, `TabSaldo`, `TabConnectionDedicated`, `TabKoneksiLayanan`, `usePricingConfig`, `usePromos`, dll).
+2. Perbarui `server.ts` agar `createViteServer` mengarahkan root ke direktori `frontend`.
+3. Perbarui `vite.config.ts` root agar menetapkan `root: path.resolve(__dirname, 'frontend')` dan output build ke `../dist`.
+4. Perbarui `frontend/index.html` dengan metadata yang selaras.
+5. Perbarui `tsconfig.json` paths dan includes.
+6. Jalankan `compile_applet` dan `lint_applet` untuk memvalidasi kelulusan build 100%.
+7. Hapus folder `/src` di root.
+8. Jalankan `compile_applet` ulang untuk membuktikan build berjalan murni dari `frontend/src`.
+9. Restart server dev dan catat hasil di `brain/PROGRESS.md`.
+
+Urutan Pengerjaan:
+1. Salin seluruh isi `src/` ke `frontend/src/`.
+2. Perbarui konfigurasi `server.ts`, `vite.config.ts`, `tsconfig.json`, `package.json`.
+3. Verifikasi build dengan `compile_applet` dan `lint_applet`.
+4. Hapus folder `/src`.
+5. Uji kompilasi ulang dengan `compile_applet`.
+6. Restart dev server dengan `restart_dev_server`.
+7. Perbarui status di `brain/LANGKAH_IMPLEMENTASI.md` dan `brain/PROGRESS.md`.
+
+Dampak Perubahan:
+Struktur proyek menjadi rapi (`frontend/`, `backend/`, `database/`, `brain/`). Tidak ada lagi kebingungan direktori ganda `/src`.
+
+Rencana Pengujian:
+1. Menjalankan `compile_applet` untuk build frontend.
+2. Menjalankan `lint_applet` untuk type check TypeScript.
+3. Memastikan Vite menyajikan file dari `frontend/src/main.tsx` di port 3000.
+
+Hasil yang Diharapkan:
+Aplikasi berjalan 100% menggunakan `frontend/src`, folder `/src` bersih terhapus, seluruh fungsi berjalan normal tanpa ada regresi.
+
+---
+
+[6.0] - IMPLEMENTASI TAHAP 4: ARSITEKTUR MONOREPO, MULTI-DOMAIN, DAN DATABASE-PER-TENANT (FITUR APARTEMEN)
+
+- Tanggal: 2026-11-01 23:49
+- Status: Completed
+Referensi SCHEDULE: 6.0
+
+Tujuan Implementasi:
+Membangun fondasi dan antarmuka Tahap 4 ("Fitur Apartemen" / Multi-Tenant Platform):
+1. Membuat struktur folder terpisah: `admin-frontend/` & `admin-backend/` berdampingan dengan `frontend/` & `backend/`.
+2. Menerapkan pola Database-per-Tenant menggunakan SQLite: `database/master.db` untuk master platform dan `database/tenants/{tenant_id}.db` untuk setiap toko tenant.
+3. Mengembangkan Multi-Session Baileys Bot Manager yang mendukung koneksi bot WhatsApp mandiri per tenant di `auth_info_baileys/tenant_{tenant_id}/`.
+4. Membangun API backend Super Admin di `admin-backend/`: autentikasi master admin, CRUD unit tenant, perpanjangan sewa (+7/+30/+90/+365 hari), suspend/activate, reset bot session, impersonation token.
+5. Membangun UI Dashboard Master Admin di `admin-frontend/` (Modern, Anti-AI Slop, responsive): ringkasan metrik gedung, tabel tenant, modal tambah tenant, modal perpanjang masa sewa, tombol kontrol status bot, dan impersonation login.
+6. Mengonfigurasi `server.ts` agar menyajikan `admin-frontend/` jika request berasal dari domain `admin.wanma2.my.id` atau path `/admin`, dan menyajikan `frontend/` untuk pengguna toko.
+
+Bagian yang Akan Diubah/Dibuat:
+- "database/master.db" - Database SQLite untuk master admin, tenants, dan paket sewa.
+- "database/tenants/" - Folder untuk database SQLite masing-masing tenant.
+- "admin-backend/database/masterSqlite.ts" - Koneksi & inisialisasi tabel `master.db`.
+- "admin-backend/services/tenantManager.ts" - Logika bisnis manajemen tenant, sewa, dan status.
+- "admin-backend/routes/adminRoutes.ts" - Endpoint REST API Master Admin.
+- "backend/database/tenantDbManager.ts" - Resolver database SQLite dinamis per tenant.
+- "backend/services/multiBotManager.ts" - Multi-session manager untuk Baileys WhatsApp bot.
+- "admin-frontend/**" - Aplikasi React + Tailwind untuk Master Admin.
+- "server.ts" - Routing Express & Vite middleware untuk multi-domain / path `/admin`.
+- "package.json" & "tsconfig.json" - Penyesuaian skrip dan compiler path options.
+
+Alasan Perubahan:
+Pengguna menginstruksikan implementasi penuh Tahap 4 sesuai kesepakatan desain arsitektur (Monorepo multi-app, multi-domain Nginx ready, database-per-tenant, dan multi-session Baileys bot).
+
+Strategi Implementasi:
+1. Inisialisasi `masterSqlite.ts` dan tabel-tabel master (`tenants`, `super_admins`).
+2. Buat `tenantDbManager.ts` untuk menyediakan koneksi DB per-tenant dan migrasikan data awal `bot.db` ke tenant default `t_wanzt`.
+3. Buat service `tenantManager.ts` dan `adminRoutes.ts` di `admin-backend/`.
+4. Buat `multiBotManager.ts` di backend untuk mengelola session per-tenant.
+5. Buat antarmuka `admin-frontend/` lengkap (tabel tenant, modal, kartu statistik, aksi impersonate).
+6. Integrasikan route dan static/vite middleware di `server.ts`.
+7. Jalankan `compile_applet` dan `lint_applet` untuk memastikan build bersih tanpa error.
+8. Update `brain/PROGRESS.md`.
+
+Urutan Pengerjaan:
+1. Catat di `brain/LANGKAH_IMPLEMENTASI.md`.
+2. Buat backend master: `admin-backend/database/masterSqlite.ts`, `admin-backend/services/tenantManager.ts`, `admin-backend/routes/adminRoutes.ts`.
+3. Buat `backend/database/tenantDbManager.ts` dan integrasikan ke `backend/app.ts`.
+4. Buat `backend/services/multiBotManager.ts` multi-session Baileys.
+5. Buat folder `admin-frontend/` (src, components, hooks, index.html, vite.config.ts).
+6. Perbarui `server.ts` untuk melayani `/admin` dan subdomain `admin.*`.
+7. Update `tsconfig.json` dan verifikasi dengan `compile_applet`.
+8. Restart dev server dan dokumentasikan di `brain/PROGRESS.md`.
+
+Dampak Perubahan:
+Aplikasi memiliki platform manajemen sewa bot WhatsApp lengkap, siap menampung banyak penyewa sekaligus dengan isolasi data dan bot 100%.
+
+Rencana Pengujian:
+1. Kompilasi TypeScript dan Vite build melalui `compile_applet`.
+2. Typecheck melalui `lint_applet`.
+3. Uji coba endpoint API `/api/admin/tenants` dan antarmuka `/admin`.
+
+Hasil yang Diharapkan:
+Dashboard Master Admin aktif, terisolasi, terhubung ke master.db, mampu mengelola tenant dan masa sewa, dan bot berjalan multi-session dengan DB per-tenant.
+
+---
+
+[7.0] - PENYESUAIAN VITE DEV SERVER BASE ROUTING UNTUK AKSES MASTER ADMIN DI SANDBOX AISTUDIO
+
+- Tanggal: 2026-11-02 08:05
+- Status: Completed
+Referensi SCHEDULE: 6.0
+
+Tujuan Implementasi:
+Memastikan antarmuka Master Admin (`admin-frontend`) dapat dimuat secara sempurna dan mulus tanpa konflik bundle/asset saat dibuka di lingkungan sandbox AI Studio melalui path `/admin` maupun subdomain produksi `admin.wanma2.my.id`.
+
+Bagian yang Akan Diubah:
+- "server.ts" - Menyesuaikan konfigurasi Vite dev server untuk `admin-frontend` dengan `base: '/admin/'` dan penanganan rewrite URL cerdas pada Express middleware.
+- "admin-frontend/vite.config.ts" - Menetapkan `base: '/admin/'` (atau berbasis env) agar seluruh tag script (`main.tsx`), CSS, dan chunk Vite menyertakan prefix `/admin/`.
+- "frontend/src/components/layout/DesktopTopNav.tsx" - Memastikan tautan tombol "Master Apartemen" mengarah ke `/admin/`.
+- "frontend/src/components/layout/Navbar.tsx" - Menambahkan tombol pintas "Master Apartemen" di header mobile untuk akses responsif.
+
+Alasan Perubahan:
+Ketika browser mengakses URL `/admin` di sandbox, jika `base` tidak diatur ke `/admin/`, tag `<script src="/src/main.tsx">` akan diminta ke root (`/src/main.tsx`), yang menyebabkan Vite dev server pengguna (`frontend/`) merespon alih-alih `admin-frontend/`. Penambahan `base: '/admin/'` memastikan pemisahan 100% request aset kedua aplikasi di port yang sama.
+
+Strategi Implementasi:
+1. Atur `base: '/admin/'` pada `admin-frontend/vite.config.ts`.
+2. Pada `server.ts`, arahkan request `req.path === '/admin'` otomatis ke `/admin/`.
+3. Izinkan `viteAdmin.middlewares` menangani semua request yang diawali `/admin/` secara native tanpa penghapusan prefix yang merusak request nested asset.
+4. Uji coba dengan curl dan pastikan respon HTML dan JS `/admin/src/main.tsx` merujuk ke `admin-frontend`.
+
+Urutan Pengerjaan:
+1. Update `admin-frontend/vite.config.ts`.
+2. Update `server.ts`.
+3. Update `DesktopTopNav.tsx` dan `Navbar.tsx`.
+4. Uji kompilasi dengan `compile_applet`.
+5. Perbarui status di `brain/LANGKAH_IMPLEMENTASI.md` dan catat di `brain/PROGRESS.md`.
+
+Dampak Perubahan:
+Pengguna dapat membuka Dashboard Master secara instan di sandbox dengan mengklik tombol "Master Apartemen" atau mengunjungi URL `/admin/` tanpa kendala layar putih atau bentrok script.
+
+Rencana Pengujian:
+1. Tes endpoint `/admin` dan `/admin/src/main.tsx` menggunakan curl.
+2. Pastikan file JavaScript yang disajikan berasal dari `admin-frontend/src/main.tsx`.
+3. Kompilasi lulus tanpa error linting.
+
+Hasil yang Diharapkan:
+Dashboard Master dapat diakses dengan lancar di AI Studio preview URL via tombol atau path `/admin/`.
+
+
+

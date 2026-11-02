@@ -13,28 +13,73 @@ async function startServer() {
   const isProduction = process.env.NODE_ENV === 'production';
 
   if (!isProduction) {
-    // Mode Development: Sambungkan Vite dev server middleware ke Express
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
+    // Mode Development: Inisialisasi Vite dev server untuk Tenant (frontend) dan Master Admin (admin-frontend)
+    const viteTenant = await createViteServer({
+      root: path.resolve(__dirname, 'frontend'),
+      server: {
+        middlewareMode: true,
+        hmr: false,
+      },
       appType: 'spa',
     });
-    serverApp.use(vite.middlewares);
+
+    const viteAdmin = await createViteServer({
+      root: path.resolve(__dirname, 'admin-frontend'),
+      base: '/admin/',
+      configFile: path.resolve(__dirname, 'admin-frontend', 'vite.config.ts'),
+      server: {
+        middlewareMode: true,
+        hmr: false,
+      },
+      appType: 'spa',
+    });
+
+    serverApp.use((req, res, next) => {
+      // Lewati rute API
+      if (req.path.startsWith('/api')) {
+        return next();
+      }
+
+      // Jika path tepat /admin (tanpa slash akhir), redirect ke /admin/ agar path relatif & script base resolve sempurna
+      if (req.path === '/admin') {
+        return res.redirect(301, '/admin/');
+      }
+
+      // Deteksi Subdomain admin.wanma2.my.id ATAU path /admin/
+      const isHostAdmin = req.hostname.startsWith('admin.');
+      const isPathAdmin = req.path.startsWith('/admin/');
+
+      if (isHostAdmin || isPathAdmin) {
+        return viteAdmin.middlewares(req, res, next);
+      }
+
+      // Default: Sajikan Web Dashboard Pengguna (dashboard.wanma2.my.id)
+      return viteTenant.middlewares(req, res, next);
+    });
   } else {
-    // Mode Production: Sajikan file build statis dari folder frontend/dist atau dist
-    const distPath = fs.existsSync(path.resolve(__dirname, 'frontend', 'dist'))
+    // Mode Production: Sajikan file build statis dari folder dist (tenant) dan dist-admin (master admin)
+    const distTenant = fs.existsSync(path.resolve(__dirname, 'frontend', 'dist'))
       ? path.resolve(__dirname, 'frontend', 'dist')
       : path.resolve(__dirname, 'dist');
+    const distAdmin = path.resolve(__dirname, 'dist-admin');
 
-    if (fs.existsSync(distPath)) {
-      serverApp.use(express.static(distPath));
-      // Fallback SPA routing kompatibel dengan Express 5 & 4
-      serverApp.use((req, res, next) => {
-        if (req.method === 'GET' && !req.path.startsWith('/api')) {
-          return res.sendFile(path.resolve(distPath, 'index.html'));
+    serverApp.use((req, res, next) => {
+      if (req.method !== 'GET' || req.path.startsWith('/api')) return next();
+
+      const isHostAdmin = req.hostname.startsWith('admin.');
+      const isPathAdmin = req.path === '/admin' || req.path.startsWith('/admin/');
+
+      if (isHostAdmin || isPathAdmin) {
+        if (fs.existsSync(distAdmin)) {
+          return res.sendFile(path.resolve(distAdmin, 'index.html'));
         }
-        next();
-      });
-    }
+      }
+
+      if (fs.existsSync(distTenant)) {
+        return res.sendFile(path.resolve(distTenant, 'index.html'));
+      }
+      next();
+    });
   }
 
   serverApp.listen(PORT, '0.0.0.0', () => {

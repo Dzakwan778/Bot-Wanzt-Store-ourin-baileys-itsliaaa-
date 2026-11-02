@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, CheckCircle2, Clock, AlertCircle, LogOut } from 'lucide-react';
+import { User, CheckCircle2, Clock, AlertCircle, LogOut, Building2 } from 'lucide-react';
 import { BotStatusResponse } from '../../types/dashboard.types';
 
 interface NavbarProps {
@@ -44,7 +44,7 @@ export const Navbar: React.FC<NavbarProps> = ({ botData, username, onLogout }) =
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
             <span className="w-2 h-2 rounded-full bg-slate-400"></span>
-            IDLE / DISCONNECTED
+            OFFLINE
           </span>
         );
     }
@@ -67,7 +67,17 @@ export const Navbar: React.FC<NavbarProps> = ({ botData, username, onLogout }) =
             <p className="text-xs text-slate-500">WhatsApp Bot Management System</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Tombol Akses Portal Apartemen Master Admin */}
+          <button
+            type="button"
+            onClick={() => (window.location.href = '/admin/')}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition cursor-pointer shadow-2xs"
+            title="Buka Portal Apartemen / Master Admin (admin.wanma2.my.id)"
+          >
+            <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+            <span className="hidden xs:inline">Master</span>
+          </button>
           {getStatusBadge()}
           {onLogout && (
             <button
