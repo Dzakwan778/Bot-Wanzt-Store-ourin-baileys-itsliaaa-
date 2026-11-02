@@ -754,4 +754,31 @@ Catatan Tambahan:
 - Setiap pembuatan database tenant baru wajib mengaktifkan mode SQLite WAL (`PRAGMA journal_mode = WAL;`) dan `PRAGMA busy_timeout = 5000;`.
 - Middleware autentikasi pada backend tenant wajib memeriksa status `is_active` dan tanggal `expires_at` dari `master.db` sebelum memproses pesan WhatsApp atau akses dashboard.
 
+---
+
+[7.0] - LARANGAN WINDOW.CONFIRM / ALERT DI ENVIRONMENT IFRAME DAN POLA MODAL KONFIRMASI IN-APP
+
+- Tanggal: 2026-11-02 02:48
+- Sumber: Pengujian Langsung & Debugging UI Sandbox AI Studio
+
+Informasi yang Dipelajari:
+1. Perilaku `window.confirm()` dan `window.alert()` pada Iframe Sandbox:
+   - Di lingkungan pratinjau browser modern yang terisolasi dalam iframe (seperti sandbox AI Studio), browser secara default memblokir atau menolak eksekusi `window.confirm()` dan `window.alert()`.
+   - Pemanggilan `window.confirm()` langsung mengembalikan nilai `false` secara instan tanpa memunculkan dialog pop-up konfirmasi apapun di layar.
+   - Akibatnya, tombol-tombol yang memanggil `if (!window.confirm(...)) return;` (seperti tombol Hapus Tenant dan Suspend/Aktifkan pada Master Admin) terlihat macet atau "tidak dapat diklik" dari sudut pandang pengguna.
+2. Solusi Standar Aplikasi Web Modern (In-App Modal Confirmation):
+   - Mengganti seluruh dialog bawaan peramban (`window.confirm`) dengan Modal Konfirmasi khusus berbasis React state (misal `tenantToDelete: Tenant | null`).
+   - Dialog modal in-app ini 100% aman dari blokir sandbox iframe, memiliki desain dark mode yang selaras dengan tema Master Admin (slate-900 border slate-800), menyajikan informasi unit yang jelas (Nama Toko, ID Unit, Pemilik), serta tombol aksi tegas "Batal" dan "Hapus Permanen".
+
+Pemahaman:
+- Seluruh aksi destruktif atau mutasi status (Delete Tenant, Suspend, Reset) wajib menggunakan modal dialog kustom in-app atau inline two-step confirmation.
+- Selalu pastikan elemen `<button>` memiliki atribut `type="button"` dan class utilitas kursor `cursor-pointer` agar interaksi klik responsif dan tidak terganggu event bawaan browser.
+
+Potensi Penerapan:
+- Menggantikan pemanggilan `window.confirm` pada `handleDeleteTenant` dan `handleToggleStatus` di `admin-frontend/src/App.tsx` dengan modal konfirmasi React in-app.
+
+Catatan Tambahan:
+- Desain modal konfirmasi hapus harus memuat peringatan jelas bahwa file database dan kredensial WhatsApp penyewa akan terhapus secara fisik dari server.
+
+
 

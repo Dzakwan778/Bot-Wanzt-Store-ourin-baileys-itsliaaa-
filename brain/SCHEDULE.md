@@ -312,6 +312,28 @@ Rencana:
 Hasil yang Diharapkan:
 Sistem multi-tenant apartemen beroperasi penuh dengan isolasi database, sesi bot, dan antarmuka mandiri.
 
+---
+
+[7.0] - PERBAIKAN TOMBOL AKSI MANAJEMEN TENANT DI DASHBOARD ADMIN (MODAL KONFIRMASI IN-APP)
+
+- Tanggal: 2026-11-02 02:49
+- Status: Completed
+
+Tujuan:
+Memperbaiki tombol aksi pada tabel tenant Master Admin (`button:nth-of-type(4)` / tombol Hapus Tenant dan tombol Suspend/Aktifkan) agar dapat diklik dan berfungsi 100% tanpa terhambat oleh kebijakan blokir `window.confirm()` di browser sandbox iframe.
+
+Rencana:
+1. Menyiapkan dokumentasi langkah implementasi di `brain/LANGKAH_IMPLEMENTASI.md` (entri [8.0]).
+2. Menghapus pemanggilan `window.confirm(...)` pada `handleDeleteTenant` dan `handleToggleStatus` di `admin-frontend/src/App.tsx`.
+3. Menambahkan state modal konfirmasi hapus `tenantToDelete: Tenant | null` dan modal konfirmasi toggle status `tenantToToggleStatus: Tenant | null`.
+4. Merancang komponen Modal Konfirmasi Hapus Tenant yang aman, informatif, dan responsif dengan peringatan penghapusan database dan sesi WhatsApp.
+5. Memastikan semua tombol aksi pada tabel memiliki `type="button"`, `cursor-pointer`, dan visual feedback klik yang jelas.
+6. Menguji kompilasi dan linting (`compile_applet`, `lint_applet`), lalu mencatat penyelesaian di `brain/PROGRESS.md`.
+
+Hasil yang Diharapkan:
+Seluruh tombol aksi manajemen (termasuk tombol Hapus ke-4) dapat diklik secara responsif, memunculkan modal dialog konfirmasi in-app yang elegan, dan menjalankan proses penghapusan/perubahan status dengan lancar.
+
+
 
 
 

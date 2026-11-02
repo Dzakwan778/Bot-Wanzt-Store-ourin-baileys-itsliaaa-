@@ -57,6 +57,8 @@ export default function App() {
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [isExtendModalOpen, setIsExtendModalOpen] = useState<boolean>(false);
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
+  const [tenantToDelete, setTenantToDelete] = useState<Tenant | null>(null);
+  const [tenantToToggleStatus, setTenantToToggleStatus] = useState<Tenant | null>(null);
 
   // Form New Tenant
   const [newStoreName, setNewStoreName] = useState<string>('');
@@ -178,16 +180,12 @@ export default function App() {
     }
   };
 
-  const handleToggleStatus = async (tenant: Tenant) => {
-    const nextStatus = tenant.status === 'active' ? 'suspended' : 'active';
-    const confirmMsg = tenant.status === 'active'
-      ? `Bekukan (suspend) unit toko "${tenant.store_name}"? Bot toko akan dihentikan sementara.`
-      : `Aktifkan kembali unit toko "${tenant.store_name}"?`;
-
-    if (!window.confirm(confirmMsg)) return;
-
+  const confirmToggleStatus = async () => {
+    if (!tenantToToggleStatus) return;
+    const nextStatus = tenantToToggleStatus.status === 'active' ? 'suspended' : 'active';
+    setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/admin/tenants/${tenant.tenant_id}/status`, {
+      const res = await fetch(`/api/admin/tenants/${tenantToToggleStatus.tenant_id}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nextStatus }),
@@ -195,37 +193,43 @@ export default function App() {
       const data = await res.json();
       if (data.success) {
         showToast(data.message);
+        setTenantToToggleStatus(null);
         fetchData();
       } else {
         showToast(data.message || 'Gagal mengubah status');
       }
     } catch (err: any) {
       showToast('Error: ' + err.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleDeleteTenant = async (tenant: Tenant) => {
-    if (tenant.tenant_id === 't_wanzt') {
+  const confirmDeleteTenant = async () => {
+    if (!tenantToDelete) return;
+    if (tenantToDelete.tenant_id === 't_wanzt') {
       showToast('Unit default "t_wanzt" tidak boleh dihapus!');
+      setTenantToDelete(null);
       return;
     }
 
-    const confirmMsg = `PERINGATAN: Hapus permanen unit toko "${tenant.store_name}" (${tenant.tenant_id})?\n\nFile database dan riwayat sesi WhatsApp toko ini akan dihapus secara fisik dari server.`;
-    if (!window.confirm(confirmMsg)) return;
-
+    setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/admin/tenants/${tenant.tenant_id}`, {
+      const res = await fetch(`/api/admin/tenants/${tenantToDelete.tenant_id}`, {
         method: 'DELETE',
       });
       const data = await res.json();
       if (data.success) {
         showToast(data.message);
+        setTenantToDelete(null);
         fetchData();
       } else {
         showToast(data.message || 'Gagal menghapus tenant');
       }
     } catch (err: any) {
       showToast('Error: ' + err.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -526,8 +530,9 @@ export default function App() {
                           <div className="inline-flex items-center gap-1.5 justify-end">
                             {/* Impersonate Button */}
                             <button
+                              type="button"
                               onClick={() => handleImpersonate(tenant)}
-                              className="px-2.5 py-1 text-[11px] font-medium text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg transition-colors active:scale-[0.98]"
+                              className="px-2.5 py-1 text-[11px] font-medium text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg transition-all active:scale-95 cursor-pointer shrink-0"
                               title="Masuk sebagai tenant (1-klik)"
                             >
                               Buka Toko
@@ -535,12 +540,13 @@ export default function App() {
 
                             {/* Extend Button */}
                             <button
+                              type="button"
                               onClick={() => {
                                 setSelectedTenant(tenant);
                                 setExtendDays(30);
                                 setIsExtendModalOpen(true);
                               }}
-                              className="px-2.5 py-1 text-[11px] font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors active:scale-[0.98]"
+                              className="px-2.5 py-1 text-[11px] font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-all active:scale-95 cursor-pointer shrink-0"
                               title="Perpanjang sewa"
                             >
                               Perpanjang
@@ -548,8 +554,9 @@ export default function App() {
 
                             {/* Suspend/Activate Toggle */}
                             <button
-                              onClick={() => handleToggleStatus(tenant)}
-                              className={`p-1 rounded-lg border transition-colors ${
+                              type="button"
+                              onClick={() => setTenantToToggleStatus(tenant)}
+                              className={`p-1.5 rounded-lg border transition-all active:scale-95 cursor-pointer shrink-0 flex items-center justify-center ${
                                 tenant.status === 'active'
                                   ? 'text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30'
                                   : 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/30'
@@ -566,8 +573,9 @@ export default function App() {
                             {/* Delete Button (disabled for t_wanzt) */}
                             {tenant.tenant_id !== 't_wanzt' && (
                               <button
-                                onClick={() => handleDeleteTenant(tenant)}
-                                className="p-1 rounded-lg text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 transition-colors"
+                                type="button"
+                                onClick={() => setTenantToDelete(tenant)}
+                                className="p-1.5 rounded-lg text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 hover:text-rose-300 border border-rose-500/30 transition-all active:scale-95 cursor-pointer shrink-0 flex items-center justify-center"
                                 title="Hapus tenant permanen"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -803,6 +811,130 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Modal: Konfirmasi Hapus Tenant */}
+      {tenantToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5 text-rose-400">
+                <AlertTriangle className="w-5 h-5 text-rose-500" />
+                <h3 className="text-base font-bold text-white">Hapus Unit Apartemen Toko</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTenantToDelete(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer transition-colors"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs space-y-2">
+              <p className="font-semibold text-rose-300">
+                Apakah Anda yakin ingin menghapus unit toko ini secara permanen?
+              </p>
+              <div className="text-slate-300 space-y-1">
+                <div>Nama Toko: <span className="font-semibold text-white">{tenantToDelete.store_name}</span></div>
+                <div>ID Unit: <span className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">{tenantToDelete.tenant_id}</span></div>
+                <div>Pemilik: <span className="text-slate-200">{tenantToDelete.owner_name} (+{tenantToDelete.owner_phone})</span></div>
+              </div>
+              <p className="text-[11px] text-rose-400/90 pt-1">
+                Peringatan: Seluruh data transaksi, database SQLite tenant, dan riwayat sesi WhatsApp akan dihapus secara fisik dari server.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-800 text-xs">
+              <button
+                type="button"
+                onClick={() => setTenantToDelete(null)}
+                disabled={isSubmitting}
+                className="px-4 py-2 font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={confirmDeleteTenant}
+                className="px-5 py-2 font-semibold text-white bg-rose-600 hover:bg-rose-500 rounded-xl transition-all shadow-md shadow-rose-600/20 disabled:opacity-50 cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{isSubmitting ? 'Menghapus...' : 'Ya, Hapus Permanen'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Konfirmasi Toggle Status (Suspend / Aktifkan) */}
+      {tenantToToggleStatus && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5 text-amber-400">
+                <AlertTriangle className="w-5 h-5 text-amber-500" />
+                <h3 className="text-base font-bold text-white">
+                  {tenantToToggleStatus.status === 'active' ? 'Bekukan (Suspend) Unit Toko' : 'Aktifkan Kembali Unit Toko'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTenantToToggleStatus(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer transition-colors"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-800/60 border border-slate-700 text-xs space-y-2">
+              <p className="text-slate-300">
+                {tenantToToggleStatus.status === 'active'
+                  ? `Unit toko "${tenantToToggleStatus.store_name}" akan ditangguhkan. Bot WhatsApp toko ini akan dinonaktifkan sementara waktu.`
+                  : `Unit toko "${tenantToToggleStatus.store_name}" akan diaktifkan kembali. Bot WhatsApp toko dapat melanjutkan operasional.`}
+              </p>
+              <div className="text-slate-400 space-y-0.5 text-[11px]">
+                <div>Unit: <span className="font-semibold text-white">{tenantToToggleStatus.store_name} ({tenantToToggleStatus.tenant_id})</span></div>
+                <div>Status Saat Ini: <span className="uppercase font-semibold text-slate-300">{tenantToToggleStatus.status}</span></div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-800 text-xs">
+              <button
+                type="button"
+                onClick={() => setTenantToToggleStatus(null)}
+                disabled={isSubmitting}
+                className="px-4 py-2 font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={confirmToggleStatus}
+                className={`px-5 py-2 font-semibold text-white rounded-xl transition-all shadow-md disabled:opacity-50 cursor-pointer inline-flex items-center gap-1.5 ${
+                  tenantToToggleStatus.status === 'active'
+                    ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-600/20'
+                    : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
+                }`}
+              >
+                {tenantToToggleStatus.status === 'active' ? (
+                  <>
+                    <PauseCircle className="w-4 h-4" />
+                    <span>{isSubmitting ? 'Memproses...' : 'Bekukan Unit'}</span>
+                  </>
+                ) : (
+                  <>
+                    <PlayCircle className="w-4 h-4" />
+                    <span>{isSubmitting ? 'Memproses...' : 'Aktifkan Unit'}</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

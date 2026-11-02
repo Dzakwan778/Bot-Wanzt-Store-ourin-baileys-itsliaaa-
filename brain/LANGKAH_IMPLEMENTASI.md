@@ -474,6 +474,64 @@ Rencana Pengujian:
 Hasil yang Diharapkan:
 Dashboard Master dapat diakses dengan lancar di AI Studio preview URL via tombol atau path `/admin/`.
 
+---
+
+[8.0] - IMPLEMENTASI MODAL KONFIRMASI IN-APP UNTUK TOMBOL HAPUS & STATUS TENANT (FIX UNCLICKABLE BUTTON)
+
+- Tanggal: 2026-11-02 02:50
+- Status: Completed
+Referensi SCHEDULE: 7.0
+
+Tujuan Implementasi:
+Mengatasi permasalahan tombol aksi manajemen tenant (khususnya tombol Hapus ke-4 dengan ikon `Trash2` pada tabel tenant) yang tidak dapat diklik atau tampak macet akibat penggunaan fungsi dialog bawaan peramban `window.confirm()` yang diblokir oleh sandbox iframe.
+
+Bagian yang Akan Diubah:
+- "admin-frontend/src/App.tsx" - Mengganti `window.confirm` dengan Modal Konfirmasi React in-app (`tenantToDelete`, `tenantToToggleStatus`), menambahkan `type="button"`, `cursor-pointer`, dan merancang modal konfirmasi hapus tenant yang informatif.
+
+Alasan Perubahan:
+Lingkungan pratinjau browser sandbox AI Studio memblokir pemanggilan `window.confirm()` dan `window.alert()`. Saat pengguna mengklik tombol ke-4 (ikon tempat sampah), pemanggilan `window.confirm` mengembalikan `false` secara instan tanpa memunculkan dialog, sehingga fungsi `handleDeleteTenant` berhenti dan seolah-olah tombol "tidak dapat diklik".
+
+Strategi Implementasi:
+1. Di `admin-frontend/src/App.tsx`:
+   - Tambahkan state: `const [tenantToDelete, setTenantToDelete] = useState<Tenant | null>(null);`
+   - Tambahkan state: `const [tenantToToggleStatus, setTenantToToggleStatus] = useState<Tenant | null>(null);`
+   - Buat fungsi eksekusi penghapusan `confirmDeleteTenant()` yang langsung memanggil API DELETE `/api/admin/tenants/${tenantToDelete.tenant_id}` tanpa `window.confirm`.
+   - Buat fungsi eksekusi perubahan status `confirmToggleStatus()` yang memanggil API POST `/api/admin/tenants/${tenantToToggleStatus.tenant_id}/status` tanpa `window.confirm`.
+   - Ubah tombol hapus di tabel:
+     - `onClick={() => setTenantToDelete(tenant)}`
+     - Tambahkan `type="button"`, `cursor-pointer`, `active:scale-95`.
+   - Ubah tombol suspend/aktifkan di tabel:
+     - `onClick={() => setTenantToToggleStatus(tenant)}`
+     - Tambahkan `type="button"`, `cursor-pointer`, `active:scale-95`.
+   - Tambahkan Modal Konfirmasi Hapus Tenant:
+     - Backdrop gelap `bg-slate-950/80 backdrop-blur-xs z-50`.
+     - Header merah/rose dengan ikon `AlertTriangle`: "Hapus Unit Apartemen Toko".
+     - Rincian unit: Nama Toko, ID Unit, Pemilik, dan peringatan bahwa database fisik & sesi WhatsApp akan dihapus permanen.
+     - Tombol: "Batal" dan "Ya, Hapus Permanen" (merah/rose, dengan state loading `isSubmitting`).
+   - Tambahkan Modal Konfirmasi Toggle Status (Suspend / Aktifkan):
+     - Rincian perubahan status dari aktif ke suspend (atau sebaliknya).
+     - Tombol konfirmasi yang cepat dan aman.
+2. Validasi dengan `compile_applet` dan `lint_applet`.
+3. Catat penyelesaian di `brain/PROGRESS.md`.
+
+Urutan Pengerjaan:
+1. Catat entri [8.0] di `brain/LANGKAH_IMPLEMENTASI.md`.
+2. Edit `admin-frontend/src/App.tsx`.
+3. Verifikasi kompilasi dan linting.
+4. Perbarui status entri [8.0] menjadi Completed dan catat di `brain/PROGRESS.md`.
+
+Dampak Perubahan:
+Tombol aksi hapus dan suspend di Master Admin dapat diklik 100% responsif dan memunculkan pop-up modal interaktif yang konsisten dengan tema desain dashboard.
+
+Rencana Pengujian:
+1. Jalankan `compile_applet` untuk build frontend admin.
+2. Jalankan `lint_applet` untuk memeriksa type checking TypeScript.
+3. Pastikan modal konfirmasi muncul saat tombol hapus atau suspend diklik.
+
+Hasil yang Diharapkan:
+Tombol dapat diklik tanpa error, modal konfirmasi tampil jelas di layar, dan proses penghapusan/perubahan status berjalan normal.
+
+
 
 
 

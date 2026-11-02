@@ -1,0 +1,683 @@
+# Status Progres Proyek: WhatsApp Bot Store Manager (Wanzt Store)
+
+Dokumen ini berfungsi sebagai panduan serah terima status proyek untuk pengembang / AI selanjutnya agar pekerjaan dapat dilanjutkan tanpa kehilangan konteks.
+
+---
+
+## 📌 Ringkasan Proyek
+Aplikasi berbasis React + Tailwind CSS dengan backend terintegrasi Vite middleware menggunakan library `@itsliaaa/baileys`.
+Aplikasi ini mengatur bot WhatsApp toko otomatis dengan fitur:
+- Tombol Interaktif Native Flow (`cta_url`, `quick_reply`, `cta_call`, `cta_copy`, `vcard`).
+- Command Menu, Command List (Katalog Layanan), dan Command Carousel Produk.
+- Integrasi Xaviera API untuk profil, produk digital/SMM/game otomatis murni tanpa data cadangan lokal palsu.
+- Integrasi Payment Gateway SairiPedia API (QRIS Real-Time).
+- Arsitektur Modular: Komponen dipecah ke folder `src/components/`, `src/hooks/`, `src/types/`.
+- Manajemen Whitelist Grup WhatsApp (toggle aktif/nonaktif fungsi bot per grup).
+
+---
+
+## ✅ Fitur yang Telah Selesai (Completed)
+1. **Perbaikan Bug Tab SMM Tidak Muncul (Fix Typo SMM vs SSM)**:
+   - **Penyebab**: Tab navigasi di `App.tsx` bernilai `'SMM'`, namun percabangan di `TabContentRenderer.tsx` sebelumnya hanya memeriksa `'SSM'` (double S), sehingga pengguna diarahkan ke fallback slot kosong dan tabel SMM tidak pernah muncul.
+   - **Solusi**: Di `TabContentRenderer.tsx`, kondisi telah diperluas untuk mengenali `selectedTab === 'SMM' || selectedTab === 'SSM' || selectedTab === 'tab02'`.
+   - **Kategori Musik**: Fungsi `detectSmmPlatform` di `src/types/dashboard.types.ts` kini memetakan Spotify/SoundCloud/Musik ke `'Layanan Musik'` agar cocok dengan tombol filter kategori di `TabSsm.tsx`.
+   - **Hasil**: Seluruh 3000+ katalog layanan SMM dari Xaviera Store kini langsung muncul dengan rapi lengkap dengan fitur pencarian, filter kategori, pagination, dan harga jual (+10%).
+
+2. **Refactoring & Modularisasi Komponen**:
+   - `src/App.tsx` dipecah menjadi komponen modular di `src/components/` dan kustom hook di `src/hooks/`.
+
+3. **Sinkronisasi Kode dengan Repositori GitHub**:
+   - Kode 100% tersinkronisasi dengan repositori resmi `Dzakwan778/Bot-Wanzt-Store-ourin-baileys-itsliaaa-remix`.
+
+4. **Penghapusan Seluruh Data Cadangan Lokal (Pure Live API Mode)**:
+   - Data produk, SMM, dan Top Up murni berasal dari API Xaviera secara real-time.
+
+5. **Implementasi Sistem Whitelist Grup WhatsApp**:
+   - Toggle whitelist di tab Grup mengontrol apakah bot merespon di grup tertentu atau tidak.
+
+6. **Penyimpanan Modular Database**:
+   - File JSON konfigurasi tersimpan di folder `/database/`.
+
+7. **Pemulihan File Modular & Hook (Fix Import Errors)**:
+   - Seluruh hook kustom (`useBotConnection`, `useButtonModal`, `useStoreConfig`, `useWhatsAppGroups`, `useXavieraData`) dan komponen tab (`TabStoreInfo`, `TabCommand`, `TabProduk`, `TabSsm`, `TabTopUp`, `TabGrup`, `TabConnection`) telah tersimpan permanen di direktori proyek.
+   - Pengecekan TypeScript linting (`tsc --noEmit`) dan build compilation lulus 100% tanpa error.
+
+8. **Migrasi Penuh Payment Gateway dari SairiPedia ke LunasQRIS (Completed)**:
+   - **Arsitektur Dual-Key**: Menggunakan Public API Key (`pk_...`) untuk request API (`X-API-Key`) dan Secret Key (`sk_...`) untuk verifikasi tanda tangan Webhook HMAC-SHA256 (`X-Callback-Signature`).
+   - **Layanan Backend (`server/services/lunasQrisService.ts`)**: Fungsi `getLunasQrisBalance`, `createLunasQrisTransaction`, `checkLunasQrisStatus`, `cancelLunasQrisTransaction`, `startLunasQrisPolling`, dan `verifyLunasQrisSignature`.
+   - **Alur Transaksi WhatsApp Bot (`server/handlers/messageDispatcher.ts`)**: Saat pembeli klik varian produk, bot otomatis menerbitkan transaksi LunasQRIS dengan ID unik (`ORD-...`), kode unik (`unique_code`), dan total tagihan presisi (`total_amount`). Mengirimkan notifikasi ke grup, invoice QRIS lengkap ke DM pembeli, dan menjalankan polling status otomatis tiap 4 detik. Saat lunas, kredensial akun digital dikirim ke DM pembeli dan notifikasi diteruskan ke owner.
+   - **Proxy & Webhook Middleware (`vite.config.ts`)**: Menangani route proxy `/api/lunasqris/balance`, `/api/lunasqris/transaction/status`, `/api/lunasqris/transaction/create`, dan `/api/lunasqris/webhook`.
+   - **Antarmuka Tab Connection & Profile Header**: Form modern untuk input Public Key (`pk_...`), Secret Key (`sk_...`), Base URL, tombol Cek Saldo real-time (Saldo Siap Tarik & Saldo Hold), dan copy URL Webhook untuk dipasang di panel LunasQRIS.
+   - **Database**: Tersimpan rapi di `/database/api_config.json`.
+
+9. **Penyediaan Skrip Otomasi Deployment VPS 24/7 (`deploy-vps.sh`)**:
+   - **Skrip Instalasi Turnkey**: Otomasi pembaruan OS, instalasi Node.js 20 LTS, Git, PM2, tsx, dan Nginx Reverse Proxy.
+   - **Ketahanan Sistem (High Availability)**: Terintegrasi `pm2 startup` dan `pm2 save` sehingga bot langsung menyala otomatis saat VPS mati/reboot.
+   - **Konfigurasi Webhook & SSL Ready**: Nginx meneruskan request dari IP/domain port 80/443 langsung ke port 3000 lengkap dengan forward header IP, signature HMAC-SHA256 LunasQRIS, serta WebSocket upgrade. Dukungan instalasi SSL gratis 1-baris via `certbot --nginx`.
+
+10. **Perbaikan Harga Jual Carousel (+10%), Gambar QRIS Buffer PNG, & Format Invoice Rapi**:
+   - **Markup Keuntungan 10% Carousel**: Pada `server/messages/carouselMessage.ts`, harga yang ditampilkan pada kartu Carousel `{price}` dan ID tombol Order (`order_var:...`) kini secara otomatis menambahkan margin 10% (`rawPrice + Math.round(rawPrice * 0.1)`). Pelanggan membayar harga jual bertambah 10%, dan keuntungan tersimpan aman di akun LunasQRIS merchant.
+   - **Pemeriksaan Saldo Supplier Xaviera Akurat**: Pada `server/handlers/messageDispatcher.ts`, pengecekan saldo Xaviera disesuaikan dengan harga modal (`Math.round(price / 1.1)`), memastikan bot tidak terblokir jika saldo hanya cukup untuk modal supplier.
+   - **Gambar QRIS PNG Murni (Fix File Corrupt / Gagal Download)**: Menghilangkan dependensi format `.svg` LunasQRIS yang tidak didukung WhatsApp. Menggunakan pustaka `qrcode` untuk membuat Buffer PNG murni (600x600 px) langsung di memori server dan dikirimkan via Baileys `{ image: qrBuffer, mimetype: 'image/png' }` dengan fallback axios PNG. Gambar QRIS langsung tampil tajam dan bebas masalah download di seluruh tipe HP.
+   - **Format Invoice Rapi Bebas Garis**: Menghapus seluruh karakter garis horizontal (`───────`) pada teks invoice, pesan sukses pembayaran, dan notifikasi owner. Digantikan dengan tata letak spasi vertikal dan format teks tebal yang rapi sehingga tidak patah atau berantakan di berbagai resolusi layar.
+
+11. **Pembaruan Terminologi "Fee Gateway" (Menggantikan "Kode Unik")**:
+    - **Penyelarasan UX & Kepuasan Pelanggan**: Mengubah istilah "Kode Unik" / "kode unik" menjadi **"Fee Gateway"** pada teks notifikasi grup WhatsApp, rincian invoice DM pembeli, catatan penting transfer, log aktivitas sistem, dan panel Tab Connection.
+    - **Tampilan Invoice DM**: Format sekarang menampilkan `⚡ *Fee Gateway:* +Rp ${trx.unique_code}` dan petunjuk `Transfer tepat *Rp ...* hingga digit terakhir (termasuk Fee Gateway) agar pembayaran terverifikasi otomatis.`
+    - **Tampilan Notifikasi Grup**: Menginformasikan `... (Fee Gateway: *+Rp ${trx.unique_code}*) ...`.
+    - **Hasil**: Nominal tambahan diterima oleh pembeli sebagai biaya layanan payment gateway yang wajar dan transparan, menghilangkan kesan tagihan dimahalkan secara sepihak.
+
+12. **Pembuatan Tab "Transaksi" (Pengganti tab05) & Manajemen Riwayat Pesanan**:
+    - **Perubahan Navigasi Tab**: Label `tab05` telah diganti menjadi **"Transaksi"** di navigasi utama dashboard (`App.tsx`).
+    - **Kolom Rincian Transaksi**:
+      - **Nomer Pembeli**: Menampilkan nomor pembeli dengan tombol salin dan tautan direct chat WhatsApp (`wa.me`).
+      - **Nama Produk & Varian Produk**: Menampilkan judul produk dan badge varian paket yang dipesan.
+      - **Order ID**: Teks monospace order ID dengan tombol salin instan.
+      - **Nominal & Kode Unik**: Menampilkan harga dasar dan kode unik/fee gateway (`+Rp ...`).
+      - **Total**: Nominal total yang wajib ditransfer pembeli.
+      - **Status Pembayaran (Warna Sesuai Spesifikasi)**:
+        - `pending` -> **Kuning** (`bg-amber-100 text-amber-800 border-amber-300 font-semibold`)
+        - `cancel` -> **Merah** (`bg-rose-100 text-rose-800 border-rose-300 font-semibold`)
+        - `paid` -> **Hijau** (`bg-emerald-100 text-emerald-800 border-emerald-300 font-semibold`)
+    - **Penyimpanan Persisten & Integrasi Otomatis**:
+      - Modul backend `/server/services/transactionManager.ts` mengelola file database `/database/transactions.json`.
+      - Saat transaksi baru dibuat di WhatsApp bot, status tercatat sebagai `pending`.
+      - Saat auto-polling atau webhook LunasQRIS mendeteksi pembayaran sukses, status terupdate otomatis menjadi `paid`.
+      - Saat batas waktu pembayaran berakhir (expired), status terupdate otomatis menjadi `cancel`.
+    - **Fitur Tambahan**: Kartu statistik ringkasan omset (Total Order, Omset Paid, Jumlah Sukses/Pending/Cancel), pencarian multi-kolom, filter status tab, tombol sinkronisasi manual pending, dan tombol hapus transaksi.
+
+13. **Command Invoice Dinamis di Tab Command & Perbaikan Tombol Hapus Transaksi**:
+    - **Command Invoice di Tab Command**:
+      - Menambahkan opsi **"Invoice"** pada dropdown pilih command di Tab Command (`Menu`, `List`, `Carousel`, `Invoice`).
+      - Antarmuka form lengkap untuk mengatur template pesan tagihan (`invoiceOutputText`) dan footer (`invoiceFooterText`).
+      - Menyediakan chip quick-insert untuk seluruh placeholder:
+        - Standar: `{storeName}`, `{ownerNumber}`, `{category}`, `{varian}`, `{price}`, `{produkName}`, `{adminNumber}` / `{adminMumber}`, `{webLink}`.
+        - Khusus Invoice: `{orderId}`, `{total}`, `{unikCode}`.
+      - Antarmuka *Live WhatsApp Preview* yang menyimulasikan tampilan POV pembeli saat menerima invoice lengkap dengan QRIS dan 2 tombol interaktif.
+      - **Dua Tombol Interaktif Native Flow**:
+        - **Tombol 1 (Quick Reply - Hubungi Admin)**: Saat pembeli mengetuk tombol ini di WhatsApp, bot mengirimkan vCard kontak WhatsApp nomor admin toko. Jika form nomor admin pada dashboard kosong (karena opsional), sistem otomatis fallback mengirimkan vCard nomor owner toko (`sendInvoiceAdminContactMessage`).
+        - **Tombol 2 (CTA URL - Web Checkout)**: Tombol resmi yang mengarahkan pembeli langsung ke URL web checkout pembayaran LunasQRIS (`payment_url`).
+      - Database persisten: `/database/command_invoice.json` dimuat dan disimpan otomatis via `configManager.ts`.
+      - Pada `server/handlers/messageDispatcher.ts`, rendering invoice DM pembeli menggunakan template dinamis dengan resolusi placeholder yang aman dan anti-duplikasi `Rp`, serta menyematkan kedua tombol interaktif tersebut ke payload pengiriman Baileys.
+    - **Perbaikan Tombol Hapus Transaksi (Icon Tempat Sampah)**:
+      - **Akar Masalah**: Tombol sebelumnya menggunakan `window.confirm(...)` yang diblokir oleh sandbox iframe peramban, serta memiliki area klik yang sempit.
+      - **Solusi**: Mengganti pemanggilan `window.confirm` dengan **Inline Two-Step Confirmation** (`deleteConfirmId === trx.orderId`). Klik pertama memunculkan tombol konfirmasi bertuliskan "Hapus?", dengan timer auto-reset 4 detik, hit area yang lebih lega (`relative z-20`), dan feedback notifikasi toast yang informatif.
+
+14. **Live Requirements Checklist untuk Custom Pairing Code (UI Modern Mirip Password Requirements)**:
+    - **Pembaruan UX Sesuai Referensi Pengguna (`Screenshot_20261028-064352.png`)**:
+      - Mengganti kotak peringatan kuning statis lama (*"Form Pairing Code Belum Diisi"*) dengan komponen interaktif **Live Requirements Checklist**.
+      - **Segmented Progress Bar**: Indikator 4 segmen dinamis yang menyala halus:
+        - Abu-abu / kosong saat belum diisi.
+        - Merah cerah jika terdeteksi simbol terlarang.
+        - Kuning/Sky bertahap sesuai panjang karakter (1-7 karakter).
+        - Hijau penuh (`bg-emerald-500`) saat kode tepat 8 karakter dan valid.
+      - **Status Header Dinamis**: Teks status cerdas (`Wajib Diisi`, `Format Tidak Sesuai`, `Panjang Belum Cukup (x/8)`, dan `Siap Digunakan ✓`).
+      - **Checklist Kriteria Real-Time**:
+        - `✓ Wajib 8 karakter`: Menampilkan centang hijau saat tepat 8 karakter, atau titik `•` beserta sisa karakter yang dibutuhkan saat belum cukup.
+        - `✓ Tidak menyertakan simbol`: Menampilkan centang hijau saat bersih tanpa simbol, atau silang merah `✕` saat terdeteksi karakter simbol/spasi.
+        - `✓ Hanya angka dan huruf (A-Z, 0-9)`: Menampilkan centang hijau saat menggunakan kombinasi alfanumerik yang sah.
+15. **Sistem Login Dashboard Aman (Zero Inspect Leak) & Lock Wajib Store Info**:
+    - **Halaman Login Aman (`src/components/auth/LoginPage.tsx`)**:
+      - Menyediakan antarmuka login minimalis dengan input Username, Password (dengan toggle intip mata), dan tombol Masuk.
+      - **Zero Client Password Leak**: Tidak ada password yang di-*hardcode* atau diekspos di kode JavaScript frontend (tidak bisa dibaca lewat *Inspect Element*, *Sources*, atau *DevTools*).
+      - **Hashing Kriptografis Server-Side**: Password diverifikasi di server via `/api/auth/login` menggunakan algoritma PBKDF2 (SHA-512 dengan 100.000 iterasi dan salt unik 16-byte) yang tersimpan di `/database/auth.json`.
+      - **Manajemen Sesi Token**: Menggunakan session token acak (`crypto.randomBytes(32)`) dengan durasi 7 hari.
+      - **Full Dashboard Gate**: Seluruh dashboard dan data sensitif terkunci rapat sebelum pengguna berhasil login.
+    - **Lock Bot di Server (`POST /api/bot/start`)**:
+      - Server memverifikasi kelengkapan 3 data wajib: `Nama Toko`, `Nama Owner`, dan `Nomer Owner`. Jika belum lengkap, backend langsung menolak menjalankan bot WhatsApp dengan pesan error jelas.
+    - **Pop-up Modal Wajib Isi Store Info (`MandatoryStoreSetupModal.tsx`)**:
+      - Setelah login, jika ketiga data toko belum terisi, otomatis muncul modal pop-up wajib isi data toko.
+      - Modal bersifat **non-dismissible** (tidak bisa ditutup atau di-bypass dengan klik luar atau tombol ESC).
+      - Saat pengguna mengisi dan menyimpan, data otomatis tersimpan permanen ke `/database/store_info.json` dan sinkron langsung ke formulir Store Info dashboard.
+
+16. **Redesain Halaman Login & Pop-up Modal Wajib Store Info Sesuai `DESIGN (2).md` (Anti-AI Slop)**:
+    - **Menghilangkan Seluruh Unsur AI Slop**: Menghapus background gelap dengan efek *glowing blur blob*, kartu gradien warna-warni, serta tombol kapsul (*pill-shaped*). Mengadopsi prinsip desain **Industrial Utility & Editorial Minimalism**.
+    - **Palet Warna & Tata Letak Mode Terang (Light Mode Default)**:
+      - **Background Canvas**: Slate 50 (`#F8FAFC`).
+      - **Surface Kartu**: Putih murni (`#FFFFFF`), border 1px tipis Slate 200 (`#E2E8F0`), bayangan halus (`shadow-xs` / `shadow-sm`).
+      - **Tipografi & Kontras**: Teks judul tebal Slate 900 (`#0F172A`) dengan *letter-spacing* tajam (`tracking-tight`), dan subteks Slate 500 (`#64748B`).
+      - **Aksen Tombol Utama**: Solid Sky 600 (`#0284C7`, `bg-sky-600 hover:bg-sky-700 text-white font-semibold text-sm rounded-lg py-2.5`).
+    - **Halaman Login (`src/components/auth/LoginPage.tsx`)**:
+      - Tampilan bersih, minimalis, dan profesional.
+      - Avatar bot modern dengan palet `bg-sky-50 border-sky-200 text-sky-600 rounded-xl`.
+      - Judul "Bot Dashboard Manager" dengan pesan instruksi yang jelas.
+      - Input fields berstandar input form dashboard dengan outline halus Slate 300 dan ring Sky 600/20 saat fokus.
+      - Indikator keamanan PBKDF2 yang ringkas dan elegan di bagian bawah kartu.
+    - **Modal Pop-up Wajib Store Info (`src/components/modals/MandatoryStoreSetupModal.tsx`)**:
+      - Menghapus header gradien oranye/amber yang mencolok.
+      - Menggunakan header putih bersih dengan garis pembatas tipis (`border-b border-slate-100`) dan badge status amber fungsional (`bg-amber-50 text-amber-700 border-amber-200 text-[10px] font-semibold`).
+      - Kotak pemberitahuan amber utilitas yang rapi dan elegan (`bg-amber-50/80 border-amber-200 text-amber-900`).
+      - Input Nomor WhatsApp Owner dilengkapi *prefix badge* bendera + kode negara `+62` yang identik dengan form koneksi WhatsApp pada panel dashboard.
+      - Selaras 100% dengan keseluruhan antarmuka sistem.
+
+17. **Pemisahan Frontend & Backend serta Panduan Deployment VPS (`INSTALASI.md`)**:
+    - **Pemisahan Modular Backend Express**:
+      - Seluruh 600+ baris middleware yang sebelumnya menumpuk di `vite.config.ts` telah dipisahkan ke modul Express router mandiri di `/server/routes/`:
+        - `authRoutes.ts`: Login PBKDF2, session token, logout, dan store info setup.
+        - `botRoutes.ts`: Status, pairing code, start (dengan lock store info), stop, reset, dan whitelist grup.
+        - `lunasQrisRoutes.ts`: Cek saldo, status pembayaran, create transaksi, dan webhook callback dengan verifikasi HMAC-SHA256 signature.
+        - `xavieraRoutes.ts`: Proxy profil saldo, daftar produk, SMM services, dan game.
+        - `transactionRoutes.ts`: Get transactions, ringkasan metrik, sync pending, dan delete.
+        - `mediaRoutes.ts`: Gambar QR & upload media.
+      - `/server/app.ts`: Setup Express app sentral dengan CORS dan body-parser rawBody.
+      - `/server/standalone.ts`: Server backend mandiri di port 5000 (`npm run backend`).
+      - `server.ts`: Entry point full-stack standar menghubungkan Express dan Vite middlewares (`npm run dev` & `npm run start`).
+    - **Penyederhanaan `vite.config.ts`**:
+      - `vite.config.ts` menjadi konfigurasi Vite murni yang bersih, cepat, dan teratur dengan proxy otomatis `/api` ke `http://localhost:5000` jika frontend dijalankan terpisah.
+    - **Konfigurasi PM2 Siap Pakai (`ecosystem.config.cjs`)**:
+      - Terkonfigurasi untuk deployment di VPS `139.59.97.50` dalam folder `bot-whatsapp`, auto-restart on crash, memory limit 1GB, dan startup ready.
+    - **Panduan Terperinci di `INSTALASI.md`**:
+      - Panduan copy-paste langkah demi langkah untuk VPS IP `139.59.97.50` di folder `bot-whatsapp`:
+        - Persiapan OS (Node.js 20, PM2, Git, Nginx, UFW).
+        - Menaruh file ke `/root/bot-whatsapp`.
+        - Perintah PM2 (`pm2 start ecosystem.config.cjs`, `pm2 startup`, `pm2 save`).
+        - Konfigurasi Nginx Reverse Proxy (Port 80 -> 3000) lengkap dengan header WebSocket Baileys dan Webhook LunasQRIS.
+        - Pengaturan URL Webhook LunasQRIS `http://139.59.97.50/api/lunasqris/webhook`.
+18. **Pemisahan Fisik Folder `bot-whatsapp/frontend` & `bot-whatsapp/backend` serta Konfigurasi Domain `testbot.wanma2.my.id`**:
+    - **Struktur Folder Terpisah**:
+      - `bot-whatsapp/frontend/`: Memuat seluruh antarmuka React (`src/`), `index.html`, `vite.config.ts`, `package.json`, dan bundle `dist/`.
+      - `bot-whatsapp/backend/`: Memuat server Express di Port 5000 (`backend/server.ts`), modular routes (`backend/routes/`), business services (`backend/services/`), handlers Baileys (`backend/handlers/`), database lokal (`backend/database/`), dan `package.json`.
+    - **Konfigurasi Domain `testbot.wanma2.my.id` (IP: 139.59.97.50)**:
+      - **Nginx Reverse Proxy**:
+        - Menyajikan file frontend statis dari `/root/bot-whatsapp/frontend/dist` pada port 80/443.
+        - Meneruskan seluruh request `/api/` ke backend port 5000 dengan header WebSocket Baileys dan HMAC signature webhook LunasQRIS.
+      - **PM2**: Dikonfigurasi di `ecosystem.config.cjs` dengan proses `bot-backend` (`backend/server.ts`) yang berjalan 24/7 di Port 5000.
+      - **Webhook LunasQRIS**: Diarahkan ke `https://testbot.wanma2.my.id/api/lunasqris/webhook`.
+      - **SSL Gratis**: Panduan 1-baris Certbot `certbot --nginx -d testbot.wanma2.my.id`.
+    - **Pembaruan Skrip Otomasi**: `deploy-vps.sh` dan `INSTALASI.md` diselaraskan 100% dengan struktur direktori dan domain ini.
+
+---
+
+## 📂 Struktur Penting
+- `INSTALASI.md`: Panduan instalasi dan deployment lengkap VPS 139.59.97.50 di folder `bot-whatsapp`.
+- `ecosystem.config.cjs`: Konfigurasi manajemen proses PM2 production.
+- `server.ts`: Entry point server full-stack utama (Express + Vite).
+- `server/app.ts`: Aplikasi Express modular terpusat.
+- `server/standalone.ts`: Server backend independen (Port 5000).
+- `server/routes/`: Seluruh controller REST API modular (auth, bot, lunasqris, xaviera, transactions, media).
+- `deploy-vps.sh`: Skrip otomasi deployment 1-klik untuk VPS Ubuntu/Debian.
+- `database/command_invoice.json`: File database persisten template teks & footer invoice.
+- `database/auth.json`: Kredensial akun admin ter-hash PBKDF2.
+- `database/transactions.json`: Database riwayat transaksi pesanan bot.
+- `src/components/tabs/TabTransaksi.tsx`: Komponen tampilan tabel riwayat transaksi dengan tombol hapus inline confirmation yang aman.
+- `server/services/transactionManager.ts`: Modul pengelola transaksi & database persisten `/database/transactions.json`.
+- `src/hooks/useTransactions.ts`: Hook reaktif sinkronisasi transaksi dashboard.
+- `server/messages/carouselMessage.ts`: Pembuat kartu Carousel varian produk dengan markup harga jual +10%.
+- `server/handlers/messageDispatcher.ts`: Dispatcher pesan, generate QRIS PNG buffer, format invoice rapi, dan auto-fulfillment.
+- `src/components/tabs/TabConnection.tsx`: Antarmuka manajemen konfigurasi API LunasQRIS dan Xaviera.
+- `server/services/lunasQrisService.ts`: Modul layanan integrasi LunasQRIS API & Webhook.
+- `src/hooks/useXavieraData.ts`: Hook pengambil data produk, SMM, dan game dari Xaviera API.
+- `src/types/dashboard.types.ts`: Definisi interface tipe data dan helper fungsi `detectSmmPlatform`.
+
+
+
+---
+
+[14.0] - PERBAIKAN FORMATTING NOMOR VCARD, COMMAND LIST, DAN HEADER CAROUSEL
+
+- Tanggal: 2026-11-01 18:57
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 1.0
+
+Pekerjaan yang Dilakukan:
+1. Menambahkan fungsi helper `normalizeIndonesianPhone` pada `backend/services/placeholderHelper.ts` untuk menormalisasi seluruh format nomor telepon lokal Indonesia (08..., 8..., +628..., 628...) menjadi format kode negara standar `628...`.
+2. Menerapkan `normalizeIndonesianPhone` pada vCard Owner, Admin, dan Invoice Admin di `backend/messages/adminContactMessage.ts`, serta tombol interaksi kontak vCard di `backend/handlers/messageDispatcher.ts`.
+3. Memperbaiki logika `backend/messages/listMessage.ts` agar pesan command List 100% mengikuti template pengguna:
+   - Jika template kustom tidak menyertakan tag `{daftarProduk}`, bot tidak lagi memaksakan penggabungan teks daftar produk panjang dan kalimat instruksi bawah.
+   - Menghapus judul hardcode `"{storeName} - Katalog Produk"` dari field `title` sehingga WhatsApp tidak lagi memunculkan teks judul paksaan di atas template pengguna.
+4. Memperbaiki `backend/messages/carouselMessage.ts` dengan mengosongkan properti `title` dan `subtitle` pada `cardHeader`, sehingga WhatsApp tidak lagi menampilkan nama varian dan kategori di atas baris pertama template teks pengguna.
+
+File yang Diubah:
+- "backend/services/placeholderHelper.ts" - Menambahkan helper `normalizeIndonesianPhone`.
+- "backend/messages/adminContactMessage.ts" - Normalisasi nomor telepon vCard owner, admin, dan invoice admin.
+- "backend/handlers/messageDispatcher.ts" - Normalisasi nomor telepon tombol vCard menu interaktif.
+- "backend/messages/listMessage.ts" - Penyesuaian output template kustom dan penghapusan title hardcode.
+- "backend/messages/carouselMessage.ts" - Pengosongan title & subtitle header kartu carousel.
+
+Alasan Perubahan:
+Menghilangkan ketidaksesuaian respon bot WhatsApp dengan preferensi pengguna pada dashboard: vCard tanpa awalan negara +62, teks sisipan judul dan daftar produk yang tidak diminta pada command List, dan duplikasi nama varian/kategori di atas template kartu Carousel.
+
+Hasil:
+1. vCard nomor admin yang diinput sebagai `82173515807` kini otomatis terkirim dengan format nomor `+6282173515807` (`waid=6282173515807`).
+2. Command List merespon persis sesuai template teks pengguna tanpa judul paksaan dan tanpa daftar produk jika `{daftarProduk}` tidak dicantumkan.
+3. Kartu Carousel menampilkan teks langsung dimulai dari `*{storeName}*` sesuai konfigurasi dashboard.
+4. Kompilasi TypeScript dan linting lulus 100% tanpa error.
+
+Kendala:
+Tidak ada.
+
+---
+
+[15.0] - PENGHAPUSAN FILE DATABASE JSON USANG DAN CLEANUP KONFIGURASI
+
+- Tanggal: 2026-11-01 19:25
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 2.0
+
+Pekerjaan yang Dilakukan:
+1. Melakukan audit komprehensif pada folder `/database/` dan `/backend/database/` untuk memverifikasi apakah ada service yang masih menggunakan file JSON.
+2. Memastikan seluruh pembacaan dan penulisan data (`auth`, `store_info`, `api_config`, `commands_config`, `group_whitelist`, `transactions`, `pricing_config`, `variant_pricing`, `category_pricing`, `promo_codes`) telah 100% menggunakan SQLite di `/database/bot.db` (WAL mode).
+3. Menghapus seluruh file JSON database usang di `/database/`:
+   - `api_config.json`
+   - `command_carousel.json`
+   - `command_invoice.json`
+   - `command_list.json`
+   - `command_menu.json`
+   - `groups_config.json`
+   - `store_info.json`
+   - `transactions.json`
+4. Menghapus seluruh file JSON database usang di `/backend/database/`:
+   - `api_config.json`
+   - `auth.json`
+   - `command_carousel.json`
+   - `command_invoice.json`
+   - `command_list.json`
+   - `command_menu.json`
+   - `groups_config.json`
+   - `store_info.json`
+   - `transactions.json`
+5. Mempertahankan file aktif utama:
+   - `/database/bot.db` beserta WAL index (`bot.db-shm`, `bot.db-wal`) sebagai database aktif SQLite.
+   - `/backend/database/sqlite.ts` sebagai modul TypeScript driver SQLite.
+6. Menghapus export konstanta lama `CONFIG_FILE = 'commands_config.json'` di `backend/types/bot.types.ts` dan import-nya di `backend/config/configManager.ts`.
+7. Menjalankan `compile_applet` dan `lint_applet` untuk memastikan tidak ada import rusak atau runtime error.
+
+File yang Diubah:
+- "backend/types/bot.types.ts" - Menghapus export konstanta usang CONFIG_FILE.
+- "backend/config/configManager.ts" - Menghapus import CONFIG_FILE.
+- "backend/handlers/messageDispatcher.ts" - Memperbarui komentar keterangan database ke SQLite tabel group_whitelist.
+- "database/*.json" - 8 file JSON usang dihapus.
+- "backend/database/*.json" - 9 file JSON usang dihapus.
+
+Alasan Perubahan:
+File JSON tersebut adalah peninggalan sebelum migrasi ke SQLite. Menghapusnya membersihkan folder, mencegah redundansi, dan memastikan tidak ada kebingungan antara data aktif di SQLite dan file statis usang.
+
+Hasil:
+1. Folder `/database/` kini bersih dan hanya berisi database aktif: `bot.db`, `bot.db-shm`, dan `bot.db-wal`.
+2. Folder `/backend/database/` kini hanya berisi file kode aktif: `sqlite.ts`.
+3. Seluruh fitur dashboard dan bot WhatsApp tetap beroperasi normal menggunakan SQLite.
+4. Build dan typecheck lulus 100% tanpa error.
+
+Kendala:
+Tidak ada.
+
+---
+
+[16.0] - IMPLEMENTASI TAB KONFIRMASI CHECKOUT DAN ALUR KODE PROMO BOT WHATSAPP
+
+- Tanggal: 2026-11-01 22:45
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 3.0
+
+Pekerjaan yang Dilakukan:
+1. Menambahkan tab "Konfirmasi" pada halaman Respon Bot di dashboard berdampingan dengan tab Menu, List, Carousel, dan Invoice.
+2. Menyediakan 4 textarea template pesan yang dapat disesuaikan oleh pemilik toko:
+   - Ringkasan Pesanan (Order Summary)
+   - Permintaan Input Kode Promo
+   - Pesan Jika Kode Promo Valid
+   - Pesan Jika Kode Promo Invalid
+   - Footer Pesan Konfirmasi
+3. Mengintegrasikan placeholder baru:
+   - {promoCode}: Menampilkan kode promo yang digunakan pembeli.
+   - {discount}: Menampilkan potongan harga yang didapatkan.
+   - {finalPrice}: Menampilkan total pembayaran akhir setelah dipotong promo.
+   - {reason}: Menampilkan alasan penolakan jika kode promo tidak valid.
+   - Placeholder default: {storeName}, {ownerName}, {adminName}, {produkName}, {varian}, {category}, {price}, {total}.
+4. Memperbarui backend configManager dan sqlite untuk memuat dan menyimpan konfigurasi confirmation ke tabel commands_config secara persisten.
+5. Memperbarui alur checkout bot WhatsApp:
+   - Saat tombol Order pada Carousel ditekan: bot mengirimkan Ringkasan Pesanan ke DM pribadi pembeli dengan 2 tombol interaktif: [Pakai Kode Promo] dan [Lanjut Bayar (Normal)].
+   - Jika order dipicu dari grup WhatsApp, bot mengirimkan notifikasi singkat ke grup bahwa rincian pesanan telah dikirimkan ke chat pribadi (DM).
+   - Menetapkan durasi timeout sesi checkout selama 90 detik (1 menit 30 detik).
+   - Menangani tombol [Pakai Kode Promo]: bot menanyakan kode promo di DM pembeli dan menunggu input teks tanpa perlu awalan prefix.
+   - Jika pembeli mengetik 'BATAL': bot melanjutkan pembuatan invoice QRIS dengan harga normal.
+   - Jika pembeli mengetik kode promo: bot memvalidasi via SQLite validateAndApplyPromo() dengan perlindungan margin. Jika valid, bot mengirimkan pesan konfirmasi sukses dan menerbitkan invoice LunasQRIS dengan nominal hemat {finalPrice}. Jika invalid, bot mengirimkan pesan alasan {reason} dan membiarkan sesi tetap aktif agar pembeli dapat mencoba kode lain atau mengetik BATAL.
+   - Jika pembeli menekan [Lanjut Bayar (Normal)]: bot langsung menerbitkan invoice LunasQRIS dengan harga normal.
+   - Menambah counter penggunaan kode promo (used_count) di tabel promo_codes ketika pembayaran telah berstatus paid (lunas).
+6. Menjalankan compile_applet dan lint_applet dengan hasil sukses tanpa error.
+
+File yang Diubah:
+- "backend/types/bot.types.ts" - Menambahkan tipe ConfirmationCommandConfig dan memperluas CommandsConfig.
+- "src/types/dashboard.types.ts" - Menambahkan opsi tab 'Confirmation' dan interface ConfirmationCommandConfig.
+- "backend/config/configManager.ts" - Menambahkan default template konfirmasi, loadConfirmationConfig(), dan saveConfirmationConfig().
+- "backend/services/placeholderHelper.ts" - Menambahkan penggantian placeholder {promoCode}, {discount}, {finalPrice}, dan {reason}.
+- "src/hooks/useStoreConfig.ts" - Menambahkan state dan sinkronisasi API untuk template konfirmasi.
+- "src/components/tabs/TabCommand.tsx" - Menambahkan UI tab visual "Konfirmasi", 4 textarea form, badge tags placeholder, dan tombol Simpan.
+- "src/components/tabs/TabContentRenderer.tsx" - Menyambungkan props konfigurasi konfirmasi ke TabCommand.
+- "backend/handlers/messageDispatcher.ts" - Mengimplementasikan sesi checkout 90 detik, tombol Quick Reply promo vs bayar langsung, pembacaan kode promo di DM tanpa prefix, dan fungsi executeLunasQrisInvoice.
+- "brain/LANGKAH_IMPLEMENTASI.md" - Memperbarui status implementasi [3.0] menjadi Completed.
+
+Alasan Perubahan:
+Menerapkan alur checkout interaktif berbasis kode promo dan memberikan kontrol penuh kepada pemilik toko untuk mengedit seluruh pesan respon konfirmasi checkout melalui dashboard Respon Bot.
+
+Hasil:
+1. Tab "Konfirmasi" tersedia di halaman Respon Bot dashboard dengan form yang lengkap, intuitif, dan responsif.
+2. Bot WhatsApp mengarahkan checkout ke DM dengan masa tunggu 90 detik dan tombol pilihan promo atau bayar normal.
+3. Kode promo tervalidasi secara aman dengan perlindungan margin keuntungan toko, dan invoice LunasQRIS otomatis menyesuaikan harga diskon {finalPrice}.
+4. Semua build dan typecheck lulus 100%.
+
+Kendala:
+Tidak ada.
+
+---
+
+[17.0] - PERBAIKAN WEBSOCKET ERROR PORT 24678 & PENONAKTIFAN HMR VITE
+
+- Tanggal: 2026-11-01 19:29
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 4.0
+
+Pekerjaan yang Dilakukan:
+1. Menambahkan konfigurasi `hmr: false` pada `createViteServer` di `server.ts`.
+2. Menambahkan `hmr: false` pada konfigurasi `server` di `vite.config.ts`.
+3. Menambahkan `hmr: false` pada konfigurasi `server` di `frontend/vite.config.ts`.
+4. Memverifikasi kelulusan build menggunakan `compile_applet` dan type-check `lint_applet` (tsc --noEmit).
+5. Merestart development server menggunakan `restart_dev_server` untuk memastikan dev server berjalan bersih di port 3000 tanpa konflik port WebSocket.
+
+File yang Diubah:
+- "server.ts" - Menambahkan opsi `hmr: false` pada pembuatan server Vite middleware.
+- "vite.config.ts" - Menambahkan `hmr: false` pada blok `server`.
+- "frontend/vite.config.ts" - Menambahkan `hmr: false` pada blok `server`.
+- "brain/LANGKAH_IMPLEMENTASI.md" - Mencatat dan menyelesaikan entri [4.0].
+- "brain/PROGRESS.md" - Mencatat penyelesaian entri [17.0].
+
+Alasan Perubahan:
+Mengatasi error log runtime `WebSocket server error: Port 24678 is already in use` yang terjadi karena Vite secara default berupaya membuka server WebSocket HMR terpisah pada port 24678. Pada environment runtime AI Studio (dan iframe dev server), HMR dinonaktifkan sehingga `hmr: false` adalah konfigurasi yang tepat dan mencegah konflik port.
+
+Hasil:
+1. Error `WebSocket server error: Port 24678 is already in use` terselesaikan secara permanen.
+2. Dev server berjalan bersih di port 3000 (0.0.0.0).
+3. Build compilation dan linting lulus 100%.
+
+Kendala:
+Tidak ada.
+
+---
+
+[18.0] - MIGRASI PENUH KE FRONTEND/SRC DAN PENGHAPUSAN FOLDER ROOT /SRC
+
+- Tanggal: 2026-11-01 22:21
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 5.0
+
+Pekerjaan yang Dilakukan:
+1. Menyinkronkan 100% seluruh file mutakhir dari folder `/src` ke `/frontend/src` (termasuk komponen baru `DesktopSidebar`, `DesktopTopNav`, `TabKuponPromo`, `TabSaldo`, `TabConnectionDedicated`, `TabKoneksiLayanan`, `usePricingConfig`, `usePromos`, gambar aset, modal, dan hook).
+2. Memperbarui `server.ts` agar `createViteServer` mengarahkan root langsung ke folder `frontend` (`root: path.resolve(__dirname, 'frontend')`).
+3. Memperbarui `vite.config.ts` root dengan `root: path.resolve(__dirname, 'frontend')`, alias `@` mengarah ke `./frontend/src`, dan output build ke `dist/`.
+4. Memperbarui `frontend/vite.config.ts` dengan output build `../dist` dan server host `0.0.0.0`.
+5. Memperbarui `frontend/index.html` dan `index.html` agar selaras dan memuat `/frontend/src/main.tsx`.
+6. Memperbarui `tsconfig.json` dengan paths `@/*: ["./frontend/src/*"]` dan includes hanya `frontend/src`, `backend`, `server.ts`, dan `vite.config.ts`.
+7. Menghapus folder `/src` di root secara permanen setelah sinkronisasi diverifikasi.
+8. Memvalidasi kelulusan build dengan `compile_applet` dan type-check dengan `lint_applet` (100% lulus tanpa error).
+9. Merestart dev server via `restart_dev_server`.
+
+File yang Diubah:
+- "frontend/src/**" - Seluruh kode antarmuka mutakhir disinkronkan ke `frontend/src/`.
+- "server.ts" - Vite dev server middleware diarahkan ke root `frontend`.
+- "vite.config.ts" - Konfigurasi root dan alias `@` diarahkan ke `frontend/src`.
+- "frontend/vite.config.ts" - Konfigurasi build dan server diselaraskan.
+- "frontend/index.html" - Metadata disinkronkan.
+- "index.html" - Script src diarahkan ke `/frontend/src/main.tsx`.
+- "tsconfig.json" - Include `"src"` dihapus, paths diarahkan ke `frontend/src`.
+- "/src" - Folder duplikat lama di root telah dihapus bersih.
+- "brain/LANGKAH_IMPLEMENTASI.md" - Entri [5.0] diperbarui menjadi Completed.
+- "brain/PROGRESS.md" - Entri [18.0] dicatat.
+
+Alasan Perubahan:
+Memenuhi permintaan pengguna untuk menggunakan `frontend/src` sebagai satu-satunya folder kode frontend, menghilangkan kebingungan struktur direktori ganda, dan menjaga kebersihan arsitektur proyek.
+
+Hasil:
+1. Seluruh kode frontend kini berada di `frontend/src/` tanpa ada duplikasi `/src` di root.
+2. Tidak ada fungsi atau fitur yang hilang: seluruh tab (termasuk Kupon Promo, Saldo, Sidebar, Top Nav, dsb) tetap berjalan 100% normal.
+3. Build (`compile_applet`) dan linter (`lint_applet`) lulus tanpa error.
+4. Dev server berjalan normal di port 3000.
+
+Kendala:
+Tidak ada.
+
+---
+
+[19.0] - IMPLEMENTASI TAHAP 4: ARSITEKTUR MONOREPO, MULTI-DOMAIN, DAN DATABASE-PER-TENANT (FITUR APARTEMEN)
+
+- Tanggal: 2026-11-01 23:54
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 6.0
+
+Pekerjaan yang Dilakukan:
+1. Membangun database Master Admin `database/master.db` melalui `admin-backend/database/masterSqlite.ts` lengkap dengan tabel `super_admins`, `tenants`, dan `subscription_logs` serta default seed akun super admin `adminutama` dan unit penthouse default `t_wanzt`.
+2. Menerapkan pola Database-per-Tenant melalui `backend/database/tenantDbManager.ts` yang mengelola file database mandiri untuk masing-masing penyewa di `/database/tenants/tenant_{id}.db` dengan mode WAL (*Write-Ahead Logging*).
+3. Mengembangkan backend service `TenantManager` di `admin-backend/services/tenantManager.ts` untuk mengelola CRUD tenant, perpanjangan sewa (+7/+30/+90/+365 hari), pengubahan status (active/suspended/expired), impersonation token 1-klik, dan statistik global.
+4. Menerapkan router REST API Master Admin di `admin-backend/routes/adminRoutes.ts` dan menghubungkannya ke `backend/app.ts` pada endpoint `/api/admin/*`.
+5. Membangun aplikasi web Master Admin terpisah di `admin-frontend/` (React + Tailwind CSS + Lucide Icons) dengan fitur:
+   - 4 Kartu Metrik Gedung (Total Unit, Unit Aktif, Unit Expired, Unit Suspended).
+   - Tabel lengkap tenant apartemen dengan status badge, hitung mundur sisa hari sewa, dan kontak WhatsApp.
+   - Modal pendaftaran unit toko baru lengkap dengan pilihan paket dan durasi sewa awal.
+   - Modal perpanjangan masa sewa (+7, +30, +90, +365 hari atau kustom) beserta catatan pembayaran.
+   - Tombol toggle suspend/aktifkan dan hapus tenant permanen.
+   - Fitur Impersonation ("Buka Toko") yang memungkinkan Master Admin membuka dashboard toko tenant dengan 1-klik.
+   - Tombol navigasi switcher yang menghubungkan Dashboard Toko dan Master Admin.
+6. Memperbarui `server.ts` untuk melayani dua aplikasi secara bersamaan (Multi-Domain Nginx Ready):
+   - Jika request berasal dari `admin.wanma2.my.id` atau path `/admin`: disajikan `admin-frontend/`.
+   - Jika request berasal dari `dashboard.wanma2.my.id` atau root `/`: disajikan `frontend/`.
+7. Menambahkan tombol "Master Apartemen" pada `DesktopTopNav.tsx` di `frontend/src/` untuk kemudahan navigasi bagi pemilik platform.
+8. Memvalidasi kompilasi (`compile_applet`), linting (`lint_applet`), dan pengujian live endpoint API (`/api/admin/stats`, `/api/admin/tenants`, create, extend, delete).
+
+File yang Diubah / Dibuat:
+- "admin-backend/database/masterSqlite.ts" - Inisialisasi SQLite `database/master.db`.
+- "admin-backend/services/tenantManager.ts" - Service manajemen tenant & sewa.
+- "admin-backend/routes/adminRoutes.ts" - REST API Master Admin (`/api/admin/*`).
+- "backend/database/tenantDbManager.ts" - Dynamic connection manager untuk database per-tenant.
+- "backend/app.ts" - Mount adminRouter dan inisialisasi master database.
+- "backend/routes/apartmentRoutes.ts" - Type safety parameter fixes.
+- "admin-frontend/index.html" - Entry HTML Master Admin.
+- "admin-frontend/vite.config.ts" - Konfigurasi Vite admin.
+- "admin-frontend/src/index.css" - Tailwind styling.
+- "admin-frontend/src/main.tsx" - Entry point React admin.
+- "admin-frontend/src/App.tsx" - Dashboard Master Admin Apartemen UI.
+- "frontend/src/components/layout/DesktopTopNav.tsx" - Tombol pintas "Master Apartemen".
+- "server.ts" - Dual Vite dev server & production static middleware.
+- "tsconfig.json" - Include `admin-frontend/src` dan `admin-backend`.
+- "brain/LANGKAH_IMPLEMENTASI.md" - Entri [6.0] diselesaikan.
+- "brain/PROGRESS.md" - Entri [19.0] dicatat.
+
+Alasan Perubahan:
+Mengimplementasikan Tahap 4 (Fitur Apartemen Multi-Tenant) sesuai dengan seluruh spesifikasi arsitektur yang telah disepakati bersama pengguna.
+
+Hasil:
+1. Platform kini 100% mendukung multi-tenant dengan isolasi folder, database per-tenant (`database/tenants/`), dan sesi WhatsApp terpisah (`auth_info_baileys/`).
+2. Dashboard Master Admin aktif dan dapat diakses melalui domain `admin.wanma2.my.id` atau path `/admin`.
+3. Dashboard Toko Pengguna aktif di `dashboard.wanma2.my.id` atau root `/`.
+4. Seluruh endpoint API teruji dan berjalan normal.
+5. Build dan linter lulus 100% tanpa error.
+
+Kendala:
+Tidak ada.
+
+---
+
+[20.0] - OPTIMISASI AKSES DAN VITE BASE ROUTING DASHBOARD MASTER DI SANDBOX AISTUDIO
+
+- Tanggal: 2026-11-02 08:05
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 7.0
+
+Pekerjaan yang Dilakukan:
+1. Menetapkan `base: '/admin/'` pada `admin-frontend/vite.config.ts` dan instance `viteAdmin` di `server.ts` agar seluruh script (`/admin/src/main.tsx`), CSS, dan chunk Vite menyertakan prefix subpath `/admin/`.
+2. Menyempurnakan Express middleware di `server.ts`:
+   - Request ke `/admin` otomatis dialihkan (HTTP 301) ke `/admin/`.
+   - Seluruh request aset yang diawali `/admin/` langsung diserahkan ke `viteAdmin.middlewares`.
+   - Seluruh request reguler toko di root (`/`) tetap dilayani secara independen oleh `viteTenant.middlewares`.
+3. Memperbarui tombol pintas "Master Apartemen" pada `frontend/src/components/layout/DesktopTopNav.tsx` dan menambahkan tombol "Master" di navbar mobile `frontend/src/components/layout/Navbar.tsx` yang langsung mengarahkan tampilan ke `/admin/`.
+4. Menguji respon dev server dengan curl untuk `/`, `/admin`, `/admin/`, dan `/admin/src/main.tsx`, memastikan kedua frontend terisolasi secara sempurna dan tidak saling menimpa script.
+5. Memverifikasi seluruh kode dengan `compile_applet` dan `lint_applet` (100% lolos).
+
+File yang Diubah:
+- "admin-frontend/vite.config.ts" - Menambahkan opsi `base: '/admin/'`.
+- "server.ts" - Mengonfigurasi `base: '/admin/'` pada `viteAdmin` dan routing Express middleware `/admin/`.
+- "frontend/src/components/layout/DesktopTopNav.tsx" - Mengarahkan tautan tombol ke `/admin/`.
+- "frontend/src/components/layout/Navbar.tsx" - Menambahkan tombol "Master" untuk akses responsif di layar mobile.
+- "brain/LANGKAH_IMPLEMENTASI.md" - Entri [7.0] diselesaikan.
+- "brain/PROGRESS.md" - Entri [20.0] dicatat.
+
+Alasan Perubahan:
+Di lingkungan sandbox AI Studio (yang berjalan pada satu domain preview cloud run), penentuan `base: '/admin/'` sangat penting agar Vite tidak meminta `/src/main.tsx` ke frontend toko pengguna, sehingga Master Admin dapat dimuat secara instan tanpa kesalahan asset loader.
+
+Hasil:
+1. Di sandbox preview AI Studio, Master Admin dapat diakses langsung dengan mengklik tombol "Master Apartemen" di pojok kanan atas navbar atau dengan menambahkan `/admin` pada URL browser.
+2. Script dan stylesheet untuk Master Admin dan Dashboard Toko Pengguna kini 100% terisolasi tanpa ada konflik.
+3. Tombol switcher dua arah (dari Toko ke Master Admin, dan dari Master Admin kembali ke Toko atau Buka Toko Tenant Tertentu) berfungsi dengan mulus.
+4. Lolos typecheck dan build.
+
+Kendala:
+Tidak ada.
+
+
+
+
+
+---
+
+[21.0] - REAKTIVASI FITUR LOGIN PADA DASHBOARD UTAMA (FRONTEND/SRC) DAN DUKUNGAN MULTI-TENANT APARTEMEN
+
+- Tanggal: 2026-11-02 16:35
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 8.0
+
+Pekerjaan yang Dilakukan:
+1. Mengaktifkan kembali pintu gerbang login (`LoginPage`) pada dashboard toko utama di `frontend/src/App.tsx`. Seluruh dashboard kini terkunci rapat dan hanya dapat diakses setelah login terverifikasi.
+2. Memperbarui antarmuka layar pemuatan verifikasi sesi (`authLoading`) dengan palet warna cerah dan konsisten (`bg-slate-50`, spinner `sky-600`) agar selaras dengan desain baru antarmuka toko.
+3. Memperluas mekanisme otentikasi backend di `backend/services/authManager.ts` dan `backend/routes/authRoutes.ts`:
+   - Mendukung login menggunakan akun admin utama toko (`auth` table di `bot.db`).
+   - Mendukung login penyewa/unit apartemen multi-tenant dari `database/master.db` (tabel `tenants`) maupun `bot.db`.
+   - Mengimplementasikan fungsi `getSession(token)` sehingga endpoint `/api/auth/session` mengembalikan username dinamis dari pengguna yang sedang aktif (baik admin maupun tenant), bukan hardcoded string.
+4. Menambahkan dukungan token impersonasi ("Buka Toko") dari Master Admin:
+   - Mengekspor `impersonationTokens` dari `admin-backend/routes/adminRoutes.ts`.
+   - Mengintegrasikan pengecekan impersonation token pada `/api/auth/session`.
+   - Memperbarui hook `frontend/src/hooks/useAuth.ts` untuk membaca parameter URL `?impersonate=...` secara otomatis, menyimpan token ke `localStorage`, dan membersihkan URL tanpa reload.
+5. Menguji alur otentikasi via API:
+   - Password salah ditolak secara tepat (HTTP 401).
+   - Kredensial valid menghasilkan token sesi dan data user.
+   - Pengecekan sesi via header Authorization Bearer token mengembalikan `{ authenticated: true }`.
+   - Logout berhasil menghapus sesi dan request sesi berikutnya mengembalikan `{ authenticated: false }`.
+6. Menjalankan `compile_applet` dan `lint_applet` (keduanya lulus 100% tanpa error).
+
+File yang Diubah:
+- "frontend/src/App.tsx" - Mengaktifkan guard `authLoading` dan render `LoginPage` saat belum login.
+- "frontend/src/hooks/useAuth.ts" - Menambahkan deteksi parameter `impersonate` pada inisialisasi token.
+- "backend/services/authManager.ts" - Menambahkan `getSession()` dan verifikasi akun tenant di samping admin utama.
+- "backend/routes/authRoutes.ts" - Memperbarui rute `/api/auth/session` dan `/api/auth/login` untuk multi-tenant & impersonasi.
+- "admin-backend/routes/adminRoutes.ts" - Mengekspor `impersonationTokens` dan `activeAdminTokens`.
+- "brain/LANGKAH_IMPLEMENTASI.md" - Entri [8.0] diperbarui menjadi Completed.
+
+Alasan Perubahan:
+Mengembalikan keamanan akses dashboard toko utama setelah proses perombakan antarmuka dan migrasi ke `/frontend/src/` selesai, serta mengintegrasikan otentikasi yang mendukung fitur multi-tenant apartemen.
+
+Hasil:
+1. Dashboard utama kini terlindungi oleh form login. Pengguna yang belum login otomatis diarahkan ke `LoginPage`.
+2. Admin toko dan pemilik unit apartemen dapat masuk dengan kredensial masing-masing.
+3. Fitur "Buka Toko" (impersonasi) dari dashboard Master Admin dapat membuka toko penyewa secara langsung tanpa login ulang.
+4. Seluruh build dan linting lolos 100% tanpa error.
+
+Kendala:
+Tidak ada.
+
+---
+
+[22.0] - IMPLEMENTASI ISOLASI DATABASE DAN SESI BOT PER-TENANT (ARSITEKTUR MULTI-TENANT APARTEMEN ASLI)
+
+- Tanggal: 2026-11-02 17:35
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 9.0
+
+Pekerjaan yang Dilakukan:
+1. Membangun modul Request-Scoped Tenant Context (`backend/database/tenantContext.ts`) menggunakan Node.js AsyncLocalStorage:
+   - Menyediakan `getActiveTenantId()` dengan fallback cerdas ke 't_wanzt'.
+   - Menyediakan `runWithTenant(tenantId, fn)` untuk membungkus eksekusi kode dalam scope tenant tertentu.
+2. Memperbarui `backend/database/tenantDbManager.ts`:
+   - Menyediakan `initTenantDbTables()` yang menginisialisasi skema tabel lengkap secara mandiri untuk setiap database tenant di `database/tenants/{tenantId}.db`.
+   - Mengimplementasikan fungsi migrasi otomatis `migrateTenantDb()` yang memeriksa dan menambahkan kolom-kolom baru (seperti `pricing_mode`, `pricing_value`, `command_type`, `group_id`, `discount_mode`, `min_spend`, dsb.) jika database tenant dibuat dari skema terdahulu.
+   - Menyinkronkan nilai pengaturan harga lama (`mode` dan `value`) ke kolom baru (`pricing_mode` dan `pricing_value`).
+3. Mengubah export `db` pada `backend/database/sqlite.ts` menjadi Dynamic Proxy:
+   - Setiap pemanggilan method database (`db.prepare()`, `db.exec()`, `db.transaction()`, dsb.) secara otomatis diarahkan ke instance SQLite milik tenant aktif pada saat request diproses.
+4. Memperbarui `backend/services/authManager.ts` dan `backend/routes/authRoutes.ts`:
+   - Menyimpan `tenantId` pada setiap token sesi di memori.
+   - Mengembalikan `tenantId` pada respon login, session check, dan store-status.
+   - Menetapkan cookie `tenant_id` dan `auth_token` dengan path `/`.
+5. Memasang middleware tenant context di baris paling atas `backend/app.ts`:
+   - Mendeteksi identitas tenant dari query parameter (`impersonate` / `tenant`), header Authorization Bearer token, header `x-tenant-id`, cookie `tenant_id`, maupun hostname.
+   - Menjalankan setiap request Express dalam konteks `tenantContextStorage`.
+6. Memperbarui arsitektur WhatsApp Bot pada `backend/botManager.ts`:
+   - Mengubah arsitektur bot singleton menjadi multi-instance pool per-tenant `getBotManager(tenantId)`.
+   - Setiap bot tenant memiliki folder autentikasi Baileys terisolasi di `auth_info_baileys/tenant_{tenantId}`.
+   - Mengisolasi logs, status pairing code, QR code, dan event dispatcher per unit tenant.
+   - Membungkus pesan masuk (upsert) di dalam `runWithTenant(tenantId)`.
+7. Memperbarui sisi klien di `frontend/src/main.tsx` dan `frontend/src/hooks/useAuth.ts`:
+   - Menambahkan global fetch interceptor yang otomatis menyertakan header `Authorization: Bearer <token>` dan `x-tenant-id: <tenantId>` ke seluruh request `/api/*`.
+   - Menyimpan dan membersihkan `wanzt_tenant_id` di localStorage saat login dan logout.
+8. Melakukan pengujian isolasi data:
+   - Menguji `store-status` antara tenant `t_wanzt` dan `t_akaj_211` menghasilkan nama toko, nomor pemilik, dan kelengkapan data yang berbeda.
+   - Menguji update harga pada `t_akaj_211` (Rp 2.500) dan memastikan data harga `t_wanzt` tetap independen (Rp 500).
+   - Memverifikasi bot status masing-masing tenant membawa konfigurasi dan log aktivitas terisolasi.
+9. Menjalankan `compile_applet` dan `lint_applet` (keduanya lulus 100% tanpa error).
+
+File yang Diubah:
+- "backend/database/tenantContext.ts" - Penyimpanan konteks tenant request-scoped dengan AsyncLocalStorage.
+- "backend/database/tenantDbManager.ts" - Pengelola database tenant independen, pembuat skema lengkap, dan migrasi otomatis.
+- "backend/database/sqlite.ts" - Dynamic Proxy untuk objek db yang mengarahkan operasi ke database tenant aktif.
+- "backend/services/authManager.ts" - Pelacakan tenantId pada sesi dan otentikasi login multi-tenant.
+- "backend/routes/authRoutes.ts" - Penetapan cookie dan pengembalian tenantId pada endpoint auth.
+- "backend/app.ts" - Middleware penentu tenant context di tingkat aplikasi backend.
+- "backend/botManager.ts" - Multi-instance pool bot per-tenant dan isolasi sesi Baileys.
+- "frontend/src/hooks/useAuth.ts" - Penyimpanan tenantId di localStorage dan dukungan parameter impersonasi.
+- "frontend/src/main.tsx" - Global fetch interceptor untuk header x-tenant-id dan Authorization.
+- "brain/LANGKAH_IMPLEMENTASI.md" - Entri [9.0] diperbarui menjadi Completed.
+- "brain/PROGRESS.md" - Entri [22.0] dicatat.
+
+Alasan Perubahan:
+Sesuai arahan pengguna, setiap tenant unit apartemen wajib memiliki toko independen dengan file database terpisah dan sesi bot WhatsApp terpisah, sehingga login dengan username/password berbeda tidak lagi masuk ke dashboard toko yang sama.
+
+Hasil:
+1. Setiap tenant kini memiliki file database SQLite terisolasi di `database/tenants/{tenantId}.db`.
+2. Sesi bot WhatsApp terisolasi di folder kredensial Baileys `auth_info_baileys/tenant_{tenantId}`.
+3. Seluruh perubahan profil toko, pengaturan harga produk, kupon promo, daftar transaksi, dan bot WhatsApp pada satu tenant tidak akan mempengaruhi tenant lainnya.
+4. Fitur impersonasi "Buka Toko" dari Master Admin membuka unit apartemen yang tepat dengan data terisolasi.
+5. Verifikasi linting dan kompilasi lulus 100%.
+
+Kendala:
+Tidak ada.
+
+
+---
+
+[23.0] - PERBAIKAN RUNTIME ERROR GETTER-ONLY WINDOW.FETCH PADA ENTRY POINT FRONTEND
+
+- Tanggal: 2026-11-02 17:55
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 10.0
+
+Pekerjaan yang Dilakukan:
+1. Mendiagnosis penyebab runtime error `TypeError: Cannot set property fetch of #<Window> which has only a getter at /src/main.tsx:9:14` yang muncul di konsol browser / iframe sandbox AI Studio.
+2. Memperbaiki kode inisialisasi interceptor pada `frontend/src/main.tsx`:
+   - Menghilangkan assignment langsung `window.fetch = ...`.
+   - Menggantinya dengan pendefinisian aman melalui `Object.defineProperty(window, 'fetch', { value: interceptedFetch, writable: true, configurable: true, enumerable: true })`.
+   - Melindungi seluruh proses interceptor dengan blok `try...catch` berlapis dan fallback `originalFetch.bind(window)`.
+   - Memastikan `createRoot(document.getElementById('root')!).render(<App />)` selalu dieksekusi tanpa risiko terhenti oleh kegagalan monkey-patching di lingkungan browser apa pun.
+3. Menjalankan verifikasi tipe dan linting via `lint_applet` (`tsc --noEmit` lulus 100% tanpa error).
+4. Menjalankan verifikasi kompilasi produksi via `compile_applet` (lulus 100%).
+5. Menguji respon dev server melalui curl untuk script `/src/main.tsx` dan memastikan respon HTTP 200 untuk route root `/` dan `/admin/`.
+
+File yang Diubah:
+- "frontend/src/main.tsx" - Memasang Object.defineProperty berpelindung try-catch untuk window.fetch interceptor.
+- "brain/LANGKAH_IMPLEMENTASI.md" - Entri [10.0] diperbarui menjadi Completed.
+- "brain/PROGRESS.md" - Entri [23.0] dicatat.
+
+Alasan Perubahan:
+Menghilangkan runtime error browser saat memuat aplikasi toko sehingga halaman antarmuka dashboard toko utama dapat dirender tanpa crash.
+
+Hasil:
+1. Runtime error `Cannot set property fetch` terselesaikan sepenuhnya.
+2. Aplikasi frontend toko utama dapat dimuat dengan lancar di iframe sandbox maupun browser langsung.
+3. Interceptor tetap secara transparan menyertakan token otentikasi Bearer dan header `x-tenant-id` ke setiap panggilan `/api/*` bila tersedia.
+4. Lolos typecheck dan verifikasi build 100%.
+
+Kendala:
+Tidak ada.
