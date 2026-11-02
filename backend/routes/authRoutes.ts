@@ -4,8 +4,11 @@ import {
   verifyLogin,
   createSession,
   validateSession,
+  getSession,
   revokeSession,
 } from '../services/authManager.ts';
+import { impersonationTokens } from '../../admin-backend/routes/adminRoutes.ts';
+import { TenantManager } from '../../admin-backend/services/tenantManager.ts';
 import { saveStoreInfo, loadStoreInfo } from '../config/configManager.ts';
 import { botManager } from '../botManager.ts';
 
@@ -18,12 +21,23 @@ initAuth();
 authRouter.post('/login', (req: Request, res: Response) => {
   try {
     const { username, password } = req.body || {};
-    const isValid = verifyLogin(username, password);
-    if (!isValid) {
+    const authResult = verifyLogin(username, password);
+    if (!authResult) {
       return res.status(401).json({ success: false, error: 'Username atau password salah!' });
     }
-    const token = createSession(username);
-    return res.json({ success: true, token, user: { username } });
+    const resolvedUsername = authResult.username || username;
+    const resolvedTenantId = authResult.tenantId || 't_wanzt';
+    const token = createSession(resolvedUsername, resolvedTenantId);
+
+    // Set cookie untuk memastikan request selanjutnya otomatis teridentifikasi tenant-nya
+    res.cookie('tenant_id', resolvedTenantId, { path: '/', httpOnly: false, maxAge: 7 * 24 * 3600 * 1000 });
+    res.cookie('auth_token', token, { path: '/', httpOnly: false, maxAge: 7 * 24 * 3600 * 1000 });
+
+    return res.json({
+      success: true,
+      token,
+      user: { username: resolvedUsername, tenantId: resolvedTenantId },
+    });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err?.message || 'Server error' });
   }
@@ -33,8 +47,28 @@ authRouter.post('/login', (req: Request, res: Response) => {
 authRouter.get('/session', (req: Request, res: Response) => {
   const authHeader = req.headers['authorization'] || '';
   const token = authHeader.replace(/^Bearer\s+/i, '') || (req.query.token as string) || '';
-  const isValid = validateSession(token);
-  return res.json({ authenticated: isValid, user: isValid ? { username: 'admin' } : null });
+
+  // A. Cek sesi impersonasi dari Master Admin ("Buka Toko")
+  if (token && impersonationTokens.has(token)) {
+    const imp = impersonationTokens.get(token);
+    if (imp && Date.now() < imp.expiresAt) {
+      const tenant = TenantManager.getTenant(imp.tenantId);
+      const username = tenant?.username || `Tenant-${imp.tenantId}`;
+      res.cookie('tenant_id', imp.tenantId, { path: '/', httpOnly: false, maxAge: 7 * 24 * 3600 * 1000 });
+      return res.json({ authenticated: true, user: { username, tenantId: imp.tenantId } });
+    } else if (imp) {
+      impersonationTokens.delete(token);
+    }
+  }
+
+  // B. Cek sesi reguler pengguna / tenant
+  const session = getSession(token);
+  if (session) {
+    res.cookie('tenant_id', session.tenantId, { path: '/', httpOnly: false, maxAge: 7 * 24 * 3600 * 1000 });
+    return res.json({ authenticated: true, user: { username: session.username, tenantId: session.tenantId } });
+  }
+
+  return res.json({ authenticated: false, user: null });
 });
 
 // 3. Logout Sesi (POST /api/auth/logout)
@@ -42,6 +76,8 @@ authRouter.post('/logout', (req: Request, res: Response) => {
   const authHeader = req.headers['authorization'] || '';
   const token = authHeader.replace(/^Bearer\s+/i, '');
   revokeSession(token);
+  res.clearCookie('tenant_id', { path: '/' });
+  res.clearCookie('auth_token', { path: '/' });
   return res.json({ success: true });
 });
 

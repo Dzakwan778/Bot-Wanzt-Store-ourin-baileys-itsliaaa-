@@ -14,6 +14,10 @@ import { initMasterDatabase } from '../admin-backend/database/masterSqlite.ts';
 import { initTenantDb } from './database/tenantDbManager.ts';
 import { initDatabase } from './database/sqlite.ts';
 
+import { tenantContextStorage } from './database/tenantContext.ts';
+import { getSession } from './services/authManager.ts';
+import { impersonationTokens } from '../admin-backend/routes/adminRoutes.ts';
+
 export function createServerApp(): Express {
   // Pastikan database SQLite siap
   initDatabase();
@@ -33,6 +37,69 @@ export function createServerApp(): Express {
     })
   );
   app.use(express.urlencoded({ extended: true }));
+
+  // Middleware Identifikasi Tenant (Apartemen Multi-Tenancy)
+  app.use((req: Request, _res: Response, next: NextFunction) => {
+    let tenantId = 't_wanzt';
+    let username = 'admin';
+
+    // 1. Cek query param ?impersonate=... atau ?tenant=...
+    const queryTenant = (req.query.tenant as string) || '';
+    const impToken = (req.query.impersonate as string) || '';
+    if (impToken && impersonationTokens.has(impToken)) {
+      const impData = impersonationTokens.get(impToken);
+      if (impData && Date.now() < impData.expiresAt) {
+        tenantId = impData.tenantId;
+      }
+    } else if (queryTenant && queryTenant.trim()) {
+      tenantId = queryTenant.trim();
+    }
+
+    // 2. Cek Header Authorization (Bearer <token>)
+    if (!queryTenant && !impToken) {
+      const authHeader = req.headers.authorization || '';
+      const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+      if (token) {
+        if (impersonationTokens.has(token)) {
+          const impData = impersonationTokens.get(token);
+          if (impData && Date.now() < impData.expiresAt) {
+            tenantId = impData.tenantId;
+          }
+        } else {
+          const session = getSession(token);
+          if (session && session.tenantId) {
+            tenantId = session.tenantId;
+            username = session.username;
+          }
+        }
+      }
+    }
+
+    // 3. Cek Header X-Tenant-Id
+    const headerTenant = req.headers['x-tenant-id'] as string;
+    if (headerTenant && headerTenant.trim()) {
+      tenantId = headerTenant.trim();
+    }
+
+    // 4. Cek Cookie tenant_id jika belum terdeteksi dari token/header
+    if (tenantId === 't_wanzt') {
+      const cookieHeader = req.headers.cookie || '';
+      const match = cookieHeader.match(/tenant_id=([^;]+)/);
+      if (match && match[1]) {
+        tenantId = decodeURIComponent(match[1].trim());
+      }
+    }
+
+    // Pastikan database unit apartemen tenant siap
+    try {
+      initTenantDb(tenantId);
+    } catch (dbErr) {
+      console.error(`[Tenant DB Error] Inisialisasi ${tenantId} gagal:`, dbErr);
+    }
+
+    (req as any).tenantId = tenantId;
+    tenantContextStorage.run({ tenantId, username }, () => next());
+  });
 
   // Health check endpoint
   app.get('/api/health', (_req: Request, res: Response) => {

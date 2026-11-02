@@ -11,6 +11,7 @@ export interface AuthConfig {
 export interface SessionData {
   token: string;
   username: string;
+  tenantId: string;
   createdAt: number;
   expiresAt: number;
 }
@@ -70,30 +71,79 @@ export function initAuth(): AuthConfig {
   }
 }
 
+import { getMasterDb, hashPassword as hashMasterPassword } from '../../admin-backend/database/masterSqlite.ts';
+
+export interface AuthVerificationResult {
+  success: boolean;
+  username: string;
+  tenantId?: string;
+}
+
 /**
  * Verifikasi login dengan perbandingan waktu konstan (constant-time comparison)
- * Mencegah timing attacks
+ * Mencegah timing attacks.
+ * Mendukung kredensial Admin Utama dan Akun Tenant Apartemen.
  */
-export function verifyLogin(usernameInput: string, passwordInput: string): boolean {
+export function verifyLogin(usernameInput: string, passwordInput: string): AuthVerificationResult | false {
   try {
-    const auth = initAuth();
     if (!usernameInput || !passwordInput) return false;
-
-    // Periksa kesesuaian username
     const trimmedInputUser = usernameInput.trim();
-    if (trimmedInputUser.toLowerCase() !== auth.username.toLowerCase()) {
-      return false;
+
+    // 1. Verifikasi Admin Utama (Tabel auth di SQLite)
+    const auth = initAuth();
+    if (trimmedInputUser.toLowerCase() === auth.username.toLowerCase()) {
+      const inputHash = hashPassword(passwordInput, auth.salt);
+      const hashBuffer = Buffer.from(auth.hash, 'hex');
+      const inputBuffer = Buffer.from(inputHash, 'hex');
+
+      if (hashBuffer.length === inputBuffer.length && crypto.timingSafeEqual(hashBuffer, inputBuffer)) {
+        return { success: true, username: auth.username, tenantId: 't_wanzt' };
+      }
     }
 
-    const inputHash = hashPassword(passwordInput, auth.salt);
-    const hashBuffer = Buffer.from(auth.hash, 'hex');
-    const inputBuffer = Buffer.from(inputHash, 'hex');
+    // 2. Verifikasi Tenant Apartemen (Tabel tenants di master.db)
+    try {
+      const masterDb = getMasterDb();
+      const masterTenant = masterDb.prepare(`
+        SELECT tenant_id, username, password_hash, status
+        FROM tenants
+        WHERE LOWER(username) = LOWER(?)
+      `).get(trimmedInputUser) as any;
 
-    if (hashBuffer.length !== inputBuffer.length) {
-      return false;
-    }
+      if (masterTenant && masterTenant.password_hash) {
+        if (masterTenant.status === 'suspended') {
+          return false;
+        }
+        const masterHash = hashMasterPassword(passwordInput);
+        if (masterHash === masterTenant.password_hash) {
+          return { success: true, username: masterTenant.username, tenantId: masterTenant.tenant_id };
+        }
+      }
+    } catch {}
 
-    return crypto.timingSafeEqual(hashBuffer, inputBuffer);
+    // 3. Verifikasi Tenant di database lokal (jika ada unit terdaftar di tabel tenants bot.db)
+    try {
+      const localTenant = db.prepare(`
+        SELECT id, username, password_hash, salt, status
+        FROM tenants
+        WHERE LOWER(username) = LOWER(?)
+      `).get(trimmedInputUser) as any;
+
+      if (localTenant && localTenant.password_hash && localTenant.salt) {
+        if (localTenant.status === 'suspended') {
+          return false;
+        }
+        const tenantHash = crypto.pbkdf2Sync(passwordInput, localTenant.salt, 100000, 64, 'sha512').toString('hex');
+        const hashBuffer = Buffer.from(localTenant.password_hash, 'hex');
+        const inputBuffer = Buffer.from(tenantHash, 'hex');
+
+        if (hashBuffer.length === inputBuffer.length && crypto.timingSafeEqual(hashBuffer, inputBuffer)) {
+          return { success: true, username: localTenant.username, tenantId: localTenant.id };
+        }
+      }
+    } catch {}
+
+    return false;
   } catch (err) {
     console.error('Error saat verifikasi login SQLite:', err);
     return false;
@@ -103,7 +153,7 @@ export function verifyLogin(usernameInput: string, passwordInput: string): boole
 /**
  * Buat sesi login baru dan kembalikan session token
  */
-export function createSession(username: string): string {
+export function createSession(username: string, tenantId: string = 't_wanzt'): string {
   cleanExpiredSessions();
 
   const token = crypto.randomBytes(32).toString('hex');
@@ -111,6 +161,7 @@ export function createSession(username: string): string {
   activeSessions.set(token, {
     token,
     username,
+    tenantId: tenantId || 't_wanzt',
     createdAt: now,
     expiresAt: now + SESSION_TTL_MS,
   });
@@ -119,19 +170,26 @@ export function createSession(username: string): string {
 }
 
 /**
- * Validasi session token
+ * Dapatkan data sesi aktif
  */
-export function validateSession(token?: string | null): boolean {
-  if (!token) return false;
+export function getSession(token?: string | null): SessionData | null {
+  if (!token) return null;
   const session = activeSessions.get(token);
-  if (!session) return false;
+  if (!session) return null;
 
   if (Date.now() > session.expiresAt) {
     activeSessions.delete(token);
-    return false;
+    return null;
   }
 
-  return true;
+  return session;
+}
+
+/**
+ * Validasi session token
+ */
+export function validateSession(token?: string | null): boolean {
+  return Boolean(getSession(token));
 }
 
 /**

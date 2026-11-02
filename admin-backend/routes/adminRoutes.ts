@@ -6,8 +6,8 @@ import crypto from 'crypto';
 export const adminRouter = Router();
 
 // In-memory token sederhana untuk sesi Master Admin & Impersonation
-const activeAdminTokens = new Set<string>();
-const impersonationTokens = new Map<string, { tenantId: string; expiresAt: number }>();
+export const activeAdminTokens = new Set<string>();
+export const impersonationTokens = new Map<string, { tenantId: string; expiresAt: number }>();
 
 // 1. Auth Super Admin
 adminRouter.post('/auth/login', (req: Request, res: Response) => {

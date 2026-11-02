@@ -53,8 +53,11 @@ import { sendProductVariantsCarousel } from './messages/carouselMessage.ts';
 import { sendAdminContactMessage } from './messages/adminContactMessage.ts';
 import { dispatchIncomingMessages, markMessageAsBotSent } from './handlers/messageDispatcher.ts';
 import { GroupItem, loadGroupsConfig, setGroupToggle } from './services/groupService.ts';
+import { getActiveTenantId, runWithTenant } from './database/tenantContext.ts';
 
-class BotManager {
+export class BotManager {
+  public tenantId: string;
+  public sessionDir: string;
   public status: BotStatus = 'idle';
   public phoneNumber: string = '';
   public pairingCode: string = '';
@@ -64,16 +67,21 @@ class BotManager {
   public sock: any = null;
   public config: CommandsConfig = DEFAULT_CONFIG;
 
-  constructor() {
+  constructor(tenantId: string = 't_wanzt') {
+    this.tenantId = tenantId;
+    this.sessionDir = path.resolve(process.cwd(), 'auth_info_baileys', `tenant_${tenantId}`);
+    if (!fs.existsSync(this.sessionDir)) {
+      fs.mkdirSync(this.sessionDir, { recursive: true });
+    }
     this.loadConfig();
   }
 
   loadConfig() {
-    this.config = loadCommandsConfig();
+    this.config = runWithTenant(this.tenantId, () => loadCommandsConfig());
   }
 
   saveConfig(newConfig: Partial<CommandsConfig>) {
-    this.config = saveCommandsConfig(this.config, newConfig);
+    this.config = runWithTenant(this.tenantId, () => saveCommandsConfig(this.config, newConfig));
   }
 
   addLog(type: 'info' | 'success' | 'warning' | 'error' | 'code', message: string) {
@@ -92,7 +100,7 @@ class BotManager {
   }
 
   getStatus() {
-    const credsPath = path.join(SESSION_DIR, 'creds.json');
+    const credsPath = path.join(this.sessionDir, 'creds.json');
     const hasSession = fs.existsSync(credsPath);
     let isRegistered = false;
     if (hasSession) {
@@ -108,8 +116,9 @@ class BotManager {
       customCode: this.customCode,
       user: this.user,
       logs: this.logs,
+      registered: isRegistered,
+      tenantId: this.tenantId,
       hasSession,
-      isRegistered,
       config: this.config,
     };
   }
@@ -180,27 +189,27 @@ class BotManager {
     }
 
     // Bersihkan sesi gantung jika belum terdaftar agar tidak terjadi error 401
-    const credsPath = path.join(SESSION_DIR, 'creds.json');
+    const credsPath = path.join(this.sessionDir, 'creds.json');
     if (!isReconnect && fs.existsSync(credsPath)) {
       try {
         const existingCreds = JSON.parse(fs.readFileSync(credsPath, 'utf-8'));
         if (!existingCreds.registered) {
-          fs.rmSync(SESSION_DIR, { recursive: true, force: true });
+          fs.rmSync(this.sessionDir, { recursive: true, force: true });
           this.addLog('info', 'Membersihkan sesi penautan sebelumnya untuk mencegah konflik kredensial.');
         }
       } catch {
-        fs.rmSync(SESSION_DIR, { recursive: true, force: true });
+        fs.rmSync(this.sessionDir, { recursive: true, force: true });
       }
     }
 
-    if (!fs.existsSync(SESSION_DIR)) {
-      fs.mkdirSync(SESSION_DIR, { recursive: true });
+    if (!fs.existsSync(this.sessionDir)) {
+      fs.mkdirSync(this.sessionDir, { recursive: true });
     }
 
-    this.addLog('info', `Memulai koneksi bot WhatsApp (@itsliaaa/baileys) untuk nomor ${cleanPhone}...`);
+    this.addLog('info', `Memulai koneksi bot WhatsApp (@itsliaaa/baileys) untuk nomor ${cleanPhone} (Tenant: ${this.tenantId})...`);
 
     try {
-      const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
+      const { state, saveCreds } = await useMultiFileAuthState(this.sessionDir);
       let waVersion: [number, number, number] = [2, 3000, 1043857760];
       try {
         const res = await fetch('https://raw.githubusercontent.com/WhiskeySockets/Baileys/master/src/Defaults/index.ts', {
@@ -304,8 +313,8 @@ class BotManager {
           if (isLoggedOut) {
             this.status = 'closed';
             this.addLog('error', 'Sesi telah dikeluarkan (logged out) oleh WhatsApp. Sesi otomatis dibersihkan.');
-            if (fs.existsSync(SESSION_DIR)) {
-              fs.rmSync(SESSION_DIR, { recursive: true, force: true });
+            if (fs.existsSync(this.sessionDir)) {
+              fs.rmSync(this.sessionDir, { recursive: true, force: true });
             }
           } else {
             this.status = 'closed';
@@ -314,16 +323,18 @@ class BotManager {
         }
       });
 
-      // Handler Pesan Masuk didelegasikan ke messageDispatcher
+      // Handler Pesan Masuk didelegasikan ke messageDispatcher dalam konteks tenant
       this.sock.ev.on('messages.upsert', async ({ messages, type }: any) => {
         for (const m of messages || []) {
           if (m?.key?.id && m?.message) {
             messageCache.set(m.key.id, m.message);
           }
         }
-        await dispatchIncomingMessages(this.sock, this.config, messages, type, {
-          addLog: (t, m) => this.addLog(t, m),
-          resolveTargetJid: (jid) => this.resolveTargetJid(jid),
+        await runWithTenant(this.tenantId, async () => {
+          await dispatchIncomingMessages(this.sock, this.config, messages, type, {
+            addLog: (t, m) => this.addLog(t, m),
+            resolveTargetJid: (jid) => this.resolveTargetJid(jid),
+          });
         });
       });
 
@@ -370,8 +381,8 @@ class BotManager {
 
   async reset() {
     await this.stop();
-    if (fs.existsSync(SESSION_DIR)) {
-      fs.rmSync(SESSION_DIR, { recursive: true, force: true });
+    if (fs.existsSync(this.sessionDir)) {
+      fs.rmSync(this.sessionDir, { recursive: true, force: true });
     }
     this.phoneNumber = '';
     this.pairingCode = '';
@@ -392,7 +403,7 @@ class BotManager {
     try {
       this.addLog('info', 'Mengambil seluruh grup WhatsApp yang diikuti oleh nomor bot...');
       const rawGroups = await this.sock.groupFetchAllParticipating();
-      const toggleMap = loadGroupsConfig();
+      const toggleMap = runWithTenant(this.tenantId, () => loadGroupsConfig());
 
       const groups: GroupItem[] = Object.values(rawGroups).map((g: any) => {
         const id = g.id || '';
@@ -427,8 +438,37 @@ class BotManager {
   }
 
   setGroupToggle(groupId: string, enabled: boolean) {
-    return setGroupToggle(groupId, enabled);
+    return runWithTenant(this.tenantId, () => setGroupToggle(groupId, enabled));
   }
 }
 
-export const botManager = new BotManager();
+// Pool bot instances per-tenant
+const botInstances = new Map<string, BotManager>();
+
+export function getBotManager(tenantId: string = 't_wanzt'): BotManager {
+  const cleanId = (tenantId || 't_wanzt').trim();
+  if (!botInstances.has(cleanId)) {
+    botInstances.set(cleanId, new BotManager(cleanId));
+  }
+  return botInstances.get(cleanId)!;
+}
+
+// Dynamic Proxy: seluruh akses ke botManager (getStatus, start, stop, dsb.)
+// otomatis dialihkan ke botManager milik tenant aktif
+export const botManager: BotManager = new Proxy({} as BotManager, {
+  get(_target, prop) {
+    const tenantId = getActiveTenantId();
+    const instance = getBotManager(tenantId);
+    const value = (instance as any)[prop];
+    if (typeof value === 'function') {
+      return value.bind(instance);
+    }
+    return value;
+  },
+  set(_target, prop, value) {
+    const tenantId = getActiveTenantId();
+    const instance = getBotManager(tenantId);
+    (instance as any)[prop] = value;
+    return true;
+  },
+});

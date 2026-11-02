@@ -35,7 +35,7 @@ Setiap ada tugas atau fitur baru yang akan dikerjakan, susun dengan format berik
      - Menghilangkan container card abu-abu tebal (`border rounded-xl shadow-2xs`).
      - Header `thead` transparan tanpa background banner `bg-slate-50`.
      - Icon produk diletakkan langsung di samping nama produk tanpa bingkai kotak putih.
-     - Baris varian anak kedua dan seterusnya menampilkan `—— -` pada kolom NAMA.
+     - Baris varian anak kedua dan seterusnya menampilkan `-- -` pada kolom NAMA.
      - Badge stok: Hijau dengan titik (`• 20`) jika stok > 0, atau bingkai merah (`0`) jika stok kosong (0).
      - Format harga asli: `Rp5.000` (tanpa spasi antara Rp dan angka).
      - Format harga jual: `Rp5.500 (500)` dengan angka margin dalam pill hijau lembut.
@@ -51,7 +51,7 @@ Setiap ada tugas atau fitur baru yang akan dikerjakan, susun dengan format berik
    - **Langkah 1**: Perbarui `vite.config.ts` pada rute `/api/xaviera/products` untuk membaca `queryKey || authHeader || botManager.config.xavieraApiKey || DEFAULT_API_KEY`.
    - **Langkah 2**: Perbarui `database/api_config.json` dengan API key Xaviera resmi `xvs_0726effe853aadea27bd6608ef98468cc3121b82e036e5f7`.
    - **Langkah 3**: Perbarui `src/hooks/useXavieraData.ts` di fungsi `fetchXavieraProducts` untuk melakukan unrolling varian `item.variants` secara tepat.
-   - **Langkah 4**: Perbarui `src/components/tabs/TabProduk.tsx` dengan layout tabel minimalis, header transparan, icon inline, varian `—— -`, badge stok titik hijau vs kotak merah, format harga tanpa spasi, dan badge margin hijau.
+   - **Langkah 4**: Perbarui `src/components/tabs/TabProduk.tsx` dengan layout tabel minimalis, header transparan, icon inline, varian `-- -`, badge stok titik hijau vs kotak merah, format harga tanpa spasi, dan badge margin hijau.
    - **Langkah 5**: Verifikasi dengan `compile_applet` dan `lint_applet`.
    - **Langkah 6**: Perbarui `brain/progress.md` dan `README.md`.
 
@@ -476,3 +476,173 @@ Dashboard Master dapat diakses dengan lancar di AI Studio preview URL via tombol
 
 
 
+
+---
+
+[8.0] - REAKTIVASI FITUR LOGIN PADA DASHBOARD UTAMA (FRONTEND/SRC) DAN DUKUNGAN MULTI-TENANT APARTEMEN
+
+- Tanggal: 2026-11-02 16:30
+- Status: Completed
+Referensi SCHEDULE: 6.0
+
+Tujuan Implementasi:
+1. Mengaktifkan kembali pintu gerbang login (`LoginPage`) pada dashboard utama di `frontend/src/App.tsx` yang sebelumnya dinonaktifkan sementara selama proses perombakan UI dan migrasi folder.
+2. Memastikan sesi login diverifikasi secara aman ke server sebelum dashboard utama dapat diakses.
+3. Mendukung otentikasi ganda yang selaras dengan arsitektur fitur apartemen (multi-tenant):
+   - Kredensial akun admin utama (`admin` / `admin123`).
+   - Kredensial unit tenant apartemen dari `database/master.db` maupun `bot.db`.
+   - Token impersonasi ("Buka Toko") dari dashboard Master Admin via parameter URL `?impersonate=...`.
+4. Menyediakan antarmuka loading verifikasi sesi yang elegan dan senada dengan desain baru dashboard (slate-50).
+
+Bagian yang Akan Diubah:
+- "frontend/src/App.tsx" - Mengaktifkan kembali pengecekan `auth.authLoading` dan `!auth.isAuthenticated` untuk menampilkan `<LoginPage />`.
+- "frontend/src/hooks/useAuth.ts" - Menambahkan deteksi parameter query `impersonate` pada URL saat diarahkan dari Master Admin.
+- "backend/services/authManager.ts" - Menambahkan fungsi `getSession()`, memperluas `verifyLogin()` untuk memvalidasi akun admin dan akun tenant apartemen.
+- "backend/routes/authRoutes.ts" - Memperbarui rute `/api/auth/session` untuk mengembalikan username pengguna asli yang sedang login dan mendukung token impersonasi.
+- "admin-backend/routes/adminRoutes.ts" - Mengekspor `impersonationTokens` agar dapat divalidasi oleh rute otentikasi.
+
+Alasan Perubahan:
+Sesuai instruksi pengguna, seluruh dashboard utama harus terlindungi oleh sistem login kembali setelah migrasi folder frontend ke `/frontend/src/` selesai, dan harus kompatibel dengan sistem apartemen multi-tenant yang telah berjalan.
+
+Strategi Implementasi:
+1. Buka blok komentar login guard di `frontend/src/App.tsx`.
+2. Perbarui `frontend/src/hooks/useAuth.ts` agar menangani penyimpanan token otomatis jika URL memiliki parameter `impersonate`.
+3. Di `backend/services/authManager.ts`, buat fungsi `getSession(token)` dan perbarui `verifyLogin()` agar memeriksa kredensial di tabel `auth` (admin utama) serta tabel `tenants` di `master.db` (tenant apartemen).
+4. Di `backend/routes/authRoutes.ts`, sinkronkan pemeriksaan sesi dengan `getSession()` dan validasi token impersonasi dari `adminRoutes.ts`.
+5. Uji build dan linting untuk memastikan zero-error.
+
+Urutan Pengerjaan:
+1. Tambahkan `export` pada `impersonationTokens` di `admin-backend/routes/adminRoutes.ts`.
+2. Perbarui `backend/services/authManager.ts`.
+3. Perbarui `backend/routes/authRoutes.ts`.
+4. Perbarui `frontend/src/hooks/useAuth.ts`.
+5. Perbarui `frontend/src/App.tsx` untuk mengaktifkan kembali tampilan login.
+6. Jalankan `compile_applet` dan `lint_applet`.
+7. Perbarui status entri di `brain/LANGKAH_IMPLEMENTASI.md` menjadi Completed dan catat di `brain/PROGRESS.md`.
+
+Dampak Perubahan:
+Dashboard utama di `frontend/src/` akan terkunci rapat dan hanya dapat diakses setelah login berhasil atau melalui impersonasi resmi dari Master Admin.
+
+Rencana Pengujian:
+1. Validasi build TypeScript dengan `compile_applet`.
+2. Validasi linting dengan `lint_applet`.
+3. Pengujian respon sesi `/api/auth/session` dan login `/api/auth/login`.
+
+Hasil yang Diharapkan:
+Dashboard utama menampilkan form login saat belum login, dan setelah login berhasil langsung menampilkan dashboard toko lengkap dengan data profil, bot, dan manajemen pesanan.
+
+---
+
+[9.0] - IMPLEMENTASI ISOLASI DATABASE DAN SESI BOT PER-TENANT (ARSITEKTUR APARTEMEN ASLI)
+
+- Tanggal: 2026-11-02 17:15
+- Status: Completed
+Referensi SCHEDULE: 6.0
+
+Tujuan Implementasi:
+1. Menghilangkan ketergantungan seluruh layanan pada satu file database statis (`bot.db`) yang sebelumnya menyebabkan seluruh tenant berbagi data toko, harga, promo, transaksi, dan bot yang sama.
+2. Menerapkan isolasi database sejati (*Database-per-Tenant*) di `/database/tenants/{tenantId}.db`:
+   - Tenant utama / Admin: `t_wanzt.db` (disinkronkan dari data awal `bot.db`).
+   - Setiap tenant unit apartemen baru: `{tenantId}.db` yang memiliki skema tabel lengkap secara mandiri.
+3. Mengembangkan sistem `TenantContext` berbasis Node.js `AsyncLocalStorage`:
+   - Mendeteksi `tenantId` secara otomatis pada setiap request HTTP dari Bearer Token sesi, Token Impersonasi Master Admin, header `x-tenant-id`, cookie `tenant_id`, query parameter `?tenant=`, atau subdomain.
+   - Menyediakan `db` Proxy dinamis sehingga seluruh pemanggilan `db.prepare()`, `db.exec()`, dsb. di seluruh endpoint otomatis mengeksekusi file database tenant yang sedang aktif.
+4. Menerapkan isolasi sesi WhatsApp bot multi-instance via `getBotManager(tenantId)`:
+   - Setiap tenant memiliki folder kredensial Baileys terisolasi di `auth_info_baileys/tenant_{tenantId}`.
+   - Status koneksi bot, pairing code, QR code, dan log terminal berjalan terpisah per tenant.
+5. Memperbarui alur login (`/api/auth/login`) dan pengecekan sesi (`/api/auth/session`):
+   - Mengaitkan token sesi dengan `tenantId` masing-masing penyewa.
+   - Menetapkan cookie `tenant_id` dan `auth_token` untuk memastikan seluruh panggilan `fetch()` dari frontend otomatis membawa identitas tenant.
+   - Memasang patch global `fetch` di frontend agar selalu menyertakan header otentikasi dan tenant ID.
+
+Bagian yang Akan Diubah:
+- "backend/database/tenantContext.ts" - Modul baru untuk penyimpanan konteks tenant request-scoped (`AsyncLocalStorage`).
+- "backend/database/tenantDbManager.ts" - Memperbarui inisialisasi skema tabel lengkap untuk setiap tenant DB baru dan sinkronisasi awal `t_wanzt.db`.
+- "backend/database/sqlite.ts" - Menghubungkan export `db` sebagai Proxy dinamis yang diarahkan ke database tenant aktif berdasarkan request context.
+- "backend/services/authManager.ts" - Memperbarui pembuatan sesi (`createSession`) dan pencarian sesi (`getSession`) agar menyimpan dan mengembalikan `tenantId`.
+- "backend/routes/authRoutes.ts" - Menetapkan cookie tenant dan mengembalikan `tenantId` pada respon login/session.
+- "backend/app.ts" - Memasang middleware penentu `tenantId` global yang membungkus setiap request dalam konteks `tenantContextStorage`.
+- "backend/botManager.ts" - Mengubah arsitektur bot singleton menjadi multi-instance pool per-tenant `getBotManager(tenantId)` dengan folder auth terpisah.
+- "frontend/src/main.tsx" - Memasang interceptor fetch ringan untuk menyertakan `Authorization` dan `x-tenant-id` ke setiap request `/api/*`.
+
+Alasan Perubahan:
+Tujuan inti dari fitur apartemen adalah multi-tenancy sejati: setiap tenant yang login memiliki toko sendiri, database sendiri, pengaturan harga sendiri, daftar transaksi sendiri, dan bot WhatsApp sendiri tanpa saling mencampuri data tenant lain.
+
+Strategi Implementasi:
+1. Buat `backend/database/tenantContext.ts` dengan `AsyncLocalStorage`.
+2. Sempurnakan `initTenantDb` di `backend/database/tenantDbManager.ts` agar membuat seluruh tabel dan indeks yang identik dengan skema lengkap toko.
+3. Ubah objek `db` di `backend/database/sqlite.ts` menjadi Proxy dinamis ke `getTenantDb(getActiveTenantId())`.
+4. Perbarui `botManager.ts` dengan `getBotManager(tenantId)` dan proxy `botManager`.
+5. Tambahkan middleware tenant-context di `backend/app.ts`.
+6. Perbarui `authManager.ts` dan `authRoutes.ts` untuk melacak `tenantId` di sesi.
+7. Pasang fetch interceptor di `frontend/src/main.tsx`.
+8. Verifikasi kompilasi dan uji coba pemisahan data antar tenant.
+
+Urutan Pengerjaan:
+1. Buat `backend/database/tenantContext.ts`.
+2. Perbarui `backend/database/tenantDbManager.ts`.
+3. Perbarui `backend/database/sqlite.ts`.
+4. Perbarui `backend/services/authManager.ts`.
+5. Perbarui `backend/routes/authRoutes.ts`.
+6. Perbarui `backend/botManager.ts`.
+7. Perbarui `backend/app.ts`.
+8. Perbarui `frontend/src/main.tsx`.
+9. Jalankan `compile_applet` dan `lint_applet`.
+10. Uji coba dengan curl dan verifikasi pembuatan file DB terpisah.
+11. Perbarui status di `brain/LANGKAH_IMPLEMENTASI.md` dan catat di `brain/PROGRESS.md`.
+
+Dampak Perubahan:
+Setiap pengguna yang login dengan kredensial tenant berbeda akan masuk ke unit apartemen toko miliknya sendiri dengan database terisolasi dan bot terisolasi.
+
+Rencana Pengujian:
+1. Buat tenant baru di Master Admin (misal: `t_toko_budi`).
+2. Login sebagai `admin` (masuk ke `t_wanzt.db`), ubah nama toko menjadi "Wanzt Store".
+3. Login sebagai `t_toko_budi` (masuk ke `t_toko_budi.db`), ubah nama toko menjadi "Budi Cell".
+4. Verifikasi bahwa data di kedua toko tidak saling menimpa dan tersimpan di file database terpisah.
+5. Verifikasi `compile_applet` dan `lint_applet` lulus 100%.
+
+Hasil yang Diharapkan:
+Arsitektur multi-tenant apartemen berjalan sempurna dengan isolasi database dan bot 100% per-tenant.
+
+
+---
+
+[10.0] - PERBAIKAN RUNTIME ERROR GLOBAL FETCH INTERCEPTOR (GETTER-ONLY WINDOW.FETCH)
+
+- Tanggal: 2026-11-02 17:50
+- Status: Completed
+
+Tujuan Implementasi:
+Mengatasi runtime error pada frontend toko:
+`TypeError: Cannot set property fetch of #<Window> which has only a getter at /src/main.tsx:9:14`
+yang disebabkan oleh assignment langsung `window.fetch = ...` di lingkungan browser / iframe sandbox tertentu di mana properti `fetch` pada `Window.prototype` hanya memiliki getter tanpa setter.
+
+Bagian yang Akan Diubah:
+- "frontend/src/main.tsx" - Mengganti assignment langsung `window.fetch = ...` dengan pendefinisian aman menggunakan `Object.defineProperty` berpelindung try-catch ganda, serta menjamin eksekusi render React `createRoot(...).render(<App />)` tidak pernah terhalang oleh error runtime interceptor.
+
+Alasan Perubahan:
+Pada lingkungan sandbox iframe AI Studio atau implementasi window proxy browser tertentu, penugasan langsung properti `window.fetch = customFetch` ditolak dengan error 'Cannot set property fetch of #<Window> which has only a getter'. Akibatnya, eksekusi skrip terhenti sebelum `createRoot(...).render(...)` sempat berjalan, menyebabkan layar aplikasi gagal memuat (blank atau crash).
+
+Strategi Implementasi:
+1. Bungkus inisialisasi interceptor dalam blok `try...catch` agar jika lingkungan melarang intervensi `fetch`, aplikasi tetap dapat memuat antarmuka React secara normal tanpa crash.
+2. Gunakan `Object.defineProperty(window, 'fetch', { value: customFetch, writable: true, configurable: true, enumerable: true })` untuk mendefinisikan own-property pada objek `window` yang membungkus pemanggilan asli `originalFetch.bind(window)`.
+3. Sediakan fallback penugasan alternatif jika `Object.defineProperty` tidak didukung.
+4. Pastikan `createRoot(document.getElementById('root')!).render(<App />);` selalu dieksekusi dengan andal di baris akhir skrip.
+
+Urutan Pengerjaan:
+1. Catat entri [10.0] pada `brain/LANGKAH_IMPLEMENTASI.md`.
+2. Perbarui `frontend/src/main.tsx` dengan implementasi interceptor yang aman dari getter-only exception.
+3. Jalankan `lint_applet` dan `compile_applet` untuk memastikan tidak ada kesalahan sintaks atau kompilasi.
+4. Uji respon dev server melalui curl untuk memastikan frontend menyajikan script dengan benar.
+5. Perbarui status entri [10.0] menjadi Completed dan catat hasil pekerjaan pada `brain/PROGRESS.md` entri [23.0].
+
+Dampak Perubahan:
+Aplikasi frontend toko utama akan dimuat secara mulus tanpa runtime crash di browser atau iframe sandbox manapun.
+
+Rencana Pengujian:
+1. Verifikasi `frontend/src/main.tsx` lolos linting TypeScript.
+2. Verifikasi dev server merespons file `/src/main.tsx` dengan kode interceptor baru.
+3. Uji kompilasi production build via `compile_applet`.
+
+Hasil yang Diharapkan:
+Runtime error `Cannot set property fetch` terselesaikan 100%, antarmuka dashboard toko utama terbuka dengan normal.

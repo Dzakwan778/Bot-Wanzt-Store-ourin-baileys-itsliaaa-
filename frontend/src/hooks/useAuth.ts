@@ -9,6 +9,15 @@ export interface UserSession {
 export function useAuth() {
   const [token, setToken] = useState<string | null>(() => {
     try {
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const impToken = params.get('impersonate');
+        if (impToken) {
+          localStorage.setItem(TOKEN_KEY, impToken);
+          window.history.replaceState({}, document.title, window.location.pathname);
+          return impToken;
+        }
+      }
       return localStorage.getItem(TOKEN_KEY);
     } catch {
       return null;
@@ -39,11 +48,17 @@ export function useAuth() {
       if (data.authenticated) {
         setIsAuthenticated(true);
         setUser(data.user || { username: 'admin' });
+        if (data.user?.tenantId) {
+          try {
+            localStorage.setItem('wanzt_tenant_id', data.user.tenantId);
+          } catch {}
+        }
       } else {
         setIsAuthenticated(false);
         setUser(null);
         try {
           localStorage.removeItem(TOKEN_KEY);
+          localStorage.removeItem('wanzt_tenant_id');
         } catch {}
       }
     } catch {
@@ -76,6 +91,9 @@ export function useAuth() {
       if (data.success && data.token) {
         try {
           localStorage.setItem(TOKEN_KEY, data.token);
+          if (data.user?.tenantId) {
+            localStorage.setItem('wanzt_tenant_id', data.user.tenantId);
+          }
         } catch {}
         setToken(data.token);
         setUser(data.user || { username: usernameInput.trim() });
@@ -109,6 +127,7 @@ export function useAuth() {
 
     try {
       localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem('wanzt_tenant_id');
     } catch {}
 
     setToken(null);

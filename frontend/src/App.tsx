@@ -92,14 +92,12 @@ export default function App() {
   // 9. Pengaturan Kupon Promo (Diskon Margin APK Premium)
   const promosState = usePromos(showToast);
 
-  /*
-  // Dinonaktifkan sementara untuk mempermudah perombakan tampilan dashboard
   // Jika sedang memverifikasi sesi login awal dari server
   if (auth.authLoading) {
     return (
-      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
-        <div className="w-10 h-10 border-4 border-sky-500/30 border-t-sky-500 rounded-full animate-spin mb-4"></div>
-        <p className="text-slate-400 text-sm font-medium">Memverifikasi sesi dashboard...</p>
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+        <div className="w-10 h-10 border-4 border-sky-600/20 border-t-sky-600 rounded-full animate-spin mb-4"></div>
+        <p className="text-slate-600 text-sm font-medium">Memverifikasi sesi dashboard...</p>
       </div>
     );
   }
@@ -108,7 +106,6 @@ export default function App() {
   if (!auth.isAuthenticated) {
     return <LoginPage onLogin={auth.login} />;
   }
-  */
 
   // Cek apakah 3 data wajib Store Info sudah diisi lengkap
   const isStoreInfoComplete = Boolean(

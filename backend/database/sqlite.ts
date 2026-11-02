@@ -15,21 +15,34 @@ function resolveDatabasePath(): string {
   return path.join(targetDir, 'bot.db');
 }
 
+import { getActiveTenantId } from './tenantContext.ts';
+import { getTenantDb, initTenantDb, migrateTenantDb } from './tenantDbManager.ts';
+
 export const DB_PATH = resolveDatabasePath();
 
-// Inisialisasi koneksi Better-SQLite3
-export const db: InstanceType<typeof Database> = new Database(DB_PATH);
-
-// Konfigurasi optimal untuk kecepatan & integritas data:
-// WAL mode mengizinkan pembacaan & penulisan secara bersamaan tanpa lock file
-db.pragma('journal_mode = WAL');
-db.pragma('synchronous = NORMAL');
-db.pragma('foreign_keys = ON');
+// Dynamic Proxy: Setiap pemanggilan method db (prepare, exec, transaction, dsb.)
+// otomatis dialihkan ke file SQLite milik tenant yang sedang aktif (/database/tenants/{tenantId}.db)
+export const db: InstanceType<typeof Database> = new Proxy({} as InstanceType<typeof Database>, {
+  get(_target, prop) {
+    const tenantId = getActiveTenantId();
+    const activeDb = getTenantDb(tenantId);
+    const value = (activeDb as any)[prop];
+    if (typeof value === 'function') {
+      return value.bind(activeDb);
+    }
+    return value;
+  },
+});
 
 /**
  * Inisialisasi skema tabel SQLite & migrasi otomatis dari file JSON lama (jika ada)
  */
 export function initDatabase(): void {
+  // Jalankan migrasi kompatibilitas terlebih dahulu jika database lama masih menggunakan nama kolom versi terdahulu
+  try {
+    migrateTenantDb(db);
+  } catch {}
+
   // 1. Tabel Auth (Kredensial Admin)
   db.exec(`
     CREATE TABLE IF NOT EXISTS auth (
