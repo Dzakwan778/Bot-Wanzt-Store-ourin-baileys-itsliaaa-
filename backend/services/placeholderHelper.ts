@@ -9,6 +9,10 @@ export interface VariantPlaceholderContext {
   orderId?: string;
   total?: number | string;
   unikCode?: number | string;
+  promoCode?: string;
+  discount?: number | string;
+  finalPrice?: number | string;
+  reason?: string;
 }
 
 /**
@@ -62,7 +66,7 @@ export function resolvePlaceholders(
     .replace(/\{waLink\}|\{linkSaluran\}/gi, store.waLink || '')
     .replace(/\{telegramBot\}|\{botTelegram\}/gi, store.telegramBot || '');
 
-  // 2. Placeholder Varian Produk & Transaksi Invoice (jika ada konteks varian / invoice)
+  // 2. Placeholder Varian Produk & Transaksi Invoice (jika ada konteks varian / invoice / konfirmasi)
   if (variant) {
     const rawPrice = variant.price !== undefined ? variant.price : 0;
     const numPrice =
@@ -95,8 +99,42 @@ export function resolvePlaceholders(
       .replace(/\{stock\}|\{stok\}/gi, variant.stock !== undefined ? String(variant.stock) : '')
       .replace(/\{orderId\}|\{order_id\}/gi, variant.orderId || '')
       .replace(/\{unikCode\}|\{kodeUnik\}|\{feeGateway\}/gi, unikStr);
+
+    // 3. Placeholder Promo & Konfirmasi Checkout
+    if (variant.promoCode !== undefined) {
+      res = res.replace(/\{promoCode\}|\{kodePromo\}/gi, variant.promoCode);
+    }
+
+    if (variant.discount !== undefined) {
+      const rawDisc = variant.discount;
+      const numDisc =
+        typeof rawDisc === 'number'
+          ? rawDisc
+          : Number(String(rawDisc).replace(/[^0-9]/g, '')) || 0;
+      const formattedDisc = numDisc.toLocaleString('id-ID');
+      res = res
+        .replace(/Rp\s*\{discount\}|Rp\s*\{potongan\}|Rp\s*\{diskon\}/gi, `Rp ${formattedDisc}`)
+        .replace(/\{discount\}|\{potongan\}|\{diskon\}/gi, formattedDisc);
+    }
+
+    if (variant.finalPrice !== undefined) {
+      const rawFinal = variant.finalPrice;
+      const numFinal =
+        typeof rawFinal === 'number'
+          ? rawFinal
+          : Number(String(rawFinal).replace(/[^0-9]/g, '')) || 0;
+      const formattedFinal = numFinal.toLocaleString('id-ID');
+      res = res
+        .replace(/Rp\s*\{finalPrice\}|Rp\s*\{hargaAkhir\}|Rp\s*\{totalDiskon\}/gi, `Rp ${formattedFinal}`)
+        .replace(/\{finalPrice\}|\{hargaAkhir\}|\{totalDiskon\}/gi, formattedFinal);
+    }
+
+    if (variant.reason !== undefined) {
+      res = res.replace(/\{reason\}|\{alasan\}/gi, variant.reason);
+    }
   }
 
   return res;
 }
+
 

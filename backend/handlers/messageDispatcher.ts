@@ -10,8 +10,14 @@ import { resolvePlaceholders, normalizeIndonesianPhone } from '../services/place
 import { loadGroupsConfig } from '../services/groupService.ts';
 import { createLunasQrisTransaction, startLunasQrisPolling } from '../services/lunasQrisService.ts';
 import { recordTransaction, updateTransactionStatus } from '../services/transactionManager.ts';
-import { DEFAULT_INVOICE_TEMPLATE } from '../config/configManager.ts';
-import { getPricingConfig } from '../database/sqlite.ts';
+import {
+  DEFAULT_INVOICE_TEMPLATE,
+  DEFAULT_CONFIRM_SUMMARY_TEMPLATE,
+  DEFAULT_CONFIRM_INPUT_PROMO_TEMPLATE,
+  DEFAULT_CONFIRM_PROMO_SUCCESS_TEMPLATE,
+  DEFAULT_CONFIRM_PROMO_INVALID_TEMPLATE,
+} from '../config/configManager.ts';
+import { getPricingConfig, validateAndApplyPromo, db } from '../database/sqlite.ts';
 import QRCode from 'qrcode';
 import axios from 'axios';
 
@@ -23,12 +29,274 @@ export interface DispatcherDeps {
 // Set untuk melacak ID pesan yang dikirim otomatis oleh bot agar tidak terjadi loop respon
 export const botSentMessageIds = new Set<string>();
 
+export interface CheckoutSession {
+  senderJid: string;
+  senderCleanNumber: string;
+  senderName: string;
+  groupJid?: string;
+  productName: string;
+  variantName: string;
+  price: number;
+  costPrice: number;
+  initialMargin: number;
+  variantId?: string;
+  createdAt: number;
+  expiresAt: number; // 90 detik
+  waitingForPromo: boolean;
+}
+
+// Map untuk melacak sesi checkout aktif berbasis JID pembeli (timeout 90 detik)
+export const activeCheckoutSessions = new Map<string, CheckoutSession>();
+
+export interface ExecuteInvoiceParams {
+  sock: any;
+  config: CommandsConfig;
+  senderJid: string;
+  senderCleanNumber: string;
+  senderName: string;
+  remoteJid: string;
+  isGroup: boolean;
+  productName: string;
+  variantName: string;
+  price: number;
+  finalPrice?: number;
+  promoCode?: string;
+  discountAmount?: number;
+  promoId?: number;
+  quotedMessage?: any;
+  deps: DispatcherDeps;
+}
+
 export function markMessageAsBotSent(id?: string) {
   if (!id) return;
   botSentMessageIds.add(id);
   if (botSentMessageIds.size > 1000) {
     const oldest = botSentMessageIds.values().next().value;
     if (oldest) botSentMessageIds.delete(oldest);
+  }
+}
+
+export async function executeLunasQrisInvoice(params: ExecuteInvoiceParams): Promise<void> {
+  const {
+    sock,
+    config,
+    senderJid,
+    senderCleanNumber,
+    senderName,
+    remoteJid,
+    isGroup,
+    productName,
+    variantName,
+    price,
+    finalPrice,
+    promoCode,
+    discountAmount,
+    promoId,
+    deps,
+  } = params;
+
+  const effectiveAmount = finalPrice !== undefined && finalPrice > 0 ? finalPrice : price;
+  const orderId = 'ORD-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+
+  const lunasKey = (config.lunasQrisApiKey || '').trim();
+  const lunasBase = (config.lunasQrisBaseUrl || 'https://lunasqris.com').trim();
+
+  if (!lunasKey) {
+    deps.addLog('error', '❌ API Key LunasQRIS belum diisi. Gagal menerbitkan QRIS otomatis.');
+    const errorMsg = '⚠️ Maaf kak, metode pembayaran otomatis QRIS belum dapat digunakan saat ini. Silakan hubungi admin toko kami.';
+    try {
+      const errRes = await sock.sendMessage(senderJid, { text: errorMsg });
+      markMessageAsBotSent(errRes?.key?.id);
+    } catch {}
+    return;
+  }
+
+  deps.addLog('info', `💳 Menghubungi gateway LunasQRIS untuk order ${orderId} (Nominal: Rp ${effectiveAmount.toLocaleString('id-ID')})...`);
+
+  let trxData: any = null;
+  try {
+    const lunasRes = await createLunasQrisTransaction(
+      lunasKey,
+      {
+        amount: effectiveAmount,
+        order_id: orderId,
+        customer_name: senderName,
+        description: `${productName} - ${variantName}`,
+      },
+      lunasBase
+    );
+    trxData = lunasRes.data;
+  } catch (apiErr: any) {
+    deps.addLog('error', `❌ Gagal membuat transaksi LunasQRIS: ${apiErr?.message || apiErr}`);
+    const failMsg = `⚠️ Terjadi kendala saat menerbitkan kode QRIS: ${apiErr?.message || 'Gagal terhubung ke gateway pembayaran'}. Silakan coba beberapa saat lagi atau hubungi admin.`;
+    try {
+      const failRes = await sock.sendMessage(senderJid, { text: failMsg });
+      markMessageAsBotSent(failRes?.key?.id);
+    } catch {}
+    return;
+  }
+
+  // Rekam transaksi baru ke SQLite
+  try {
+    recordTransaction({
+      orderId,
+      trxId: trxData.trx_id,
+      customerNumber: senderCleanNumber,
+      customerName: senderName,
+      productName,
+      variantName,
+      nominal: trxData.amount,
+      uniqueCode: trxData.unique_code,
+      total: trxData.total_amount,
+      paymentUrl: trxData.payment_url,
+      status: 'pending',
+    });
+  } catch (dbErr: any) {
+    deps.addLog('warning', `Catat transaksi ke SQLite ada kendala: ${dbErr?.message}`);
+  }
+
+  // Aktifkan poller otomatis LunasQRIS
+  startLunasQrisPolling(
+    {
+      orderId,
+      trxId: trxData.trx_id,
+      senderJid,
+      groupJid: isGroup ? remoteJid : undefined,
+      senderName,
+      productName,
+      variantName,
+      price: effectiveAmount,
+      totalAmount: trxData.total_amount,
+      uniqueCode: trxData.unique_code,
+      apiKey: lunasKey,
+      baseUrl: lunasBase,
+      onPaid: async () => {
+        try {
+          updateTransactionStatus(orderId, 'paid');
+        } catch {}
+
+        if (promoId) {
+          try {
+            db.prepare('UPDATE promo_codes SET used_count = used_count + 1 WHERE id = ?').run(promoId);
+          } catch (pErr: any) {
+            deps.addLog('warning', `Gagal menambah counter promo: ${pErr?.message}`);
+          }
+        }
+
+        const paidMsg = `🎉 *PEMBAYARAN DITERIMA & LUNAS!*\n\nTerima kasih Kak *${senderName}*, pembayaran untuk pesanan *${productName} (${variantName})* sebesar *Rp ${trxData.total_amount.toLocaleString('id-ID')}* telah diverifikasi lunas oleh sistem LunasQRIS.\n\nPesanan Anda akan segera diproses oleh sistem atau admin kami.`;
+        try {
+          const pRes = await sock.sendMessage(senderJid, { text: paidMsg });
+          markMessageAsBotSent(pRes?.key?.id);
+        } catch {}
+
+        if (isGroup && remoteJid) {
+          try {
+            const grpPaid = `✅ Pembayaran untuk *${productName} (${variantName})* oleh @${senderCleanNumber} telah *LUNAS*! Pesanan sedang diproses.`;
+            const grpRes = await sock.sendMessage(remoteJid, { text: grpPaid, mentions: [senderJid] });
+            markMessageAsBotSent(grpRes?.key?.id);
+          } catch {}
+        }
+      },
+      onExpired: async () => {
+        try {
+          updateTransactionStatus(orderId, 'cancel');
+        } catch {}
+        try {
+          const expMsg = `⏰ Waktu pembayaran pesanan *${productName} (${variantName})* (Order: ${orderId}) telah berakhir atau dibatalkan. Silakan pesan kembali jika masih berminat.`;
+          const eRes = await sock.sendMessage(senderJid, { text: expMsg });
+          markMessageAsBotSent(eRes?.key?.id);
+        } catch {}
+      },
+    },
+    deps.addLog
+  );
+
+  // Generate buffer QR Code untuk dikirim ke WhatsApp
+  let qrBuffer: Buffer | null = null;
+  if (trxData.qris_string) {
+    try {
+      qrBuffer = await QRCode.toBuffer(trxData.qris_string, {
+        width: 480,
+        margin: 2,
+        color: { dark: '#000000', light: '#FFFFFF' },
+      });
+    } catch (qrErr: any) {
+      deps.addLog('warning', `Gagal generate QR buffer: ${qrErr?.message}`);
+    }
+  }
+
+  // Siapkan teks Invoice dari template
+  const matchedCat = DEFAULT_CATALOG.find((cat) =>
+    cat.items.some((item) => item.toLowerCase() === productName.toLowerCase())
+  );
+  const category = matchedCat?.kategori || 'Digital';
+
+  const invoiceTemplate =
+    config.invoiceOutputText && config.invoiceOutputText.trim()
+      ? config.invoiceOutputText
+      : DEFAULT_INVOICE_TEMPLATE;
+
+  const invoiceCaption = resolvePlaceholders(invoiceTemplate, config, {
+    name: productName,
+    variant: variantName,
+    category,
+    price: effectiveAmount,
+    total: trxData.total_amount,
+    orderId,
+    promoCode: promoCode || '-',
+    discount: discountAmount || 0,
+    finalPrice: effectiveAmount,
+  });
+
+  const invoiceFooterTemplate =
+    config.invoiceFooterText && config.invoiceFooterText.trim()
+      ? config.invoiceFooterText
+      : '{storeName} • Invoice LunasQRIS';
+
+  const invoiceFooter = resolvePlaceholders(invoiceFooterTemplate, config, {
+    name: productName,
+    variant: variantName,
+    category,
+    price: effectiveAmount,
+    total: trxData.total_amount,
+    orderId,
+  });
+
+  const invoiceButtons = [
+    {
+      text: '📞 Hubungi Admin',
+      id: 'invoice_contact_admin',
+    },
+  ];
+
+  try {
+    if (qrBuffer) {
+      try {
+        const invRes = await sock.sendMessage(senderJid, {
+          image: qrBuffer,
+          caption: invoiceCaption,
+          footer: invoiceFooter,
+          nativeFlow: invoiceButtons,
+        });
+        markMessageAsBotSent(invRes?.key?.id);
+      } catch {
+        const invRes = await sock.sendMessage(senderJid, {
+          image: qrBuffer,
+          caption: `${invoiceCaption}\n\n*${invoiceFooter}*`,
+        });
+        markMessageAsBotSent(invRes?.key?.id);
+      }
+    } else {
+      const invRes = await sock.sendMessage(senderJid, {
+        text: `${invoiceCaption}\n\n💳 Link Pembayaran: ${trxData.payment_url}`,
+        footer: invoiceFooter,
+        nativeFlow: invoiceButtons,
+      });
+      markMessageAsBotSent(invRes?.key?.id);
+    }
+    deps.addLog('success', `🧾 Invoice LunasQRIS untuk ${productName} (${variantName}) berhasil dikirimkan ke DM ${senderJid}`);
+  } catch (sendErr: any) {
+    deps.addLog('error', `Gagal mengirim invoice ke WhatsApp ${senderJid}: ${sendErr?.message || sendErr}`);
   }
 }
 
@@ -209,7 +477,7 @@ export async function dispatchIncomingMessages(
       continue;
     }
 
-    // B. Tombol Order Varian (Integrasi Payment Gateway Sairi & Privacy-First Flow)
+    // B. Tombol Order Varian -> Membuka Sesi Konfirmasi di DM
     if (cleanBtn.startsWith('order_')) {
       let productName = 'Produk Pilihan';
       let variantName = 'Varian Pilihan';
@@ -238,7 +506,6 @@ export async function dispatchIncomingMessages(
       }
       senderJid = deps.resolveTargetJid(senderJid);
       const senderCleanNumber = (senderJid.split('@')[0] || '').replace(/[^0-9]/g, '');
-      const storeTitle = resolvePlaceholders('{storeName}', config) || 'Toko Kami';
 
       // 1. Pre-check Saldo Utama di Akun Xaviera (Hitung harga modal berdasarkan markup aktif)
       const currentPricing = config.pricingConfig || getPricingConfig();
@@ -249,6 +516,8 @@ export async function dispatchIncomingMessages(
         const pct = (currentPricing.value || 0) / 100;
         costPrice = pct > 0 ? Math.round(price / (1 + pct)) : price;
       }
+      const initialMargin = Math.max(0, price - costPrice);
+
       try {
         const xavieraBal = await checkXavieraBalance(costPrice, config);
         if (!xavieraBal.sufficient) {
@@ -266,315 +535,190 @@ export async function dispatchIncomingMessages(
         deps.addLog('warning', `Gagal cek saldo Xaviera (diteruskan): ${chkErr?.message || chkErr}`);
       }
 
-      // 2. Verifikasi Konfigurasi API LunasQRIS
-      const lunasQrisApiKey = config.lunasQrisApiKey?.trim();
-      if (!lunasQrisApiKey) {
-        deps.addLog('error', `❌ API Key LunasQRIS belum diisi di tab Connection! Tidak dapat membuat invoice QRIS.`);
-        const noApiMsg = `Maaf kak @${senderCleanNumber}, sistem pembayaran QRIS otomatis toko sedang dalam konfigurasi. Silakan hubungi admin toko untuk pemesanan manual.`;
-        const resp = await sock.sendMessage(
-          remoteJid,
-          { text: noApiMsg, mentions: [senderJid] },
-          { quoted: m }
-        );
-        markMessageAsBotSent(resp?.key?.id);
-        continue;
-      }
+      // 2. Simpan sesi checkout aktif untuk pembeli (timeout 90 detik)
+      const sessionData: CheckoutSession = {
+        senderJid,
+        senderCleanNumber,
+        senderName,
+        groupJid: isGroup ? remoteJid : undefined,
+        productName,
+        variantName,
+        price,
+        costPrice,
+        initialMargin,
+        variantId: `${productName}|${variantName}`,
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 90 * 1000,
+        waitingForPromo: false,
+      };
+      activeCheckoutSessions.set(senderJid, sessionData);
 
-      // 3. Request Transaksi & QRIS Dinamis ke API LunasQRIS
-      try {
-        const orderId = `ORD-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-        deps.addLog('info', `📡 Mengajukan transaksi LunasQRIS (${orderId}) untuk nominal Rp ${price.toLocaleString('id-ID')}...`);
-
-        const trxResult = await createLunasQrisTransaction(
-          lunasQrisApiKey,
-          {
-            amount: price,
-            order_id: orderId,
-            description: `Pembelian ${productName} (${variantName}) - ${storeTitle}`,
-            customer_name: senderName || `Pelanggan-${senderCleanNumber}`,
-            expired_minutes: 15,
-          },
-          config.lunasQrisBaseUrl
-        );
-
-        const trx = trxResult.data;
-        deps.addLog(
-          'success',
-          `✅ Transaksi LunasQRIS berhasil dibuat: Trx ID ${trx.trx_id} | Order ID ${trx.order_id} | Total: Rp ${trx.total_amount.toLocaleString('id-ID')} (Fee Gateway: Rp ${trx.unique_code})`
-        );
-
-        // Catat transaksi baru ke database lokal dengan status 'pending'
+      // 3. Jika di Grup: Kirim notifikasi singkat bahwa konfirmasi pesanan dikirim ke DM
+      if (isGroup) {
+        const groupNotification = `Halo @${senderCleanNumber}, rincian pesanan untuk *${productName} (${variantName})* telah kami kirimkan ke *chat pribadi (DM)* Anda. 💬\n\nSilakan buka chat pribadi untuk memilih menggunakan kupon promo atau langsung melanjutkan pembayaran.`;
         try {
-          recordTransaction({
-            orderId: trx.order_id || orderId,
-            trxId: trx.trx_id,
-            customerNumber: senderCleanNumber,
-            customerName: senderName || `Pelanggan-${senderCleanNumber}`,
-            productName,
-            variantName,
-            nominal: trx.amount || price,
-            uniqueCode: trx.unique_code || 0,
-            total: trx.total_amount,
-            paymentUrl: trx.payment_url,
-            status: 'pending',
-          });
-        } catch (dbErr: any) {
-          deps.addLog('warning', `Gagal menyimpan database transaksi: ${dbErr?.message}`);
-        }
-
-        // 4. Di Grup: Kirim notifikasi singkat bahwa invoice telah dikirim ke DM pembeli
-        if (isGroup) {
-          const groupNotification = `Halo @${senderCleanNumber}, invoice pembayaran QRIS sebesar *Rp ${trx.total_amount.toLocaleString('id-ID')}* (Fee Gateway: *+Rp ${trx.unique_code}*) telah kami kirimkan ke *chat pribadi (DM)* Anda. 💬\n\nSilakan periksa pesan pribadi untuk melakukan pembayaran. Privasi & keamanan akun terjamin aman!`;
-          try {
-            const grpRes = await sock.sendMessage(
-              remoteJid,
-              { text: groupNotification, mentions: [senderJid] },
-              { quoted: m }
-            );
-            markMessageAsBotSent(grpRes?.key?.id);
-            deps.addLog('success', `💬 Notifikasi pengiriman invoice terkirim ke grup ${remoteJid}`);
-          } catch (grpErr: any) {
-            deps.addLog('error', `Gagal mengirim notifikasi grup: ${grpErr?.message || grpErr}`);
-          }
-        }
-
-        // 5. Di Chat Pribadi (DM): Format invoice dinamis dari konfigurasi Tab Command (Invoice)
-        const matchedCat = DEFAULT_CATALOG.find((cat) =>
-          cat.items.some((item) => item.toLowerCase() === productName.toLowerCase())
-        );
-        const category = matchedCat?.kategori || 'Digital';
-
-        const templateInvoice =
-          config.invoiceOutputText && config.invoiceOutputText.trim()
-            ? config.invoiceOutputText
-            : DEFAULT_INVOICE_TEMPLATE;
-
-        const invoiceCaption = resolvePlaceholders(templateInvoice, config, {
-          name: productName,
-          variant: variantName,
-          category,
-          price: trx.amount || price,
-          total: trx.total_amount,
-          unikCode: trx.unique_code,
-          orderId: trx.order_id || orderId,
-        });
-
-        const templateFooter =
-          config.invoiceFooterText && config.invoiceFooterText.trim()
-            ? config.invoiceFooterText
-            : '{storeName} Official • Pembayaran Otomatis';
-
-        const invoiceFooter = resolvePlaceholders(templateFooter, config, {
-          name: productName,
-          variant: variantName,
-          category,
-          price: trx.amount || price,
-          total: trx.total_amount,
-          unikCode: trx.unique_code,
-          orderId: trx.order_id || orderId,
-        });
-
-        // 2 Tombol Interaktif Native Flow:
-        // 1. Quick Reply: Hubungi Admin (memicu vCard nomor admin atau fallback nomor owner)
-        // 2. CTA URL: Langsung menuju web checkout pembayaran
-        const invoiceButtons = [
-          {
-            text: '📞 Hubungi Admin',
-            id: 'invoice_contact_admin',
-          },
-          {
-            text: '🌐 Web Checkout',
-            url: trx.payment_url || 'https://lunasqris.com',
-          },
-        ];
-
-        let dmSent = false;
-        let qrBuffer: Buffer | null = null;
-
-        // Metode 1: Generate buffer gambar PNG murni langsung dari raw string EMVCo qris_string (bebas SVG & anti file corrupt)
-        if (trx.qris_string) {
-          try {
-            qrBuffer = await QRCode.toBuffer(trx.qris_string, {
-              type: 'png',
-              width: 600,
-              margin: 2,
-              color: {
-                dark: '#000000',
-                light: '#ffffff',
-              },
-            });
-          } catch (qrErr: any) {
-            deps.addLog('warning', `Generate QR code lokal gagal: ${qrErr?.message || qrErr}`);
-          }
-        }
-
-        // Metode 2: Cadangan unduh file PNG dari generator QR jika library lokal gagal
-        if (!qrBuffer && (trx.qris_string || trx.payment_url)) {
-          try {
-            const rawData = trx.qris_string || trx.payment_url;
-            const fallbackUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(rawData)}&size=600x600&format=png&margin=15`;
-            const resp = await axios.get(fallbackUrl, { responseType: 'arraybuffer', timeout: 8000 });
-            if (resp.data) {
-              qrBuffer = Buffer.from(resp.data);
-            }
-          } catch (axErr: any) {
-            deps.addLog('warning', `Unduh buffer PNG cadangan gagal: ${axErr?.message || axErr}`);
-          }
-        }
-
-        // Kirim gambar kode QR (Buffer PNG resmi yang didukung 100% oleh WhatsApp) dengan native buttons & footer
-        if (qrBuffer) {
-          try {
-            const imgRes = await sock.sendMessage(senderJid, {
-              image: qrBuffer,
-              mimetype: 'image/png',
-              caption: invoiceCaption,
-              footer: invoiceFooter,
-              nativeFlow: invoiceButtons,
-            });
-            markMessageAsBotSent(imgRes?.key?.id);
-            dmSent = true;
-          } catch (imgErr: any) {
-            deps.addLog('warning', `Kirim gambar buffer QRIS dengan tombol gagal: ${imgErr?.message || imgErr}. Mencoba tanpa tombol...`);
-            try {
-              const fallbackImg = await sock.sendMessage(senderJid, {
-                image: qrBuffer,
-                mimetype: 'image/png',
-                caption: invoiceCaption,
-              });
-              markMessageAsBotSent(fallbackImg?.key?.id);
-              dmSent = true;
-            } catch (fbErr: any) {
-              deps.addLog('warning', `Kirim gambar fallback gagal: ${fbErr?.message || fbErr}`);
-            }
-          }
-        }
-
-        // Fallback pesan teks jika media gambar gagal terkirim
-        if (!dmSent) {
-          try {
-            const txtRes = await sock.sendMessage(senderJid, {
-              text: `${invoiceCaption}\n\n🔗 *Tautan Pembayaran:* ${trx.payment_url}`,
-              footer: invoiceFooter,
-              nativeFlow: invoiceButtons,
-            });
-            markMessageAsBotSent(txtRes?.key?.id);
-            dmSent = true;
-          } catch (txtErr: any) {
-            try {
-              const rawTxtRes = await sock.sendMessage(senderJid, {
-                text: `${invoiceCaption}\n\n🔗 *Tautan Pembayaran:* ${trx.payment_url}`,
-              });
-              markMessageAsBotSent(rawTxtRes?.key?.id);
-              dmSent = true;
-            } catch (err: any) {
-              deps.addLog('error', `Gagal mengirim invoice ke DM ${senderJid}: ${err?.message || err}`);
-            }
-          }
-        }
-
-        if (dmSent) {
-          deps.addLog('success', `📩 Invoice LunasQRIS (Gambar PNG) berhasil dikirimkan ke chat pribadi ${senderJid}`);
-        }
-
-        // 6. Jalankan Background Poller untuk verifikasi status lunas otomatis
-        startLunasQrisPolling(
-          {
-            orderId: trx.order_id || orderId,
-            trxId: trx.trx_id,
-            senderJid,
-            groupJid: isGroup ? remoteJid : undefined,
-            senderName,
-            productName,
-            variantName,
-            price,
-            totalAmount: trx.total_amount,
-            uniqueCode: trx.unique_code,
-            apiKey: lunasQrisApiKey,
-            baseUrl: config.lunasQrisBaseUrl || 'https://lunasqris.com',
-            onPaid: async () => {
-              // Update status transaksi di database lokal menjadi 'paid'
-              try {
-                updateTransactionStatus(trx.order_id || orderId, 'paid');
-              } catch {}
-
-              // Pembayaran LUNAS -> Kirim data produk sensitif ke DM
-              const randomAccount = Math.random().toString(36).substring(2, 7);
-              const randomPass = Math.random().toString(36).substring(2, 8);
-              const emailCust = `cust.${randomAccount}@premium.net`;
-              const passCust = `P@ss${randomPass}!`;
-
-              const successMessage =
-                `🎉 *PEMBAYARAN DITERIMA & LUNAS!*\n` +
-                `*${storeTitle}*\n\n` +
-                `Terima kasih Kak ${senderName}, pembayaran untuk order \`${trx.order_id}\` sebesar *Rp ${trx.total_amount.toLocaleString('id-ID')}* telah sukses diverifikasi otomatis oleh LunasQRIS!\n\n` +
-                `📦 *Produk:* ${productName}\n` +
-                `⚡ *Varian:* ${variantName}\n` +
-                `📅 *Waktu:* ${new Date().toLocaleString('id-ID')}\n\n` +
-                `🔐 *DETAIL KREDENSIAL AKUN (RAHASIA):*\n` +
-                `• *Email / Username:* \`${emailCust}\`\n` +
-                `• *Password:* \`${passCust}\`\n` +
-                `• *Masa Aktif:* 30 Hari Garansi Penuh\n` +
-                `• *Aturan Pakai:* Gunakan akun sesuai profil yang disediakan, jangan mengubah password utama.\n\n` +
-                `_Terima kasih telah berbelanja di ${storeTitle}! Detail di atas hanya dikirimkan ke chat pribadi Anda demi keamanan._`;
-
-              try {
-                const sRes = await sock.sendMessage(senderJid, { text: successMessage });
-                markMessageAsBotSent(sRes?.key?.id);
-                deps.addLog('success', `🎁 Kredensial akun premium berhasil dikirimkan ke DM ${senderJid}`);
-              } catch (sendErr: any) {
-                deps.addLog('error', `Gagal mengirim detail akun ke DM: ${sendErr?.message || sendErr}`);
-              }
-
-              // Notifikasi ke Owner jika nomor owner terisi
-              const ownerNum = config.storeInfo?.ownerNumber?.replace(/[^0-9]/g, '');
-              if (ownerNum) {
-                const ownerJid = `${ownerNum}@s.whatsapp.net`;
-                const ownerNote =
-                  `🔔 *NOTIFIKASI PESANAN LUNAS (LUNASQRIS)*\n\n` +
-                  `• *Pembeli:* ${senderName} (${senderCleanNumber})\n` +
-                  `• *Produk:* ${productName} (${variantName})\n` +
-                  `• *Order ID:* ${trx.order_id}\n` +
-                  `• *Nominal:* Rp ${trx.total_amount.toLocaleString('id-ID')}\n` +
-                  `• *Status:* Lunas & Terkirim ke DM pembeli`;
-                try {
-                  const oRes = await sock.sendMessage(ownerJid, { text: ownerNote });
-                  markMessageAsBotSent(oRes?.key?.id);
-                } catch {}
-              }
-            },
-            onExpired: async () => {
-              // Update status transaksi di database lokal menjadi 'cancel'
-              try {
-                updateTransactionStatus(trx.order_id || orderId, 'cancel');
-              } catch {}
-
-              // Pembayaran Kedaluwarsa
-              const expiredMsg =
-                `⏰ *INVOICE KEDALUWARSA*\n` +
-                `Tagihan \`${trx.order_id}\` untuk *${productName} (${variantName})* telah melewati batas waktu pembayaran.\n\n` +
-                `Jika Anda masih ingin memesan, silakan ulangi pemesanan di grup atau hubungi admin.`;
-              try {
-                const eRes = await sock.sendMessage(senderJid, { text: expiredMsg });
-                markMessageAsBotSent(eRes?.key?.id);
-              } catch {}
-            },
-          },
-          deps.addLog
-        );
-      } catch (invErr: any) {
-        deps.addLog('error', `Gagal memproses invoice QRIS: ${invErr?.message || invErr}`);
-        const errMsg = `Maaf kak @${senderCleanNumber}, gagal membuat invoice pembayaran: ${invErr?.message || 'Server sibuk'}. Silakan coba kembali atau hubungi admin.`;
-        try {
-          const eResp = await sock.sendMessage(
+          const grpRes = await sock.sendMessage(
             remoteJid,
-            { text: errMsg, mentions: [senderJid] },
+            { text: groupNotification, mentions: [senderJid] },
             { quoted: m }
           );
-          markMessageAsBotSent(eResp?.key?.id);
+          markMessageAsBotSent(grpRes?.key?.id);
+          deps.addLog('success', `💬 Notifikasi ringkasan pesanan terkirim ke grup ${remoteJid}`);
+        } catch (grpErr: any) {
+          deps.addLog('error', `Gagal mengirim notifikasi grup: ${grpErr?.message || grpErr}`);
+        }
+      }
+
+      // 4. Di Chat Pribadi (DM): Kirim Ringkasan Pesanan dengan 2 Tombol Interaktif
+      const matchedCat = DEFAULT_CATALOG.find((cat) =>
+        cat.items.some((item) => item.toLowerCase() === productName.toLowerCase())
+      );
+      const category = matchedCat?.kategori || 'Digital';
+
+      const summaryTemplate =
+        config.confirmSummaryText && config.confirmSummaryText.trim()
+          ? config.confirmSummaryText
+          : DEFAULT_CONFIRM_SUMMARY_TEMPLATE;
+
+      const summaryCaption = resolvePlaceholders(summaryTemplate, config, {
+        name: productName,
+        variant: variantName,
+        category,
+        price,
+        total: price,
+      });
+
+      const confirmFooterTemplate =
+        config.confirmFooterText && config.confirmFooterText.trim()
+          ? config.confirmFooterText
+          : '{storeName} • Konfirmasi Pesanan';
+
+      const confirmFooter = resolvePlaceholders(confirmFooterTemplate, config, {
+        name: productName,
+        variant: variantName,
+        category,
+        price,
+        total: price,
+      });
+
+      const checkoutButtons = [
+        {
+          text: '🎟️ Pakai Kode Promo',
+          id: 'checkout_promo',
+        },
+        {
+          text: '⚡ Lanjut Bayar (Normal)',
+          id: 'checkout_direct',
+        },
+      ];
+
+      try {
+        const dmRes = await sock.sendMessage(senderJid, {
+          text: summaryCaption,
+          footer: confirmFooter,
+          nativeFlow: checkoutButtons,
+        });
+        markMessageAsBotSent(dmRes?.key?.id);
+        deps.addLog('success', `📩 Pesan Ringkasan Pesanan & Tombol Promo berhasil dikirim ke DM ${senderJid}`);
+      } catch (dmErr: any) {
+        deps.addLog('warning', `Kirim ringkasan dengan tombol gagal, fallback teks: ${dmErr?.message}`);
+        try {
+          const fallbackRes = await sock.sendMessage(senderJid, {
+            text: `${summaryCaption}\n\nKetik *PROMO* untuk pakai kupon, atau ketik *BAYAR* untuk lanjut bayar normal.`,
+          });
+          markMessageAsBotSent(fallbackRes?.key?.id);
         } catch {}
       }
 
+      continue;
+    }
+
+    // Tombol: Pakai Kode Promo (Quick Reply)
+    if (cleanBtn === 'checkout_promo' || cleanBtn.toLowerCase().includes('checkout_promo')) {
+      let senderJid = m.key?.participant || remoteJid;
+      if (senderJid.includes(':')) senderJid = senderJid.replace(/:[0-9]+@/, '@');
+      senderJid = deps.resolveTargetJid(senderJid);
+
+      const session = activeCheckoutSessions.get(senderJid);
+      if (!session || Date.now() > session.expiresAt) {
+        activeCheckoutSessions.delete(senderJid);
+        const expRes = await sock.sendMessage(senderJid, {
+          text: '⏰ Sesi pesanan Anda telah berakhir. Silakan pilih varian kembali di grup atau katalog toko.',
+        });
+        markMessageAsBotSent(expRes?.key?.id);
+        continue;
+      }
+
+      session.waitingForPromo = true;
+      deps.addLog('info', `🎟️ Pelanggan ${senderName} memilih untuk memasukkan kode promo. Menunggu input kode...`);
+
+      const inputPromoTemplate =
+        config.confirmInputPromoText && config.confirmInputPromoText.trim()
+          ? config.confirmInputPromoText
+          : DEFAULT_CONFIRM_INPUT_PROMO_TEMPLATE;
+
+      const inputPromoText = resolvePlaceholders(inputPromoTemplate, config, {
+        name: session.productName,
+        variant: session.variantName,
+        price: session.price,
+        total: session.price,
+      });
+
+      const confirmFooter = resolvePlaceholders(
+        config.confirmFooterText || '{storeName} • Konfirmasi Pesanan',
+        config,
+        {
+          name: session.productName,
+          variant: session.variantName,
+          price: session.price,
+        }
+      );
+
+      try {
+        const resp = await sock.sendMessage(senderJid, {
+          text: inputPromoText,
+          footer: confirmFooter,
+        });
+        markMessageAsBotSent(resp?.key?.id);
+      } catch (err: any) {
+        deps.addLog('error', `Gagal mengirim instruksi kode promo ke ${senderJid}: ${err?.message}`);
+      }
+      continue;
+    }
+
+    // Tombol: Lanjut Bayar Langsung (Harga Normal)
+    if (cleanBtn === 'checkout_direct' || cleanBtn.toLowerCase().includes('checkout_direct')) {
+      let senderJid = m.key?.participant || remoteJid;
+      if (senderJid.includes(':')) senderJid = senderJid.replace(/:[0-9]+@/, '@');
+      senderJid = deps.resolveTargetJid(senderJid);
+
+      const session = activeCheckoutSessions.get(senderJid);
+      if (!session || Date.now() > session.expiresAt) {
+        activeCheckoutSessions.delete(senderJid);
+        const expRes = await sock.sendMessage(senderJid, {
+          text: '⏰ Sesi pesanan Anda telah berakhir. Silakan pilih varian kembali di grup atau katalog toko.',
+        });
+        markMessageAsBotSent(expRes?.key?.id);
+        continue;
+      }
+
+      activeCheckoutSessions.delete(senderJid);
+      deps.addLog('info', `⚡ Pelanggan ${senderName} memilih Lanjut Bayar Normal untuk "${session.productName} (${session.variantName})".`);
+
+      await executeLunasQrisInvoice({
+        sock,
+        config,
+        senderJid,
+        senderCleanNumber: session.senderCleanNumber,
+        senderName: session.senderName,
+        remoteJid: session.groupJid || senderJid,
+        isGroup: Boolean(session.groupJid),
+        productName: session.productName,
+        variantName: session.variantName,
+        price: session.price,
+        quotedMessage: m,
+        deps,
+      });
       continue;
     }
 
@@ -801,9 +945,209 @@ export async function dispatchIncomingMessages(
       continue;
     }
 
-    // 4. TANGANI PESAN TEKS MANUAL (WAJIB PREFIX: / . ! ? # $ % &)
+    // 4. TANGANI PESAN TEKS MANUAL
     if (!trimmedText) continue;
 
+    // 4.A TANGANI SESI AKTIF KONFIRMASI CHECKOUT & KODE PROMO DI PRIVATE CHAT (DM)
+    let senderJid = m.key?.participant || remoteJid;
+    if (senderJid.includes(':')) {
+      senderJid = senderJid.replace(/:[0-9]+@/, '@');
+    }
+    senderJid = deps.resolveTargetJid(senderJid);
+
+    const activeSession = activeCheckoutSessions.get(senderJid);
+    if (!isGroup && activeSession) {
+      // Kasus 1: Sesi sedang menunggu input kode promo dari pembeli
+      if (activeSession.waitingForPromo) {
+        if (Date.now() > activeSession.expiresAt) {
+          activeCheckoutSessions.delete(senderJid);
+          const expRes = await sock.sendMessage(senderJid, {
+            text: '⏰ Sesi kode promo Anda telah berakhir (melebihi 90 detik). Silakan pilih varian kembali di katalog toko.',
+          });
+          markMessageAsBotSent(expRes?.key?.id);
+          continue;
+        }
+
+        const inputUpper = trimmedText.trim().toUpperCase();
+
+        // 1. Pembeli mengetik 'BATAL'
+        if (inputUpper === 'BATAL') {
+          activeCheckoutSessions.delete(senderJid);
+          deps.addLog('info', `❌ Pelanggan ${senderName} mengetik BATAL untuk promo. Melanjutkan dengan harga normal.`);
+          const cancelMsg = `Penggunaan kode promo dibatalkan. Menyiapkan invoice LunasQRIS dengan harga normal (Rp ${activeSession.price.toLocaleString('id-ID')})...`;
+          const cRes = await sock.sendMessage(senderJid, { text: cancelMsg });
+          markMessageAsBotSent(cRes?.key?.id);
+
+          await executeLunasQrisInvoice({
+            sock,
+            config,
+            senderJid,
+            senderCleanNumber: activeSession.senderCleanNumber,
+            senderName: activeSession.senderName,
+            remoteJid: activeSession.groupJid || senderJid,
+            isGroup: Boolean(activeSession.groupJid),
+            productName: activeSession.productName,
+            variantName: activeSession.variantName,
+            price: activeSession.price,
+            quotedMessage: m,
+            deps,
+          });
+          continue;
+        }
+
+        // 2. Pembeli mengetik kode promo (misal: HEMAT10)
+        const promoResult = validateAndApplyPromo({
+          code: trimmedText.trim(),
+          variantId: activeSession.variantId || `${activeSession.productName}|${activeSession.variantName}`,
+          basePrice: activeSession.costPrice,
+          initialMargin: activeSession.initialMargin,
+          totalOrderAmount: activeSession.price,
+          isApkPremium: true,
+        });
+
+        if (!promoResult.isValid) {
+          const reason = promoResult.errorMessage || 'Kode promo tidak valid atau tidak dapat digunakan.';
+          deps.addLog('warning', `⚠️ Kode promo "${trimmedText.trim()}" oleh ${senderName} invalid: ${reason}`);
+
+          const invalidTemplate =
+            config.confirmPromoInvalidText && config.confirmPromoInvalidText.trim()
+              ? config.confirmPromoInvalidText
+              : DEFAULT_CONFIRM_PROMO_INVALID_TEMPLATE;
+
+          const invalidMsg = resolvePlaceholders(invalidTemplate, config, {
+            name: activeSession.productName,
+            variant: activeSession.variantName,
+            price: activeSession.price,
+            promoCode: trimmedText.trim(),
+            reason,
+          });
+
+          const invFooter = resolvePlaceholders(
+            config.confirmFooterText || '{storeName} • Konfirmasi Pesanan',
+            config
+          );
+
+          const invResp = await sock.sendMessage(senderJid, {
+            text: invalidMsg,
+            footer: invFooter,
+          });
+          markMessageAsBotSent(invResp?.key?.id);
+          // Biarkan activeSession tetap aktif agar customer bisa mencoba kode lain atau ketik BATAL
+          continue;
+        }
+
+        // Kode promo VALID!
+        activeCheckoutSessions.delete(senderJid);
+        const appliedDiscount = promoResult.actualDiscountApplied;
+        const finalPrice = promoResult.finalPrice;
+        const promoCodeUsed = promoResult.promo?.code || trimmedText.trim().toUpperCase();
+        const promoId = promoResult.promo?.id;
+
+        deps.addLog(
+          'success',
+          `🎉 Kode promo "${promoCodeUsed}" VALID untuk ${senderName}! Potongan: Rp ${appliedDiscount.toLocaleString('id-ID')}, Harga Akhir: Rp ${finalPrice.toLocaleString('id-ID')}`
+        );
+
+        const successTemplate =
+          config.confirmPromoSuccessText && config.confirmPromoSuccessText.trim()
+            ? config.confirmPromoSuccessText
+            : DEFAULT_CONFIRM_PROMO_SUCCESS_TEMPLATE;
+
+        const successMsg = resolvePlaceholders(successTemplate, config, {
+          name: activeSession.productName,
+          variant: activeSession.variantName,
+          price: activeSession.price,
+          promoCode: promoCodeUsed,
+          discount: appliedDiscount,
+          finalPrice: finalPrice,
+        });
+
+        const succFooter = resolvePlaceholders(
+          config.confirmFooterText || '{storeName} • Konfirmasi Pesanan',
+          config
+        );
+
+        const sRes = await sock.sendMessage(senderJid, {
+          text: successMsg,
+          footer: succFooter,
+        });
+        markMessageAsBotSent(sRes?.key?.id);
+
+        await executeLunasQrisInvoice({
+          sock,
+          config,
+          senderJid,
+          senderCleanNumber: activeSession.senderCleanNumber,
+          senderName: activeSession.senderName,
+          remoteJid: activeSession.groupJid || senderJid,
+          isGroup: Boolean(activeSession.groupJid),
+          productName: activeSession.productName,
+          variantName: activeSession.variantName,
+          price: activeSession.price,
+          finalPrice,
+          promoCode: promoCodeUsed,
+          discountAmount: appliedDiscount,
+          promoId,
+          quotedMessage: m,
+          deps,
+        });
+        continue;
+      }
+
+      // Kasus 2: Sesi belum waitingForPromo tapi pembeli mengetik teks fallback seperti 'PROMO' atau 'BAYAR'
+      const lower = trimmedText.trim().toLowerCase();
+      if (lower === 'promo' || lower === 'pakai promo' || lower === 'kode promo') {
+        activeSession.waitingForPromo = true;
+        deps.addLog('info', `🎟️ Pelanggan ${senderName} mengetik "${trimmedText}" untuk memasukkan kode promo.`);
+
+        const inputPromoTemplate =
+          config.confirmInputPromoText && config.confirmInputPromoText.trim()
+            ? config.confirmInputPromoText
+            : DEFAULT_CONFIRM_INPUT_PROMO_TEMPLATE;
+
+        const inputPromoText = resolvePlaceholders(inputPromoTemplate, config, {
+          name: activeSession.productName,
+          variant: activeSession.variantName,
+          price: activeSession.price,
+          total: activeSession.price,
+        });
+
+        const confirmFooter = resolvePlaceholders(
+          config.confirmFooterText || '{storeName} • Konfirmasi Pesanan',
+          config
+        );
+
+        try {
+          const resp = await sock.sendMessage(senderJid, {
+            text: inputPromoText,
+            footer: confirmFooter,
+          });
+          markMessageAsBotSent(resp?.key?.id);
+        } catch {}
+        continue;
+      } else if (lower === 'bayar' || lower === 'lanjut bayar' || lower === 'normal') {
+        activeCheckoutSessions.delete(senderJid);
+        deps.addLog('info', `⚡ Pelanggan ${senderName} mengetik "${trimmedText}" untuk bayar harga normal.`);
+
+        await executeLunasQrisInvoice({
+          sock,
+          config,
+          senderJid,
+          senderCleanNumber: activeSession.senderCleanNumber,
+          senderName: activeSession.senderName,
+          remoteJid: activeSession.groupJid || senderJid,
+          isGroup: Boolean(activeSession.groupJid),
+          productName: activeSession.productName,
+          variantName: activeSession.variantName,
+          price: activeSession.price,
+          quotedMessage: m,
+          deps,
+        });
+        continue;
+      }
+    }
+
+    // 4.B TANGANI COMMAND DENGAN PREFIX (WAJIB PREFIX: / . ! ? # $ % &)
     const firstChar = trimmedText.charAt(0);
     if (!ALLOWED_PREFIXES.includes(firstChar)) {
       // Abaikan teks manual tanpa prefix untuk menghindari spam di obrolan grup

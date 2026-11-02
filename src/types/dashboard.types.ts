@@ -48,10 +48,19 @@ export interface WhatsAppButton {
   callPhoneNumber?: string;
 }
 
+export interface ConfirmationCommandConfig {
+  confirmSummaryText: string;
+  confirmInputPromoText: string;
+  confirmPromoSuccessText: string;
+  confirmPromoInvalidText: string;
+  confirmFooterText?: string;
+}
+
 export interface PricingConfig {
   mode: 'rp' | 'percent';
   value: number;
 }
+
 
 export interface VariantPricingItem {
   variantId: string;

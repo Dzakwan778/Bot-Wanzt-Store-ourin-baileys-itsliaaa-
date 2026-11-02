@@ -224,6 +224,28 @@ export const TabContentRenderer: React.FC<TabContentRendererProps> = ({
           storeConfig.syncConfigToServer(payload);
           showToast('Konfigurasi Invoice berhasil disimpan!');
         }}
+        confirmSummaryText={storeConfig.confirmSummaryText}
+        setConfirmSummaryText={storeConfig.setConfirmSummaryText}
+        confirmInputPromoText={storeConfig.confirmInputPromoText}
+        setConfirmInputPromoText={storeConfig.setConfirmInputPromoText}
+        confirmPromoSuccessText={storeConfig.confirmPromoSuccessText}
+        setConfirmPromoSuccessText={storeConfig.setConfirmPromoSuccessText}
+        confirmPromoInvalidText={storeConfig.confirmPromoInvalidText}
+        setConfirmPromoInvalidText={storeConfig.setConfirmPromoInvalidText}
+        confirmFooterText={storeConfig.confirmFooterText}
+        setConfirmFooterText={storeConfig.setConfirmFooterText}
+        onSaveConfirmation={(confirmData?: any) => {
+          const isEvent = confirmData && (confirmData.nativeEvent || confirmData._reactName || confirmData.target);
+          const payload = (!isEvent && confirmData && typeof confirmData === 'object') ? confirmData : {
+            confirmSummaryText: storeConfig.confirmSummaryText,
+            confirmInputPromoText: storeConfig.confirmInputPromoText,
+            confirmPromoSuccessText: storeConfig.confirmPromoSuccessText,
+            confirmPromoInvalidText: storeConfig.confirmPromoInvalidText,
+            confirmFooterText: storeConfig.confirmFooterText,
+          };
+          storeConfig.syncConfigToServer(payload);
+          showToast('Konfigurasi Konfirmasi & Promo berhasil disimpan!');
+        }}
         storeInfo={storeConfig.storeInfo}
         isSavingConfig={storeConfig.isSavingConfig}
         showToast={showToast}

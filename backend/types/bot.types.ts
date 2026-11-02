@@ -85,6 +85,14 @@ export interface InvoiceCommandConfig {
   invoiceFooterText: string;
 }
 
+export interface ConfirmationCommandConfig {
+  confirmSummaryText: string;
+  confirmInputPromoText: string;
+  confirmPromoSuccessText: string;
+  confirmPromoInvalidText: string;
+  confirmFooterText?: string;
+}
+
 export interface PricingConfig {
   mode: 'rp' | 'percent';
   value: number;
@@ -113,11 +121,17 @@ export interface CommandsConfig {
   carouselPicture?: string;
   invoiceOutputText?: string;
   invoiceFooterText?: string;
+  confirmSummaryText?: string;
+  confirmInputPromoText?: string;
+  confirmPromoSuccessText?: string;
+  confirmPromoInvalidText?: string;
+  confirmFooterText?: string;
   xavieraApiKey?: string;
   xavieraBaseUrl?: string;
   lunasQrisApiKey?: string;
   lunasQrisSecretKey?: string;
   lunasQrisBaseUrl?: string;
 }
+
 
 

@@ -190,3 +190,76 @@ Rencana Pengujian:
 
 Hasil yang Diharapkan:
 Seluruh file JSON usang terhapus bersih, dan sistem berjalan normal menggunakan SQLite `bot.db`.
+
+---
+
+[3.0] - IMPLEMENTASI TAB KONFIRMASI CHECKOUT DAN ALUR KODE PROMO BOT WHATSAPP
+
+- Tanggal: 2026-11-01 22:30
+- Status: Completed
+Referensi SCHEDULE: 4.0
+
+Tujuan Implementasi:
+1. Menambahkan tab "Konfirmasi" pada halaman Respon Bot (Tab Command) di dashboard untuk mengatur 4 template teks:
+   - Ringkasan Pesanan (Order Summary)
+   - Permintaan Input Kode Promo
+   - Pesan Jika Kode Promo Valid
+   - Pesan Jika Kode Promo Invalid
+2. Mendukung placeholder dinamis: `{promoCode}`, `{discount}`, `{finalPrice}`, dan `{reason}` di samping placeholder standar toko `{storeName}`, `{produkName}`, `{varian}`, `{price}`.
+3. Mengubah alur order bot WhatsApp agar membuka sesi konfirmasi di DM (durasi 90 detik) dengan tombol pilihan `[Pakai Kode Promo]` dan `[Lanjut Bayar (Normal)]`, memvalidasi kupon via SQLite `validateAndApplyPromo()`, dan menerbitkan invoice QRIS dengan harga diskon jika promo valid.
+
+Bagian yang Akan Diubah:
+- "backend/types/bot.types.ts" - Menambahkan tipe `ConfirmationCommandConfig` dan memperbarui `CommandsConfig`.
+- "src/types/dashboard.types.ts" - Menambahkan opsi tab `'Confirmation'` dan tipe data konfigurasi konfirmasi.
+- "backend/config/configManager.ts" - Menambahkan default template konfirmasi dan fungsi get/save ke SQLite tabel `commands_config`.
+- "backend/services/placeholderHelper.ts" - Menambahkan resolusi placeholder `{promoCode}`, `{discount}`, `{finalPrice}`, dan `{reason}`.
+- "src/components/tabs/TabCommand.tsx" - Menambahkan tab "Konfirmasi", 4 form textarea pesan, dan tombol sisipkan tag placeholder.
+- "src/App.tsx" - Menyediakan state konfigurasi konfirmasi dan handler penyimpanan API `/api/config/command/confirmation`.
+- "backend/routes/configRoutes.ts" / "backend/app.ts" / "backend/server.ts" - Menangani endpoint API get dan update konfigurasi command konfirmasi.
+- "backend/handlers/messageDispatcher.ts" - Mengimplementasikan sesi checkout 90 detik di DM pelanggan, interaksi tombol promo vs bayar langsung, pembacaan kode promo, dan integrasi invoice QRIS diskon.
+
+Alasan Perubahan:
+Alur saat ini langsung membuat invoice QRIS seketika saat tombol Order ditekan tanpa memberi kesempatan bagi pembeli untuk menginput kupon promo. Penambahan tab Konfirmasi memungkinkan pemilik toko mengontrol teks pesan setiap tahapan checkout tanpa mengubah kode sumber.
+
+Strategi Implementasi:
+1. Definisikan tipe data dan template default di backend dan frontend.
+2. Tambahkan handler SQLite di `configManager.ts` untuk menyimpan command `confirmation`.
+3. Pasang tab visual "Konfirmasi" di `TabCommand.tsx` dengan UI yang konsisten, preview tag placeholder yang lengkap, dan tombol simpan.
+4. Perbarui `placeholderHelper.ts` agar mendukung `{promoCode}`, `{discount}`, `{finalPrice}`, `{reason}`.
+5. Di `messageDispatcher.ts`:
+   - Buat in-memory Map `activeCheckoutSessions` dengan key `remoteJid` (pembeli).
+   - Saat tombol `order_` ditekan:
+     - Simpan data varian, produk, dan harga normal ke sesi dengan masa berlaku 90 detik.
+     - Jika order berasal dari grup, kirim notifikasi singkat ke grup bahwa ringkasan pesanan dikirim ke DM.
+     - Di DM pembeli, kirim rincian pesanan dari template `confirmSummaryText` disertai 2 tombol: `[🎟️ Pakai Kode Promo]` dan `[⚡ Lanjut Bayar (Normal)]`.
+   - Tangani klik tombol `checkout_promo`:
+     - Set status sesi `waitingForPromo = true`.
+     - Kirim teks `confirmInputPromoText`.
+   - Tangani klik tombol `checkout_direct`:
+     - Hapus sesi, langsung lanjutkan alur pembuatan invoice QRIS LunasQRIS harga normal.
+   - Tangani pesan balasan teks pembeli saat `waitingForPromo = true`:
+     - Jika pembeli mengetik `BATAL`: lanjutkan invoice QRIS harga normal.
+     - Jika pembeli mengetik kode promo:
+       - Panggil `validateAndApplyPromo()`.
+       - Jika valid: kirim `confirmPromoSuccessText` lalu terbitkan invoice QRIS LunasQRIS dengan nominal hemat `{finalPrice}`.
+       - Jika invalid: kirim `confirmPromoInvalidText` (dengan `{reason}`) dan beri kesempatan coba kode lain atau ketik BATAL sebelum timeout 90 detik.
+
+Urutan Pengerjaan:
+1. Update `backend/types/bot.types.ts` dan `src/types/dashboard.types.ts`.
+2. Update `backend/config/configManager.ts` dan `backend/services/placeholderHelper.ts`.
+3. Update endpoint backend di `backend/app.ts` / `backend/server.ts` untuk route konfigurasi `confirmation`.
+4. Update frontend `src/components/tabs/TabCommand.tsx` dan `src/App.tsx`.
+5. Update alur checkout di `backend/handlers/messageDispatcher.ts`.
+6. Jalankan `compile_applet` dan `lint_applet` untuk verifikasi build.
+7. Catat penyelesaian implementasi di `brain/PROGRESS.md`.
+
+Dampak Perubahan:
+Pemilik toko memiliki kendali penuh atas pesan checkout di dashboard Respon Bot. Pelanggan dapat berbelanja dengan kode promo secara interaktif dan aman di DM WhatsApp.
+
+Rencana Pengujian:
+1. Validasi kompilasi TypeScript dengan `compile_applet`.
+2. Validasi linting dengan `lint_applet`.
+3. Memastikan semua endpoint API berjalan lancar tanpa error runtime.
+
+Hasil yang Diharapkan:
+Tab "Konfirmasi" tampil di Respon Bot, pengaturan tersimpan persisten ke database SQLite, dan bot WhatsApp menjalankan alur checkout interaktif 90 detik dengan dukungan penuh kupon diskon promo.

@@ -8,6 +8,7 @@ import {
   ListCommandConfig,
   CarouselCommandConfig,
   InvoiceCommandConfig,
+  ConfirmationCommandConfig,
   ApiConfig,
   PricingConfig,
 } from '../types/bot.types.ts';
@@ -78,6 +79,42 @@ export const DEFAULT_INVOICE_CONFIG: InvoiceCommandConfig = {
   invoiceFooterText: '{webLink} • Verifikasi Otomatis',
 };
 
+export const DEFAULT_CONFIRM_SUMMARY_TEMPLATE = `🛒 *RINCIAN PESANAN*
+Halo kak, silakan konfirmasi pesanan Anda:
+
+• *Produk:* {produkName}
+• *Varian:* {varian}
+• *Harga Normal:* Rp {price}
+
+Punya kode promo? Silakan pilih tombol di bawah untuk menggunakan diskon atau langsung bayar.`;
+
+export const DEFAULT_CONFIRM_INPUT_PROMO_TEMPLATE = `🎟️ *MASUKKAN KODE PROMO*
+Silakan ketik kode promo Anda (contoh: HEMAT10) atau ketik *BATAL* untuk melanjutkan dengan harga normal.
+
+⏱️ _Batas waktu: 90 detik._`;
+
+export const DEFAULT_CONFIRM_PROMO_SUCCESS_TEMPLATE = `🎉 *KODE PROMO BERHASIL DIGUNAKAN!*
+• *Kode Promo:* {promoCode}
+• *Harga Awal:* Rp {price}
+• *Potongan Diskon:* -Rp {discount}
+• *Total Bayar:* Rp {finalPrice}
+
+Invoice pembayaran QRIS sedang diterbitkan...`;
+
+export const DEFAULT_CONFIRM_PROMO_INVALID_TEMPLATE = `⚠️ *KODE PROMO TIDAK DAPAT DIGUNAKAN*
+Kode promo *{promoCode}* tidak dapat diterapkan.
+Penyebab: *{reason}*
+
+Silakan ketik kode promo lain, atau ketik *BATAL* untuk lanjut bayar harga normal (Rp {price}).`;
+
+export const DEFAULT_CONFIRMATION_CONFIG: ConfirmationCommandConfig = {
+  confirmSummaryText: DEFAULT_CONFIRM_SUMMARY_TEMPLATE,
+  confirmInputPromoText: DEFAULT_CONFIRM_INPUT_PROMO_TEMPLATE,
+  confirmPromoSuccessText: DEFAULT_CONFIRM_PROMO_SUCCESS_TEMPLATE,
+  confirmPromoInvalidText: DEFAULT_CONFIRM_PROMO_INVALID_TEMPLATE,
+  confirmFooterText: '{storeName} • Konfirmasi Pesanan',
+};
+
 export const DEFAULT_API_CONFIG: ApiConfig = {
   xavieraApiKey: '',
   xavieraBaseUrl: 'https://xaviera.store/api',
@@ -92,6 +129,7 @@ export const DEFAULT_CONFIG: CommandsConfig = {
   ...DEFAULT_LIST_CONFIG,
   ...DEFAULT_CAROUSEL_CONFIG,
   ...DEFAULT_INVOICE_CONFIG,
+  ...DEFAULT_CONFIRMATION_CONFIG,
   ...DEFAULT_API_CONFIG,
 };
 
@@ -267,6 +305,36 @@ export function saveInvoiceConfig(update: Partial<InvoiceCommandConfig>): Invoic
   return merged;
 }
 
+export function loadConfirmationConfig(): ConfirmationCommandConfig {
+  try {
+    const row = db.prepare('SELECT config_data FROM commands_config WHERE command_type = ?').get('confirmation') as any;
+    if (row && row.config_data) {
+      const parsed = JSON.parse(row.config_data);
+      return { ...DEFAULT_CONFIRMATION_CONFIG, ...parsed };
+    }
+  } catch (err) {
+    console.error('Gagal membaca confirmation config dari SQLite:', err);
+  }
+  return { ...DEFAULT_CONFIRMATION_CONFIG };
+}
+
+export function saveConfirmationConfig(update: Partial<ConfirmationCommandConfig>): ConfirmationCommandConfig {
+  const current = loadConfirmationConfig();
+  const merged = { ...current, ...update };
+  const now = new Date().toISOString();
+
+  try {
+    db.prepare(`
+      INSERT OR REPLACE INTO commands_config (command_type, config_data, updated_at)
+      VALUES (?, ?, ?)
+    `).run('confirmation', JSON.stringify(merged), now);
+  } catch (err) {
+    console.error('Gagal menyimpan confirmation config ke SQLite:', err);
+  }
+
+  return merged;
+}
+
 export function loadApiConfig(): ApiConfig {
   try {
     const row = db.prepare('SELECT * FROM api_config WHERE id = 1').get() as any;
@@ -321,6 +389,7 @@ export function loadCommandsConfig(): CommandsConfig {
   const list = loadListConfig();
   const carousel = loadCarouselConfig();
   const invoice = loadInvoiceConfig();
+  const confirm = loadConfirmationConfig();
   const api = loadApiConfig();
 
   return {
@@ -341,6 +410,11 @@ export function loadCommandsConfig(): CommandsConfig {
     carouselPicture: carousel.carouselPicture,
     invoiceOutputText: invoice.invoiceOutputText,
     invoiceFooterText: invoice.invoiceFooterText,
+    confirmSummaryText: confirm.confirmSummaryText,
+    confirmInputPromoText: confirm.confirmInputPromoText,
+    confirmPromoSuccessText: confirm.confirmPromoSuccessText,
+    confirmPromoInvalidText: confirm.confirmPromoInvalidText,
+    confirmFooterText: confirm.confirmFooterText,
     xavieraApiKey: api.xavieraApiKey,
     xavieraBaseUrl: api.xavieraBaseUrl,
     lunasQrisApiKey: api.lunasQrisApiKey !== undefined ? api.lunasQrisApiKey : DEFAULT_API_CONFIG.lunasQrisApiKey,
@@ -407,6 +481,22 @@ export function saveCommandsConfig(
   }
 
   if (
+    newConfig.confirmSummaryText !== undefined ||
+    newConfig.confirmInputPromoText !== undefined ||
+    newConfig.confirmPromoSuccessText !== undefined ||
+    newConfig.confirmPromoInvalidText !== undefined ||
+    newConfig.confirmFooterText !== undefined
+  ) {
+    saveConfirmationConfig({
+      ...(newConfig.confirmSummaryText !== undefined && { confirmSummaryText: newConfig.confirmSummaryText }),
+      ...(newConfig.confirmInputPromoText !== undefined && { confirmInputPromoText: newConfig.confirmInputPromoText }),
+      ...(newConfig.confirmPromoSuccessText !== undefined && { confirmPromoSuccessText: newConfig.confirmPromoSuccessText }),
+      ...(newConfig.confirmPromoInvalidText !== undefined && { confirmPromoInvalidText: newConfig.confirmPromoInvalidText }),
+      ...(newConfig.confirmFooterText !== undefined && { confirmFooterText: newConfig.confirmFooterText }),
+    });
+  }
+
+  if (
     newConfig.xavieraApiKey !== undefined ||
     newConfig.xavieraBaseUrl !== undefined ||
     newConfig.lunasQrisApiKey !== undefined ||
@@ -424,3 +514,4 @@ export function saveCommandsConfig(
 
   return loadCommandsConfig();
 }
+

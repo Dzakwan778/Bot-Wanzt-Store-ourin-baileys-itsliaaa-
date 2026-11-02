@@ -300,3 +300,60 @@ Hasil:
 
 Kendala:
 Tidak ada.
+
+---
+
+[16.0] - IMPLEMENTASI TAB KONFIRMASI CHECKOUT DAN ALUR KODE PROMO BOT WHATSAPP
+
+- Tanggal: 2026-11-01 22:45
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 3.0
+
+Pekerjaan yang Dilakukan:
+1. Menambahkan tab "Konfirmasi" pada halaman Respon Bot di dashboard berdampingan dengan tab Menu, List, Carousel, dan Invoice.
+2. Menyediakan 4 textarea template pesan yang dapat disesuaikan oleh pemilik toko:
+   - Ringkasan Pesanan (Order Summary)
+   - Permintaan Input Kode Promo
+   - Pesan Jika Kode Promo Valid
+   - Pesan Jika Kode Promo Invalid
+   - Footer Pesan Konfirmasi
+3. Mengintegrasikan placeholder baru:
+   - {promoCode}: Menampilkan kode promo yang digunakan pembeli.
+   - {discount}: Menampilkan potongan harga yang didapatkan.
+   - {finalPrice}: Menampilkan total pembayaran akhir setelah dipotong promo.
+   - {reason}: Menampilkan alasan penolakan jika kode promo tidak valid.
+   - Placeholder default: {storeName}, {ownerName}, {adminName}, {produkName}, {varian}, {category}, {price}, {total}.
+4. Memperbarui backend configManager dan sqlite untuk memuat dan menyimpan konfigurasi confirmation ke tabel commands_config secara persisten.
+5. Memperbarui alur checkout bot WhatsApp:
+   - Saat tombol Order pada Carousel ditekan: bot mengirimkan Ringkasan Pesanan ke DM pribadi pembeli dengan 2 tombol interaktif: [Pakai Kode Promo] dan [Lanjut Bayar (Normal)].
+   - Jika order dipicu dari grup WhatsApp, bot mengirimkan notifikasi singkat ke grup bahwa rincian pesanan telah dikirimkan ke chat pribadi (DM).
+   - Menetapkan durasi timeout sesi checkout selama 90 detik (1 menit 30 detik).
+   - Menangani tombol [Pakai Kode Promo]: bot menanyakan kode promo di DM pembeli dan menunggu input teks tanpa perlu awalan prefix.
+   - Jika pembeli mengetik 'BATAL': bot melanjutkan pembuatan invoice QRIS dengan harga normal.
+   - Jika pembeli mengetik kode promo: bot memvalidasi via SQLite validateAndApplyPromo() dengan perlindungan margin. Jika valid, bot mengirimkan pesan konfirmasi sukses dan menerbitkan invoice LunasQRIS dengan nominal hemat {finalPrice}. Jika invalid, bot mengirimkan pesan alasan {reason} dan membiarkan sesi tetap aktif agar pembeli dapat mencoba kode lain atau mengetik BATAL.
+   - Jika pembeli menekan [Lanjut Bayar (Normal)]: bot langsung menerbitkan invoice LunasQRIS dengan harga normal.
+   - Menambah counter penggunaan kode promo (used_count) di tabel promo_codes ketika pembayaran telah berstatus paid (lunas).
+6. Menjalankan compile_applet dan lint_applet dengan hasil sukses tanpa error.
+
+File yang Diubah:
+- "backend/types/bot.types.ts" - Menambahkan tipe ConfirmationCommandConfig dan memperluas CommandsConfig.
+- "src/types/dashboard.types.ts" - Menambahkan opsi tab 'Confirmation' dan interface ConfirmationCommandConfig.
+- "backend/config/configManager.ts" - Menambahkan default template konfirmasi, loadConfirmationConfig(), dan saveConfirmationConfig().
+- "backend/services/placeholderHelper.ts" - Menambahkan penggantian placeholder {promoCode}, {discount}, {finalPrice}, dan {reason}.
+- "src/hooks/useStoreConfig.ts" - Menambahkan state dan sinkronisasi API untuk template konfirmasi.
+- "src/components/tabs/TabCommand.tsx" - Menambahkan UI tab visual "Konfirmasi", 4 textarea form, badge tags placeholder, dan tombol Simpan.
+- "src/components/tabs/TabContentRenderer.tsx" - Menyambungkan props konfigurasi konfirmasi ke TabCommand.
+- "backend/handlers/messageDispatcher.ts" - Mengimplementasikan sesi checkout 90 detik, tombol Quick Reply promo vs bayar langsung, pembacaan kode promo di DM tanpa prefix, dan fungsi executeLunasQrisInvoice.
+- "brain/LANGKAH_IMPLEMENTASI.md" - Memperbarui status implementasi [3.0] menjadi Completed.
+
+Alasan Perubahan:
+Menerapkan alur checkout interaktif berbasis kode promo dan memberikan kontrol penuh kepada pemilik toko untuk mengedit seluruh pesan respon konfirmasi checkout melalui dashboard Respon Bot.
+
+Hasil:
+1. Tab "Konfirmasi" tersedia di halaman Respon Bot dashboard dengan form yang lengkap, intuitif, dan responsif.
+2. Bot WhatsApp mengarahkan checkout ke DM dengan masa tunggu 90 detik dan tombol pilihan promo atau bayar normal.
+3. Kode promo tervalidasi secara aman dengan perlindungan margin keuntungan toko, dan invoice LunasQRIS otomatis menyesuaikan harga diskon {finalPrice}.
+4. Semua build dan typecheck lulus 100%.
+
+Kendala:
+Tidak ada.
