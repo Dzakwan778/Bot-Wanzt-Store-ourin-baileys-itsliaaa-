@@ -36,7 +36,7 @@ export function useStoreConfig(
   // Command State
   const [selectedCommand, setSelectedCommand] = useState<'Menu' | 'List' | 'Carousel' | 'Invoice' | 'Confirmation'>('Menu');
   const [carouselOutputText, setCarouselOutputText] = useState<string>(
-    `*Wanzt Store*\n\n*{produkName} | {category}*\n\nNikmati produk pilihanmu dengan harga terbaik di Wanzt Store.\n\n*Detail Produk:*\n- Varian: {varian}\n- Harga: {price}\n- Stok: {stock} tersedia\n\nProduk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk melanjutkan.`
+    `*{storeName}*\n\n*{produkName} | {category}*\n\nNikmati produk pilihanmu dengan harga terbaik di {storeName}.\n\n*Detail Produk:*\n- Varian: {varian}\n- Harga: {price}\n- Stok: {stock} tersedia\n\nProduk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk melanjutkan.`
   );
   const [carouselPicture, setCarouselPicture] = useState<string>('snaptik-app-7690985506468908308-slide-2.jpg');
   const [invoiceOutputText, setInvoiceOutputText] = useState<string>(
@@ -55,7 +55,7 @@ export function useStoreConfig(
     `⚠️ *KODE PROMO TIDAK DAPAT DIGUNAKAN*\nKode promo *{promoCode}* tidak dapat diterapkan.\nPenyebab: *{reason}*\n\nSilakan ketik kode promo lain, atau ketik *BATAL* untuk lanjut bayar harga normal (Rp {price}).`
   );
   const [menuOutputText, setMenuOutputText] = useState<string>(
-    'Halo kak! Selamat datang di wanztstore.web.id ✨\n\nSilakan pilih layanan yang ingin Anda pesan melalui tombol interaktif di bawah ini:'
+    'Halo kak! Selamat datang di {storeName} ✨\n\nSilakan pilih layanan yang ingin Anda pesan melalui tombol interaktif di bawah ini:'
   );
   const [menuButtons, setMenuButtons] = useState<WhatsAppButton[]>([]);
   const [listOutputText, setListOutputText] = useState<string>(

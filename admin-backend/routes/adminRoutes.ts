@@ -74,7 +74,7 @@ adminRouter.get('/tenants', (_req: Request, res: Response) => {
 // 4. Buat Tenant Baru
 adminRouter.post('/tenants', (req: Request, res: Response) => {
   try {
-    const { store_name, owner_name, owner_phone, username, password, package_name, duration_days, max_groups, notes } = req.body;
+    const { store_name, owner_name, owner_phone, username, password, duration_days, notes } = req.body;
     if (!store_name || !owner_name || !owner_phone || !username) {
       return res.status(400).json({ success: false, message: 'Nama toko, pemilik, nomor WA, dan username wajib diisi' });
     }
@@ -85,9 +85,7 @@ adminRouter.post('/tenants', (req: Request, res: Response) => {
       owner_phone,
       username,
       password,
-      package_name,
       duration_days: parseInt(duration_days || '30', 10),
-      max_groups: parseInt(max_groups || '10', 10),
       notes,
     });
 

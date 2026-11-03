@@ -723,3 +723,111 @@ Hasil:
 Kendala:
 Tidak ada.
 
+
+
+---
+
+[25.0] - REFACTORING ARSITEKTUR FRONTEND DASHBOARD: ISOLASI STATE PER-TENANT & CLEAN REMOUNT (FIX ISU DATA TERCAMPUR)
+
+- Tanggal: 2026-11-02 03:28
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 11.0
+
+Pekerjaan yang Dilakukan:
+1. Menganalisis akar penyebab pengguna yang login sebagai akun tenant baru (`berkah_erot` / Berkah Store) malah melihat data default toko Wanzt Store (Dzakwan):
+   - Hook bisnis data toko (`useStoreConfig`, `useBotConnection`, `useTransactions`, dsb.) sebelumnya dipanggil di tingkat root `App.tsx` tanpa perlindungan otentikasi.
+   - Saat aplikasi pertama kali dimuat di layar login, hook tersebut memicu request awal yang mendapatkan data tenant default dan tersimpan di memori state React.
+   - Ketika pengguna login dengan kredensial `berkah_erot`, state React tidak ter-unmount secara bersih, sehingga tampilan tetap menahan state toko default.
+2. Memperbarui `frontend/src/hooks/useAuth.ts`:
+   - Menambahkan properti `tenantId?: string` pada antarmuka `UserSession`.
+   - Mengambil `tenantId` dari respon server `/api/auth/session` dan `/api/auth/login`.
+   - Menyimpan `wanzt_tenant_id` ke `localStorage` dan menghapusnya saat logout.
+   - Memastikan `user` state menyertakan `{ username, tenantId }`.
+3. Membangun komponen terisolasi `frontend/src/components/dashboard/TenantDashboard.tsx`:
+   - Memindahkan seluruh hooks bisnis toko ke dalam komponen ini.
+   - Memanggil `fetch('/api/auth/store-status')` segera saat mount untuk mengisi konfigurasi profil toko tenant yang aktif.
+4. Merefaktor `frontend/src/App.tsx`:
+   - Menjadikan `App.tsx` murni sebagai gerbang otentikasi.
+   - Jika `!auth.isAuthenticated`, hanya menampilkan `<LoginPage />`.
+   - Jika `auth.isAuthenticated`, merender `<TenantDashboard key={auth.user?.tenantId || auth.user?.username} auth={auth} />`.
+   - Prop `key={tenantId}` menjamin pembersihan total (*unmount*) instance lama dan pemuatan (*mount*) instance baru secara terisolasi saat berganti tenant.
+5. Memperbarui fallback pada `frontend/src/hooks/useStoreConfig.ts`:
+   - Mengganti teks hardcode "Wanzt Store" dan URL default dengan placeholder dinamis berbasis nama toko tenant.
+6. Memvalidasi sistem multi-session Baileys bot di backend:
+   - Sesi Baileys setiap tenant tersimpan di `auth_info_baileys/tenant_${tenantId}`.
+   - Sesi socket bot tetap berjalan di server 24/7 dan tidak terputus meskipun pengguna logout dari dashboard web.
+7. Menjalankan pengujian otentikasi ganda via skrip pengujian:
+   - Login `admin` -> `tenantId: t_wanzt` -> Nama Toko: `Wanzt Store`, Pemilik: `Dzakwan`.
+   - Login `berkah_erot` -> `tenantId: t_berkahstore_469` -> Nama Toko: `Berkah Store`, Pemilik: `Mak Erot`.
+8. Menjalankan verifikasi kompilasi produksi via `compile_applet`.
+
+File yang Diubah:
+- "frontend/src/hooks/useAuth.ts" - Menambahkan tenantId ke UserSession dan sinkronisasi state.
+- "frontend/src/hooks/useStoreConfig.ts" - Menghilangkan string hardcode nama toko default.
+- "frontend/src/components/dashboard/TenantDashboard.tsx" - Komponen dashboard toko terisolasi.
+- "frontend/src/App.tsx" - Pemasangan dynamic key remounting per tenant.
+- "brain/SCHEDULE.md" - Entri [8.0] diperbarui menjadi Completed.
+- "brain/LANGKAH_IMPLEMENTASI.md" - Entri [11.0] diperbarui menjadi Completed.
+- "brain/PROGRESS.md" - Entri [25.0] dicatat.
+
+Alasan Perubahan:
+Menjamin isolasi antarmuka dan data 100% antar penyewa toko, sehingga tenant `berkah_erot` (Berkah Store / Mak Erot) maupun tenant lainnya tidak akan pernah tertimpa atau melihat data toko milik tenant lain saat login.
+
+Hasil:
+1. Login dengan `berkah_erot` langsung memuat data Berkah Store (Mak Erot) dengan bot, kupon, dan transaksinya sendiri.
+2. Login dengan `admin` tetap memuat data Wanzt Store (Dzakwan).
+3. Berbagai user dapat login secara bersamaan dari perangkat berbeda tanpa saling mengganggu.
+4. Koneksi WhatsApp Bot tetap terhubung dan aktif 24/7 di server meskipun user logout dari browser web.
+5. Verifikasi build lolos 100%.
+
+Kendala:
+Tidak ada.
+
+---
+
+[26.0] - PENYERAGAMAN FITUR MULTI-TENANT, ELIMINASI SISTEM TIER, DAN PERBAIKAN DEFAULT XAVIERA API
+
+- Tanggal: 2026-11-02 04:38
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 12.0
+
+Pekerjaan yang Dilakukan:
+1. Menghilangkan seluruh sistem tier/paket langganan (Basic, Pro, Enterprise) dari arsitektur multi-tenant sesuai instruksi kesetaraan fitur.
+2. Memperbarui `admin-backend/services/tenantManager.ts`:
+   - Menyeragamkan seluruh tenant baru ke label 'Akses Penuh' dengan kuota grup default 50.
+   - Mengimplementasikan logika pengurutan (sorting) peringkat otomatis berdasarkan masa sewa (`expires_at DESC`).
+   - Memperhalus fungsi `getAllTenants` agar mengurutkan unit aktif dengan durasi terpanjang di posisi teratas untuk transparansi peringkat yang adil.
+3. Memperbarui `admin-frontend/src/App.tsx`:
+   - Menghapus elemen pilihan paket pada modal pendaftaran unit.
+   - Memperbaiki bug visual berupa kode tombol aksi yang duplikat.
+   - Menambahkan fitur pengurutan (Sorting) tabel berdasarkan: Masa Sewa Terpanjang, Mendekati Kedaluwarsa, dan Terbaru.
+   - Menggantikan kolom kasta "Paket" menjadi kolom "Tier & Masa Sewa" yang dinamis berdasarkan sisa hari (Tier Panjang, Tier Standar, Tier Singkat).
+   - Menambahkan indikator visual peringkat (#1, #2, dsb.) dengan ikon `Sparkles` untuk peringkat utama.
+4. Memperbarui `admin-backend/routes/adminRoutes.ts` dengan menyederhanakan validasi body request pendaftaran unit.
+5. Memperbaiki `backend/config/configManager.ts`:
+   - Mengubah default `xavieraBaseUrl` menjadi `'https://xavierastore.com/api/v1'` guna mencegah error fatal JSON parsing akibat domain lama yang telah kedaluwarsa.
+6. Memastikan kepatuhan terhadap prinsip Anti-AI Slop:
+   - Menghilangkan penggunaan em-dash (`—`) pada seluruh UI.
+   - Menjaga kontras tinggi dan layout yang rapi.
+7. Menjalankan verifikasi akhir:
+   - `lint_applet` (TypeScript check) lulus 100%.
+   - `compile_applet` (Full build) berhasil tanpa error.
+
+File yang Diubah:
+- "admin-backend/services/tenantManager.ts" - Logika penyeragaman paket & ranking masa sewa.
+- "admin-backend/routes/adminRoutes.ts" - Penyederhanaan payload pendaftaran unit.
+- "admin-frontend/src/App.tsx" - UI dashboard admin (sorting, ranking, eliminasi kasta).
+- "backend/config/configManager.ts" - Perbaikan default domain Xaviera Store.
+- "brain/SCHEDULE.md" - Entri [9.0] diperbarui menjadi Completed.
+- "brain/LANGKAH_IMPLEMENTASI.md" - Entri [12.0] diperbarui menjadi Completed.
+- "brain/PROGRESS.md" - Entri [26.0] dicatat.
+
+Hasil:
+1. Seluruh unit bot kini memiliki fitur yang setara (Akses Penuh) tanpa perbedaan kasta tier.
+2. Peringkat bot di dashboard murni ditentukan secara adil dari durasi masa sewa aktif.
+3. Kesalahan pemuatan data produk Xaviera akibat domain expired telah teratasi secara sistemik dengan pembaruan default Base URL.
+4. Antarmuka Master Admin tampil lebih profesional, informatif, dan adil.
+5. Build dan linting lulus 100%.
+
+Kendala:
+Tidak ada.

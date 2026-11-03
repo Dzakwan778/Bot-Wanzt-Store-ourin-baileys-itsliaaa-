@@ -28,7 +28,7 @@ try {
           headers.set('x-tenant-id', tenantId);
         }
 
-        return originalFetch(input, {
+        return originalFetch(url, {
           ...init,
           headers,
         });
