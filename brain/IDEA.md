@@ -986,4 +986,40 @@ Potensi Penerapan:
 Catatan Tambahan:
 - Pengguna meminta agar pemahaman dijelaskan terlebih dahulu sebelum kode diubah. Tidak ada perubahan kode aplikasi yang dilakukan sebelum konfirmasi dari pengguna.
 
+---
+
+[13.0] - EKSPLORASI FIGCRAFT DARI ARTCRAFT (DESAIN UI/UX OPEN-SOURCE NATIVE BERBASIS RUST)
+
+- Tanggal: 2026-11-03 09:35
+- Sumber: Diskusi Pengguna & Dokumentasi Ekosistem ArtCraft
+
+Informasi yang Dipelajari:
+1. Definisi dan Tujuan FigCraft:
+   FigCraft adalah perangkat lunak desain antarmuka (UI/UX) dan prototyping gratis, sumber terbuka (free & open source / FOSS), serta bersifat local-first yang dikembangkan oleh ArtCraft.
+2. Dibangun Murni dengan Rust (Native & Tanpa Electron):
+   Berbeda dengan Figma yang berbasis cloud browser atau aplikasi Electron yang boros memori (RAM), FigCraft ditulis dari awal menggunakan bahasa pemrograman Rust. Hal ini menghasilkan performa render yang sangat kencang, konsumsi daya/memori minimal, dan responsivitas instan.
+3. Fitur Utama yang Mengadopsi Standar Desain Modern:
+   - Frames dan Kanvas Tanpa Batas (Infinite Canvas).
+   - Auto Layout dengan fleksibilitas alur responsif.
+   - Reusable Components dan Variants untuk pembuatan Design System.
+   - Vector Networks untuk pembuatan ikon dan aset grafis vektor presisi.
+   - Styles dan Design Tokens / Variables untuk tokenisasi warna, tipografi, dan spasi.
+   - Interactive Prototyping dengan transisi kurva Bezier kustom.
+   - Dev Mode terintegrasi untuk copy-paste kode/CSS secara instan.
+4. Filosofi Local-First dan Bebas Biaya Langganan:
+   FigCraft dapat berjalan 100% offline tanpa perlu koneksi internet, file desain tersimpan langsung di penyimpanan lokal komputer pengguna, serta bebas dari model langganan bulanan (*subscription-free*).
+5. Ekosistem Kreatif ArtCraft yang Lebih Luas:
+   FigCraft merupakan bagian dari rangkaian software kreatif ArtCraft (dikelola melalui ArtCraft Launcher), yang juga mencakup PhotoCraft (alternatif Photoshop) dan FilmCraft (alternatif editor video). Proyek ini juga mendukung integrasi antarmuka program seperti command line, kanal kontrol JSON, dan Model Context Protocol (MCP) server.
+
+Pemahaman:
+FigCraft hadir sebagai alternatif independen dan open-source yang tangguh terhadap Figma, terutama bagi desainer dan developer yang menginginkan kepemilikan penuh atas file desain lokal mereka, privasi data tanpa keterikatan cloud vendor, serta kecepatan aplikasi native berbasis Rust.
+
+Potensi Penerapan:
+- Dapat digunakan sebagai referensi alur kerja Dev Mode dan konversi token desain ke Tailwind CSS/React.
+- Relevan untuk desainer atau developer yang mengutamakan privasi dan performa native dalam merancang antarmuka web atau aplikasi.
+
+Catatan Tambahan:
+- Karena proyek ini masih dalam fase pengembangan aktif (alpha/open-source), beberapa ekosistem plugin komunitas pihak ketiga masih terus bertumbuh dibandingkan platform mature seperti Figma.
+
+
 
