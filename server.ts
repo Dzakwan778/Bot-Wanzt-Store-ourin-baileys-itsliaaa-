@@ -5,8 +5,7 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import { serverApp } from './backend/app.ts';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = import.meta.dirname;
 
 async function startServer() {
   const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -18,7 +17,7 @@ async function startServer() {
       root: path.resolve(__dirname, 'frontend'),
       server: {
         middlewareMode: true,
-        hmr: false,
+        hmr: { port: 24678 },
       },
       appType: 'spa',
     });
@@ -29,7 +28,7 @@ async function startServer() {
       configFile: path.resolve(__dirname, 'admin-frontend', 'vite.config.ts'),
       server: {
         middlewareMode: true,
-        hmr: false,
+        hmr: { port: 24679 },
       },
       appType: 'spa',
     });
