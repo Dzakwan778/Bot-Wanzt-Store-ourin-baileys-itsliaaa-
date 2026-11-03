@@ -16,8 +16,261 @@ import {
   Bell,
   BellOff,
   ChevronDown,
+  Upload,
 } from 'lucide-react';
 import { WhatsAppButton, StoreInfoConfig } from '../../types/dashboard.types';
+
+interface MediaGalleryPickerProps {
+  label: string;
+  description: string;
+  selectedPicture: string;
+  onSelectPicture: (pic: string) => void;
+  availablePictures: string[];
+  setAvailablePictures: (pics: string[]) => void;
+  showToast: (msg: string) => void;
+}
+
+const MediaGalleryPicker: React.FC<MediaGalleryPickerProps> = ({
+  label,
+  description,
+  selectedPicture,
+  onSelectPicture,
+  availablePictures,
+  setAvailablePictures,
+  showToast,
+}) => {
+  const [isUploading, setIsUploading] = React.useState(false);
+  const [isDeleting, setIsDeleting] = React.useState<string | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const handleRefresh = async () => {
+    try {
+      const res = await fetch('/api/media/pictures');
+      const data = await res.json();
+      if (data.pictures) {
+        setAvailablePictures(data.pictures);
+        showToast('Daftar foto diperbarui');
+      }
+    } catch {
+      showToast('Gagal memuat foto');
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!['image/jpeg', 'image/png', 'image/webp', 'image/jpg'].includes(file.type)) {
+      showToast('Gunakan file gambar format JPG, PNG, atau WEBP');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('Ukuran foto maksimal 10 MB');
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64Data = reader.result as string;
+        try {
+          const res = await fetch('/api/media/upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filename: file.name,
+              data: base64Data,
+            }),
+          });
+          const resData = await res.json();
+          if (resData.success) {
+            setAvailablePictures(resData.pictures);
+            if (resData.filename) {
+              onSelectPicture(resData.filename);
+            }
+            showToast('Foto berhasil diunggah!');
+          } else {
+            showToast(resData.error || 'Gagal mengunggah foto');
+          }
+        } catch {
+          showToast('Koneksi upload gagal');
+        } finally {
+          setIsUploading(false);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch {
+      setIsUploading(false);
+      showToast('Gagal membaca file gambar');
+    }
+  };
+
+  const handleDelete = async (pic: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsDeleting(pic);
+    try {
+      const res = await fetch(`/api/media/${encodeURIComponent(pic)}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAvailablePictures(data.pictures);
+        if (selectedPicture === pic) {
+          const nextPic = data.pictures.length > 0 ? data.pictures[0] : '';
+          onSelectPicture(nextPic);
+        }
+        showToast('Foto berhasil dihapus');
+      } else {
+        showToast(data.error || 'Gagal menghapus foto');
+      }
+    } catch {
+      showToast('Gagal menghapus foto');
+    } finally {
+      setIsDeleting(null);
+    }
+  };
+
+  return (
+    <div className="space-y-3.5 p-4 bg-slate-50/80 rounded-2xl border border-slate-200">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/jpg"
+        onChange={handleFileChange}
+        className="hidden"
+      />
+
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <h4 className="text-xs font-bold text-slate-800">{label}</h4>
+          <p className="text-[11px] text-slate-500">{description}</p>
+        </div>
+
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={handleRefresh}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium text-slate-600 hover:text-[#0084D1] bg-white rounded-lg border border-slate-200 hover:border-sky-300 transition cursor-pointer shadow-2xs"
+          >
+            <RefreshCw className="w-3 h-3" />
+            <span>Refresh</span>
+          </button>
+
+          <button
+            type="button"
+            disabled={isUploading}
+            onClick={() => fileInputRef.current?.click()}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-white bg-[#0084D1] hover:bg-[#0073b7] rounded-lg transition cursor-pointer shadow-xs disabled:opacity-50"
+          >
+            {isUploading ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Upload className="w-3.5 h-3.5" />
+            )}
+            <span>{isUploading ? 'Mengunggah...' : 'Upload Foto Baru'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Grid Galeri Foto Tenant */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 pt-1">
+        {/* Card Tombol Upload Cepat */}
+        <button
+          type="button"
+          disabled={isUploading}
+          onClick={() => fileInputRef.current?.click()}
+          className="group flex flex-col items-center justify-center p-3 rounded-xl border-2 border-dashed border-slate-300 hover:border-[#0084D1] bg-white/70 hover:bg-sky-50/50 transition cursor-pointer min-h-[110px]"
+        >
+          <div className="w-8 h-8 rounded-full bg-slate-100 group-hover:bg-sky-100 flex items-center justify-center text-slate-500 group-hover:text-[#0084D1] mb-1.5 transition">
+            {isUploading ? (
+              <RefreshCw className="w-4 h-4 animate-spin text-[#0084D1]" />
+            ) : (
+              <Plus className="w-4 h-4" />
+            )}
+          </div>
+          <span className="text-[11px] font-semibold text-slate-700 group-hover:text-[#0084D1] text-center leading-tight">
+            {isUploading ? 'Proses...' : 'Upload Foto'}
+          </span>
+          <span className="text-[9px] text-slate-400 mt-0.5">JPG, PNG, WEBP</span>
+        </button>
+
+        {/* Daftar Foto */}
+        {availablePictures.map((pic) => {
+          const isSelected = selectedPicture === pic;
+          return (
+            <div
+              key={pic}
+              onClick={() => onSelectPicture(pic)}
+              className={`group relative rounded-xl border overflow-hidden cursor-pointer transition flex flex-col bg-white min-h-[110px] ${
+                isSelected
+                  ? 'border-[#0084D1] ring-2 ring-[#0084D1]/20 shadow-xs'
+                  : 'border-slate-200 hover:border-slate-300 hover:shadow-2xs'
+              }`}
+            >
+              {/* Thumbnail Image */}
+              <div className="relative w-full h-20 bg-slate-100 overflow-hidden">
+                <img
+                  src={`/api/media/view?name=${encodeURIComponent(pic)}`}
+                  alt={pic}
+                  loading="lazy"
+                  className="w-full h-full object-cover transition group-hover:scale-105"
+                />
+
+                {/* Badge Terpilih */}
+                {isSelected && (
+                  <div className="absolute top-1.5 left-1.5 bg-[#0084D1] text-white p-1 rounded-md shadow-xs">
+                    <Check className="w-3 h-3 stroke-[3]" />
+                  </div>
+                )}
+
+                {/* Tombol Hapus */}
+                <button
+                  type="button"
+                  title="Hapus foto ini"
+                  disabled={isDeleting === pic}
+                  onClick={(e) => handleDelete(pic, e)}
+                  className="absolute top-1.5 right-1.5 p-1 rounded-md bg-white/90 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition shadow-xs opacity-0 group-hover:opacity-100 cursor-pointer"
+                >
+                  {isDeleting === pic ? (
+                    <RefreshCw className="w-3 h-3 animate-spin text-rose-600" />
+                  ) : (
+                    <Trash2 className="w-3 h-3" />
+                  )}
+                </button>
+              </div>
+
+              {/* Caption Nama File */}
+              <div className="p-1.5 text-center bg-white border-t border-slate-100">
+                <p className="text-[10px] font-mono text-slate-600 truncate max-w-full">
+                  {pic}
+                </p>
+                {isSelected && (
+                  <span className="text-[9px] font-semibold text-[#0084D1] block -mt-0.5">
+                    Aktif
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {availablePictures.length === 0 && (
+        <div className="text-center py-4 bg-white rounded-xl border border-dashed border-slate-200">
+          <ImageIcon className="w-6 h-6 text-slate-300 mx-auto mb-1" />
+          <p className="text-xs text-slate-500 font-medium">Belum ada foto yang diunggah.</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">
+            Klik tombol Upload Foto di atas untuk menambahkan foto promosi toko Anda.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
+
 
 interface TabCommandProps {
   selectedCommand: 'Menu' | 'List' | 'Carousel' | 'Invoice' | 'Confirmation';
@@ -296,59 +549,15 @@ export const TabCommand: React.FC<TabCommandProps> = ({
               </label>
 
               {includeMedia && (
-                <div className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200 space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-medium text-slate-700">Pilih file gambar:</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        fetch('/api/media/pictures')
-                          .then((res) => res.json())
-                          .then((data) => {
-                            if (data.pictures) {
-                              setAvailablePictures(data.pictures);
-                              showToast('Daftar gambar diperbarui');
-                            }
-                          })
-                          .catch(() => {});
-                      }}
-                      className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-slate-600 hover:text-[#0084D1] bg-white rounded-lg border border-slate-200 transition cursor-pointer"
-                    >
-                      <RefreshCw className="w-3 h-3" />
-                      Refresh
-                    </button>
-                  </div>
-
-                  {availablePictures.length === 0 ? (
-                    <p className="text-xs text-slate-500 italic">
-                      Belum ada file di folder ./src/media/picture
-                    </p>
-                  ) : (
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                      <select
-                        value={selectedPicture}
-                        onChange={(e) => setSelectedPicture(e.target.value)}
-                        className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-[#0084D1]"
-                      >
-                        {availablePictures.map((pic) => (
-                          <option key={pic} value={pic}>
-                            {pic}
-                          </option>
-                        ))}
-                      </select>
-
-                      {selectedPicture && (
-                        <div className="w-12 h-12 rounded-lg border border-slate-200 overflow-hidden bg-white shrink-0">
-                          <img
-                            src={`/api/media/view?name=${encodeURIComponent(selectedPicture)}`}
-                            alt="Preview"
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <MediaGalleryPicker
+                  label="Galeri Foto Header Menu"
+                  description="Pilih atau unggah foto promosi yang akan tampil di atas pesan menu WhatsApp."
+                  selectedPicture={selectedPicture}
+                  onSelectPicture={setSelectedPicture}
+                  availablePictures={availablePictures}
+                  setAvailablePictures={setAvailablePictures}
+                  showToast={showToast}
+                />
               )}
             </div>
 
@@ -545,63 +754,15 @@ export const TabCommand: React.FC<TabCommandProps> = ({
         <div className="space-y-5">
           <div className="bg-white border border-slate-200/80 rounded-2xl p-5 sm:p-6 shadow-xs space-y-5">
             {/* Header Image for Carousel */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xs font-semibold text-slate-800">Gambar Header Kartu</h3>
-                  <p className="text-[11px] text-slate-400">Gambar yang tampil di atas kartu varian.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    fetch('/api/media/pictures')
-                      .then((res) => res.json())
-                      .then((data) => {
-                        if (data.pictures) {
-                          setAvailablePictures(data.pictures);
-                          showToast('Daftar gambar diperbarui');
-                        }
-                      })
-                      .catch(() => {});
-                  }}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:text-[#0084D1] bg-slate-50 hover:bg-white rounded-lg border border-slate-200 transition cursor-pointer"
-                >
-                  <RefreshCw className="w-3 h-3" />
-                  Refresh
-                </button>
-              </div>
-
-              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                <div className="relative flex-1">
-                  <select
-                    value={carouselPicture}
-                    onChange={(e) => setCarouselPicture(e.target.value)}
-                    className="w-full appearance-none bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2.5 pr-9 text-xs font-mono text-slate-800 focus:outline-none focus:bg-white focus:border-[#0084D1]"
-                  >
-                    {availablePictures.length > 0 ? (
-                      availablePictures.map((pic) => (
-                        <option key={pic} value={pic}>
-                          {pic}
-                        </option>
-                      ))
-                    ) : (
-                      <option value="">Belum ada file di ./src/media/picture</option>
-                    )}
-                  </select>
-                  <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                </div>
-
-                {carouselPicture && (
-                  <div className="w-14 h-14 rounded-xl border border-slate-200 overflow-hidden bg-white shrink-0">
-                    <img
-                      src={`/api/media/view?name=${encodeURIComponent(carouselPicture)}`}
-                      alt={carouselPicture}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
+            <MediaGalleryPicker
+              label="Gambar Header Kartu Carousel"
+              description="Pilih atau unggah foto promosi yang akan tampil di atas kartu varian produk WhatsApp."
+              selectedPicture={carouselPicture}
+              onSelectPicture={setCarouselPicture}
+              availablePictures={availablePictures}
+              setAvailablePictures={setAvailablePictures}
+              showToast={showToast}
+            />
 
             {/* Template Output Text */}
             <div className="space-y-2 pt-2 border-t border-slate-100">

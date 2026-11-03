@@ -7,6 +7,8 @@ import { getProductVariants } from '../services/xavieraService.ts';
 import { buildQuoteContextInfo } from '../services/quoteHelper.ts';
 import { resolvePlaceholders } from '../services/placeholderHelper.ts';
 import { getPricingConfig, calculateSellingPrice, calculateSellingPriceForVariant } from '../database/sqlite.ts';
+import { getPicturePath } from '../services/mediaManager.ts';
+import { getActiveTenantId } from '../database/tenantContext.ts';
 
 export async function sendProductVariantsCarousel(
   sock: any,
@@ -46,19 +48,13 @@ export async function sendProductVariantsCarousel(
   // dan akan memunculkan "Versi WhatsApp Anda tidak mendukungnya. Perbarui WhatsApp".
   let uploadedMedia: any = null;
   try {
+    const tenantId = (sock as any)?.tenantId || getActiveTenantId();
     const pictureName = config.carouselPicture || config.selectedPicture || 'snaptik-app-7690985506468908308-slide-2.jpg';
-    const pictureDir = path.join(process.cwd(), 'src', 'media', 'picture');
     let imageBuffer: Buffer | null = null;
 
-    if (fs.existsSync(path.join(pictureDir, pictureName))) {
-      imageBuffer = fs.readFileSync(path.join(pictureDir, pictureName));
-    } else if (fs.existsSync(pictureDir)) {
-      const files = fs
-        .readdirSync(pictureDir)
-        .filter((f) => ['.jpg', '.jpeg', '.png', '.webp'].includes(path.extname(f).toLowerCase()));
-      if (files.length > 0) {
-        imageBuffer = fs.readFileSync(path.join(pictureDir, files[0]));
-      }
+    const picPath = getPicturePath(tenantId, pictureName);
+    if (picPath && fs.existsSync(picPath)) {
+      imageBuffer = fs.readFileSync(picPath);
     }
 
     if (imageBuffer && sock.waUploadToServer) {

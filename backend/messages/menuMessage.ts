@@ -2,6 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import { CommandsConfig } from '../types/bot.types.ts';
 import { resolvePlaceholders } from '../services/placeholderHelper.ts';
+import { getPicturePath } from '../services/mediaManager.ts';
+import { getActiveTenantId } from '../database/tenantContext.ts';
 
 export async function sendMenuInteractiveMessage(
   sock: any,
@@ -67,9 +69,9 @@ export async function sendMenuInteractiveMessage(
   let imageInput: Buffer | undefined = undefined;
   if (config.includeMedia && config.selectedPicture) {
     try {
-      const safeName = path.basename(config.selectedPicture);
-      const picPath = path.join(process.cwd(), 'src', 'media', 'picture', safeName);
-      if (fs.existsSync(picPath)) {
+      const tenantId = (sock as any)?.tenantId || getActiveTenantId();
+      const picPath = getPicturePath(tenantId, config.selectedPicture);
+      if (picPath && fs.existsSync(picPath)) {
         const buf = fs.readFileSync(picPath);
         if (buf.length <= 10 * 1024 * 1024) {
           imageInput = buf;
@@ -77,11 +79,11 @@ export async function sendMenuInteractiveMessage(
           addLog('warning', `Ukuran gambar menu (${(buf.length / (1024 * 1024)).toFixed(2)} MB) melebihi batas 10MB.`);
         }
       } else if (addLog) {
-        addLog('warning', `File gambar terpilih tidak ditemukan di ./src/media/picture: ${safeName}`);
+        addLog('warning', `File gambar menu tidak ditemukan: ${config.selectedPicture}`);
       }
     } catch (err: any) {
       if (addLog) {
-        addLog('warning', `Gagal membaca gambar dari ./src/media/picture: ${err?.message || err}`);
+        addLog('warning', `Gagal membaca gambar menu: ${err?.message || err}`);
       }
     }
   }

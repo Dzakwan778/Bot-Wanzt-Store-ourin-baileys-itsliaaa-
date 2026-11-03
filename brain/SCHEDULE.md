@@ -386,3 +386,72 @@ Rencana:
 
 Hasil yang Diharapkan:
 Seluruh unit bot memiliki hak akses dan fitur yang 100% setara tanpa diskriminasi tier/paket. Peringkat bot di dashboard murni mencerminkan durasi dan keaktifan masa sewa secara adil.
+
+---
+
+[10.0] - PERENCANAAN SISTEM PENYIMPANAN MEDIA TERISOLASI DAN FITUR UPLOAD FOTO MULTI-TENANT
+
+- Tanggal: 2026-11-03 08:25
+- Status: Completed
+
+Tujuan:
+Merancang dan merencanakan solusi menyeluruh agar setiap tenant dapat mengunggah dan memilih foto kustom mereka sendiri (untuk command Menu dan Carousel) secara mandiri dari dashboard, tanpa perlu hardcode di server, dan dengan isolasi ketat sehingga foto milik Tenant A tidak dapat dilihat atau diakses oleh Tenant B.
+
+Rencana:
+1. Analisis dan Konfirmasi Arsitektur dengan Pengguna:
+   - Mempresentasikan analisis akar masalah saat ini (folder statis bersama `/frontend/src/media/picture`).
+   - Menyampaikan usulan solusi direktori terisolasi `storage/tenants/<tenantId>/media/` di server lokal.
+   - Menjelaskan rancangan API upload, list, view, dan delete yang terlindungi autentikasi konteks tenant.
+   - Menjelaskan integrasi bot WhatsApp agar membaca foto dari folder tenant aktif dengan fallback ke default.
+   - Menjelaskan rancangan UI upload dan galeri foto di dashboard Command Tab.
+   - Menunggu persetujuan pengguna sebelum melakukan perubahan kode.
+
+2. Tahap Implementasi Teknis (Setelah Pengguna Menyetujui):
+   - Langkah 1: Persiapan direktori penyimpanan server `storage/tenants/<tenantId>/media/` dan aset bersama `storage/shared/default_media/`.
+   - Langkah 2: Pembaruan `backend/routes/mediaRoutes.ts` dengan upload handler (multer/stream), sanitasi path keamanan, dan scoping berdasarkan `getActiveTenantId()`.
+   - Langkah 3: Penyesuaian `menuMessage.ts`, `carouselMessage.ts`, dan `botManager.ts` agar mengambil media dari storage tenant yang sesuai.
+   - Langkah 4: Pembuatan komponen Upload Media & Selector di `frontend/src/components/dashboard/tabs/CommandTab.tsx`.
+   - Langkah 5: Pengujian isolasi foto antar-tenant (verifikasi bahwa Tenant A tidak melihat foto Tenant B) dan verifikasi bot WhatsApp.
+
+Hasil yang Diharapkan:
+Setiap tenant memiliki ruang penyimpanan foto terisolasi 100%, dapat dengan mudah mengunggah foto promosi melalui dashboard web, dan foto tersebut otomatis digunakan saat bot WhatsApp mereka merespons pesan Menu dan Carousel tanpa saling tumpang tindih antar penyewa.
+
+---
+
+[11.0] - DESAIN DAN IMPLEMENTASI TABEL DAFTAR PENYEWA BARU PADA DASHBOARD MASTER ADMIN
+
+- Tanggal: 2026-11-03 08:42
+- Status: Completed
+
+Tujuan:
+Merespons permintaan pembaruan tabel penyewa pada dashboard Master Admin (`/master` / `admin-frontend/`) dengan susunan 13 kolom informasi dan aksi lengkap (Status Akun, ID Bot, Toko, Owner, No WhatsApp, Username, Masa Sewa, Tanggal Expired, Status Bot Baileys Online/Offline, Tombol Perpanjang Sewa, Toggle Switch Suspend, Tombol Reset Password, dan Tombol Hapus Tenant).
+
+Rencana:
+1. Tahap Konfirmasi Pemahaman (Saat Ini):
+   - Menjelaskan seluruh pemahaman struktur tabel, fungsi setiap kolom, cara kerja toggle suspend, indikator status bot WhatsApp, serta tombol-tombol aksi kepada pengguna.
+   - Menunggu persetujuan pengguna sebelum melakukan perubahan kode.
+
+2. Tahap Implementasi Teknis (Setelah Disetujui Pengguna):
+   - Langkah 1: Mendokumentasikan rencana teknis di `brain/LANGKAH_IMPLEMENTASI.md` ([29.0]).
+   - Langkah 2: Menyesuaikan backend `admin-backend/services/tenantManager.ts` dan `admin-backend/routes/adminRoutes.ts` agar menyertakan status koneksi real-time bot Baileys (`bot_status: 'online' | 'offline'`) untuk setiap tenant, serta endpoint reset password dan update status.
+   - Langkah 3: Merombak antarmuka tabel di `admin-frontend/src/App.tsx` sesuai spesifikasi 13 kolom:
+     * Status Akun: Badge warna (Aktif = Hijau, Suspend = Oranye, Expired = Merah).
+     * ID Bot: Format kode monospace seperti `t_berkahstore_450`.
+     * Toko: Nama toko penyewa.
+     * Owner: Nama pemilik toko.
+     * No. WhatsApp: Nomor kontak dengan tautan langsung / format rapi.
+     * Username: Username login dashboard toko.
+     * Masa Sewa: Durasi masa sewa aktif (contoh: "360 Hari").
+     * Expired: Format tanggal jatuh tempo Indonesia (contoh: "28 Oktober 2026").
+     * Status Bot: Indikator Online (hijau dengan dot berkedip) jika socket Baileys terhubung, atau Offline (abu-abu).
+     * Perpanjang: Tombol membuka modal perpanjangan masa sewa bot (+hari).
+     * Suspend: Toggle switch (On = Suspend aktif, Off = Normal).
+     * Reset: Tombol modal reset password akun tenant.
+     * Hapus: Tombol modal konfirmasi hapus tenant beserta database & sesinya.
+   - Langkah 4: Menguji build frontend dan backend (`compile_applet` dan `lint_applet`).
+   - Langkah 5: Mencatat hasil akhir di `brain/PROGRESS.md`.
+
+Hasil yang Diharapkan:
+Tabel daftar penyewa di Dashboard Master Admin tampil modern, rapi, responsif, dan menyajikan kendali lengkap atas seluruh unit bot apartemen sesuai kebutuhan pengguna.
+
+

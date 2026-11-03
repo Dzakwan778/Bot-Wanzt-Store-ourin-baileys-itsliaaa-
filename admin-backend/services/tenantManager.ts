@@ -1,5 +1,6 @@
 import { getMasterDb, hashPassword } from '../database/masterSqlite.ts';
 import { initTenantDb, deleteTenantDb } from '../../backend/database/tenantDbManager.ts';
+import { getBotManager } from '../../backend/botManager.ts';
 import fs from 'fs';
 import path from 'path';
 
@@ -17,6 +18,8 @@ export interface TenantRecord {
   expires_at: string;
   notes: string | null;
   days_remaining?: number;
+  duration_days?: number;
+  bot_status?: 'online' | 'offline';
 }
 
 export interface CreateTenantInput {
@@ -30,6 +33,19 @@ export interface CreateTenantInput {
   duration_days?: number;
   max_groups?: number;
   notes?: string;
+}
+
+export function normalizeIndonesianPhone(raw: string): string {
+  if (!raw) return '';
+  let digits = raw.replace(/\D/g, '');
+  if (digits.startsWith('0')) {
+    digits = '62' + digits.slice(1);
+  } else if (digits.startsWith('8')) {
+    digits = '62' + digits;
+  } else if (!digits.startsWith('62') && digits.length > 0) {
+    digits = '62' + digits;
+  }
+  return digits;
 }
 
 export class TenantManager {
@@ -50,10 +66,26 @@ export class TenantManager {
     const now = new Date().getTime();
     const mapped = rows.map((row) => {
       const exp = new Date(row.expires_at).getTime();
+      const created = new Date(row.created_at).getTime();
       const diffDays = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+      const durationDays = Math.max(1, Math.round((exp - created) / (1000 * 60 * 60 * 24)));
+
+      let botStatus: 'online' | 'offline' = 'offline';
+      try {
+        const bot = getBotManager(row.tenant_id);
+        if (bot && bot.status === 'connected') {
+          botStatus = 'online';
+        }
+      } catch {
+        botStatus = 'offline';
+      }
+
       return {
         ...row,
+        owner_phone: normalizeIndonesianPhone(row.owner_phone),
         days_remaining: diffDays > 0 ? diffDays : 0,
+        duration_days: durationDays,
+        bot_status: botStatus,
         status: exp < now && row.status === 'active' ? ('expired' as const) : row.status,
       };
     });
@@ -79,10 +111,26 @@ export class TenantManager {
 
     const now = new Date().getTime();
     const exp = new Date(row.expires_at).getTime();
+    const created = new Date(row.created_at).getTime();
     const diffDays = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+    const durationDays = Math.max(1, Math.round((exp - created) / (1000 * 60 * 60 * 24)));
+
+    let botStatus: 'online' | 'offline' = 'offline';
+    try {
+      const bot = getBotManager(row.tenant_id);
+      if (bot && bot.status === 'connected') {
+        botStatus = 'online';
+      }
+    } catch {
+      botStatus = 'offline';
+    }
+
     return {
       ...row,
+      owner_phone: normalizeIndonesianPhone(row.owner_phone),
       days_remaining: diffDays > 0 ? diffDays : 0,
+      duration_days: durationDays,
+      bot_status: botStatus,
     };
   }
 
@@ -92,6 +140,7 @@ export class TenantManager {
     const password = input.password || 'toko12345';
     const passwordHash = hashPassword(password);
     const duration = input.duration_days || 30;
+    const normalizedPhone = normalizeIndonesianPhone(input.owner_phone);
 
     const createdAt = new Date();
     const expiresAt = new Date();
@@ -106,7 +155,7 @@ export class TenantManager {
       tenantId,
       input.store_name,
       input.owner_name,
-      input.owner_phone,
+      normalizedPhone,
       input.username,
       passwordHash,
       'Akses Penuh',
@@ -164,6 +213,30 @@ export class TenantManager {
     `).run(status, tenantId);
 
     return this.getTenant(tenantId)!;
+  }
+
+  static resetPassword(tenantId: string, newPassword?: string): { tenant_id: string; username: string; new_password: string } {
+    const db = getMasterDb();
+    const tenant = this.getTenant(tenantId);
+    if (!tenant) throw new Error('Tenant tidak ditemukan');
+
+    const passwordToSet = newPassword && newPassword.trim().length > 0
+      ? newPassword.trim()
+      : `pass_${Math.random().toString(36).substring(2, 8)}`;
+
+    const passwordHash = hashPassword(passwordToSet);
+
+    db.prepare(`
+      UPDATE tenants
+      SET password_hash = ?
+      WHERE tenant_id = ?
+    `).run(passwordHash, tenantId);
+
+    return {
+      tenant_id: tenantId,
+      username: tenant.username,
+      new_password: passwordToSet,
+    };
   }
 
   static deleteTenant(tenantId: string): boolean {

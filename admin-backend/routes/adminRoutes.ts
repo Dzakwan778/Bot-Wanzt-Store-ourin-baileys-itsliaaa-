@@ -130,7 +130,23 @@ adminRouter.post('/tenants/:id/status', (req: Request, res: Response) => {
   }
 });
 
-// 7. Hapus Tenant
+// 7. Reset Password Tenant
+adminRouter.post('/tenants/:id/reset-password', (req: Request, res: Response) => {
+  try {
+    const tenantId = String(req.params.id);
+    const { new_password } = req.body;
+    const result = TenantManager.resetPassword(tenantId, new_password);
+    res.json({
+      success: true,
+      message: `Password tenant ${tenantId} berhasil diperbarui`,
+      data: result,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 8. Hapus Tenant
 adminRouter.delete('/tenants/:id', (req: Request, res: Response) => {
   try {
     const tenantId = String(req.params.id);
@@ -141,7 +157,7 @@ adminRouter.delete('/tenants/:id', (req: Request, res: Response) => {
   }
 });
 
-// 8. Impersonasi (Masuk Langsung ke Dashboard Tenant)
+// 9. Impersonasi (Masuk Langsung ke Dashboard Tenant)
 adminRouter.post('/tenants/:id/impersonate', (req: Request, res: Response) => {
   try {
     const tenantId = String(req.params.id);

@@ -21,7 +21,9 @@ import {
   FileText,
   Award,
   ArrowUpDown,
-  Sparkles
+  Sparkles,
+  Check,
+  Copy
 } from 'lucide-react';
 
 interface Tenant {
@@ -38,6 +40,8 @@ interface Tenant {
   expires_at: string;
   notes: string | null;
   days_remaining?: number;
+  duration_days?: number;
+  bot_status?: 'online' | 'offline';
 }
 
 interface Stats {
@@ -62,6 +66,11 @@ export default function App() {
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
   const [tenantToDelete, setTenantToDelete] = useState<Tenant | null>(null);
   const [tenantToToggleStatus, setTenantToToggleStatus] = useState<Tenant | null>(null);
+  const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
+  const [selectedTenantForReset, setSelectedTenantForReset] = useState<Tenant | null>(null);
+  const [newResetPassword, setNewResetPassword] = useState<string>('');
+  const [resetSuccessData, setResetSuccessData] = useState<{ username: string; new_password: string } | null>(null);
+  const [copiedPassword, setCopiedPassword] = useState<boolean>(false);
 
   // Form New Tenant
   const [newStoreName, setNewStoreName] = useState<string>('');
@@ -125,7 +134,7 @@ export default function App() {
         body: JSON.stringify({
           store_name: newStoreName,
           owner_name: newOwnerName,
-          owner_phone: newOwnerPhone,
+          owner_phone: formatIndonesianPhone(newOwnerPhone).cleanDigits,
           username: newUsername,
           password: newPassword || 'toko12345',
           duration_days: newDuration,
@@ -207,6 +216,71 @@ export default function App() {
     }
   };
 
+  const handleToggleSuspend = async (tenant: Tenant) => {
+    const nextStatus = tenant.status === 'suspended' ? 'active' : 'suspended';
+    try {
+      const res = await fetch(`/api/admin/tenants/${tenant.tenant_id}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(
+          nextStatus === 'suspended'
+            ? `Unit "${tenant.store_name}" dinonaktifkan (Suspend)!`
+            : `Unit "${tenant.store_name}" aktif kembali!`
+        );
+        fetchData();
+      } else {
+        showToast(data.message || 'Gagal mengubah status suspend');
+      }
+    } catch (err: any) {
+      showToast('Error: ' + err.message);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTenantForReset) return;
+    setIsSubmitting(true);
+    try {
+      const res = await fetch(`/api/admin/tenants/${selectedTenantForReset.tenant_id}/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          new_password: newResetPassword,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setResetSuccessData(data.data);
+        showToast(`Password untuk ${selectedTenantForReset.store_name} berhasil direset!`);
+      } else {
+        showToast(data.message || 'Gagal mereset password');
+      }
+    } catch (err: any) {
+      showToast('Error: ' + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCopyPassword = (pwd: string) => {
+    navigator.clipboard.writeText(pwd);
+    setCopiedPassword(true);
+    setTimeout(() => setCopiedPassword(false), 2000);
+  };
+
+  const generateRandomPassword = () => {
+    const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+    let gen = 'pass_';
+    for (let i = 0; i < 6; i++) {
+      gen += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setNewResetPassword(gen);
+  };
+
   const confirmDeleteTenant = async () => {
     if (!tenantToDelete) return;
     if (tenantToDelete.tenant_id === 't_wanzt') {
@@ -252,6 +326,22 @@ export default function App() {
       showToast('Error: ' + err.message);
     }
   };
+
+  function formatIndonesianPhone(raw: string): { display: string; cleanDigits: string } {
+    if (!raw) return { display: '-', cleanDigits: '' };
+    let digits = raw.replace(/\D/g, '');
+    if (digits.startsWith('0')) {
+      digits = '62' + digits.slice(1);
+    } else if (digits.startsWith('8')) {
+      digits = '62' + digits;
+    } else if (!digits.startsWith('62') && digits.length > 0) {
+      digits = '62' + digits;
+    }
+    return {
+      display: `+${digits}`,
+      cleanDigits: digits,
+    };
+  }
 
   function getRentalTierInfo(daysRemaining: number, status: string) {
     if (status === 'expired' || daysRemaining <= 0) {
@@ -488,183 +578,243 @@ export default function App() {
         {/* Tenant Table Container */}
         <section className="bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse min-w-[1320px]">
               <thead>
-                <tr className="border-b border-slate-800 text-[11px] font-semibold text-slate-400 uppercase tracking-wider bg-slate-900/90">
-                  <th className="py-3.5 px-4">Peringkat Sewa</th>
-                  <th className="py-3.5 px-4">ID Unit & Toko</th>
-                  <th className="py-3.5 px-4">No. WhatsApp</th>
-                  <th className="py-3.5 px-4">Tier & Masa Sewa</th>
-                  <th className="py-3.5 px-4">Status Layanan</th>
-                  <th className="py-3.5 px-4 text-right">Aksi Manajemen</th>
+                <tr className="border-b border-slate-800 text-[11px] font-semibold text-slate-400 uppercase tracking-wider bg-slate-900/90 select-none">
+                  <th className="py-3.5 px-3.5 whitespace-nowrap">Status</th>
+                  <th className="py-3.5 px-3.5 whitespace-nowrap">ID Bot</th>
+                  <th className="py-3.5 px-3.5 whitespace-nowrap">Toko</th>
+                  <th className="py-3.5 px-3.5 whitespace-nowrap">Owner</th>
+                  <th className="py-3.5 px-3.5 whitespace-nowrap">No. WhatsApp</th>
+                  <th className="py-3.5 px-3.5 whitespace-nowrap">Username</th>
+                  <th className="py-3.5 px-3.5 whitespace-nowrap">Masa Sewa</th>
+                  <th className="py-3.5 px-3.5 whitespace-nowrap">Expired</th>
+                  <th className="py-3.5 px-3.5 whitespace-nowrap">Status Bot</th>
+                  <th className="py-3.5 px-3.5 whitespace-nowrap text-center">Perpanjang</th>
+                  <th className="py-3.5 px-3.5 whitespace-nowrap text-center">Suspend</th>
+                  <th className="py-3.5 px-3.5 whitespace-nowrap text-center">Reset</th>
+                  <th className="py-3.5 px-3.5 whitespace-nowrap text-center">Hapus</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/80 text-xs text-slate-300">
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-400">
+                    <td colSpan={13} className="py-12 text-center text-slate-400">
                       <RefreshCw className="w-6 h-6 animate-spin mx-auto text-indigo-400 mb-2" />
                       Memuat data apartemen...
                     </td>
                   </tr>
                 ) : filteredTenants.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-400">
+                    <td colSpan={13} className="py-12 text-center text-slate-400">
                       Tidak ada data unit apartemen yang cocok.
                     </td>
                   </tr>
                 ) : (
-                  filteredTenants.map((tenant, index) => {
+                  filteredTenants.map((tenant) => {
                     const isExp = tenant.status === 'expired';
                     const isSusp = tenant.status === 'suspended';
-                    const tierInfo = getRentalTierInfo(tenant.days_remaining || 0, tenant.status);
 
                     return (
                       <tr key={tenant.id} className="hover:bg-slate-800/30 transition-colors">
-                        {/* Peringkat Sewa */}
-                        <td className="py-3.5 px-4">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`inline-flex items-center justify-center font-mono font-bold text-xs w-7 h-7 rounded-lg border ${
-                                index === 0 && tenant.status === 'active'
-                                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-xs'
-                                  : index === 1 && tenant.status === 'active'
-                                  ? 'bg-slate-700/60 text-slate-200 border-slate-600'
-                                  : index === 2 && tenant.status === 'active'
-                                  ? 'bg-amber-700/20 text-amber-400 border-amber-700/30'
-                                  : 'bg-slate-800 text-slate-400 border-slate-700'
-                              }`}
-                            >
-                              #{index + 1}
-                            </span>
-                            {index === 0 && tenant.status === 'active' && (
-                              <span className="text-[10px] font-semibold text-amber-400 flex items-center gap-0.5">
-                                <Sparkles className="w-3 h-3 text-amber-400" />
-                                Peringkat 1
-                              </span>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* ID Unit & Toko */}
-                        <td className="py-3.5 px-4">
-                          <div className="font-semibold text-white">{tenant.store_name}</div>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 font-semibold">
-                              {tenant.tenant_id}
-                            </span>
-                            <span className="text-[11px] text-slate-400">Owner: {tenant.owner_name} ({tenant.username})</span>
-                          </div>
-                        </td>
-
-                        {/* No WA */}
-                        <td className="py-3.5 px-4">
-                          <a
-                            href={`https://wa.me/${tenant.owner_phone}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 text-slate-300 hover:text-emerald-400 transition-colors font-mono"
-                          >
-                            <Phone className="w-3.5 h-3.5 text-emerald-500" />
-                            <span>+{tenant.owner_phone}</span>
-                          </a>
-                        </td>
-
-                        {/* Tier & Masa Sewa (Semua Bot Sama Rata, Peringkat Berdasarkan Masa Sewa) */}
-                        <td className="py-3.5 px-4">
-                          <div className="flex items-center gap-2">
-                            <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-md border ${tierInfo.color}`}>
-                              {tierInfo.tier}
-                            </span>
-                            <span className={`font-semibold text-xs ${isExp ? 'text-rose-400' : 'text-slate-200'}`}>
-                              {tenant.days_remaining} Hari
-                            </span>
-                          </div>
-                          <div className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
-                            <Calendar className="w-3 h-3 text-slate-500" />
-                            <span>Aktif s/d {new Date(tenant.expires_at).toLocaleDateString('id-ID')}</span>
-                          </div>
-                        </td>
-
-                        {/* Status */}
-                        <td className="py-3.5 px-4">
+                        {/* 1. Status Akun */}
+                        <td className="py-3.5 px-3.5 whitespace-nowrap">
                           {tenant.status === 'active' && (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                               Aktif
                             </span>
                           )}
                           {isSusp && (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/25">
                               <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                              Ditangguhkan
+                              Suspend
                             </span>
                           )}
                           {isExp && (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/25">
                               <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
                               Expired
                             </span>
                           )}
                         </td>
 
-                        {/* Aksi */}
-                        <td className="py-3.5 px-4 text-right">
-                          <div className="inline-flex items-center gap-1.5 justify-end">
-                            {/* Impersonate Button */}
+                        {/* 2. ID Bot */}
+                        <td className="py-3.5 px-3.5 whitespace-nowrap">
+                          <span className="font-mono text-xs font-semibold px-2 py-1 rounded-md bg-slate-800 text-indigo-300 border border-slate-700/80 select-all">
+                            {tenant.tenant_id}
+                          </span>
+                        </td>
+
+                        {/* 3. Toko */}
+                        <td className="py-3.5 px-3.5 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5 font-semibold text-white">
+                            <span>{tenant.store_name}</span>
                             <button
                               type="button"
                               onClick={() => handleImpersonate(tenant)}
-                              className="px-2.5 py-1 text-[11px] font-medium text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg transition-all active:scale-95 cursor-pointer shrink-0"
-                              title="Masuk sebagai tenant (1-klik)"
+                              className="text-slate-400 hover:text-emerald-400 p-0.5 rounded transition-colors cursor-pointer"
+                              title="Masuk ke Dashboard Toko (Impersonasi)"
                             >
-                              Buka Toko
+                              <ExternalLink className="w-3.5 h-3.5" />
                             </button>
-
-                            {/* Extend Button */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedTenant(tenant);
-                                setExtendDays(30);
-                                setIsExtendModalOpen(true);
-                              }}
-                              className="px-2.5 py-1 text-[11px] font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-all active:scale-95 cursor-pointer shrink-0"
-                              title="Perpanjang sewa"
-                            >
-                              Perpanjang
-                            </button>
-
-                            {/* Suspend/Activate Toggle */}
-                            <button
-                              type="button"
-                              onClick={() => setTenantToToggleStatus(tenant)}
-                              className={`p-1.5 rounded-lg border transition-all active:scale-95 cursor-pointer shrink-0 flex items-center justify-center ${
-                                tenant.status === 'active'
-                                  ? 'text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30'
-                                  : 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/30'
-                              }`}
-                              title={tenant.status === 'active' ? 'Bekukan (Suspend)' : 'Aktifkan'}
-                            >
-                              {tenant.status === 'active' ? (
-                                <PauseCircle className="w-4 h-4" />
-                              ) : (
-                                <PlayCircle className="w-4 h-4" />
-                              )}
-                            </button>
-
-                            {/* Delete Button (disabled for t_wanzt) */}
-                            {tenant.tenant_id !== 't_wanzt' && (
-                              <button
-                                type="button"
-                                onClick={() => setTenantToDelete(tenant)}
-                                className="p-1.5 rounded-lg text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 hover:text-rose-300 border border-rose-500/30 transition-all active:scale-95 cursor-pointer shrink-0 flex items-center justify-center"
-                                title="Hapus tenant permanen"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            )}
                           </div>
+                        </td>
+
+                        {/* 4. Owner */}
+                        <td className="py-3.5 px-3.5 whitespace-nowrap">
+                          <span className="text-slate-200 font-medium">{tenant.owner_name}</span>
+                        </td>
+
+                        {/* 5. No. WhatsApp */}
+                        <td className="py-3.5 px-3.5 whitespace-nowrap">
+                          {(() => {
+                            const phone = formatIndonesianPhone(tenant.owner_phone);
+                            return (
+                              <a
+                                href={`https://wa.me/${phone.cleanDigits}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 text-slate-300 hover:text-emerald-400 transition-colors font-mono text-xs"
+                                title="Kirim WhatsApp ke Pemilik"
+                              >
+                                <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                <span>{phone.display}</span>
+                              </a>
+                            );
+                          })()}
+                        </td>
+
+                        {/* 6. Username */}
+                        <td className="py-3.5 px-3.5 whitespace-nowrap">
+                          <span className="font-mono text-xs text-slate-300 bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700">
+                            {tenant.username}
+                          </span>
+                        </td>
+
+                        {/* 7. Masa Sewa */}
+                        <td className="py-3.5 px-3.5 whitespace-nowrap">
+                          <div className="font-semibold text-slate-200">
+                            {tenant.duration_days || tenant.days_remaining || 30} Hari
+                          </div>
+                          {tenant.days_remaining !== undefined && (
+                            <div className="text-[10px] text-slate-400">
+                              Sisa {tenant.days_remaining} Hari
+                            </div>
+                          )}
+                        </td>
+
+                        {/* 8. Expired */}
+                        <td className="py-3.5 px-3.5 whitespace-nowrap">
+                          <div className="text-slate-300 font-medium text-xs">
+                            {new Date(tenant.expires_at).toLocaleDateString('id-ID', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric',
+                            })}
+                          </div>
+                        </td>
+
+                        {/* 9. Status Bot Baileys */}
+                        <td className="py-3.5 px-3.5 whitespace-nowrap">
+                          {tenant.bot_status === 'online' ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                              <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                              </span>
+                              Online
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+                              <span className="w-2 h-2 rounded-full bg-slate-500"></span>
+                              Offline
+                            </span>
+                          )}
+                        </td>
+
+                        {/* 10. Perpanjang */}
+                        <td className="py-3.5 px-3.5 whitespace-nowrap text-center">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedTenant(tenant);
+                              setExtendDays(30);
+                              setIsExtendModalOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 rounded-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+                            title="Perpanjang Masa Sewa"
+                          >
+                            <Calendar className="w-3.5 h-3.5" />
+                            <span>Perpanjang</span>
+                          </button>
+                        </td>
+
+                        {/* 11. Suspend (Toggle Switch) */}
+                        <td className="py-3.5 px-3.5 whitespace-nowrap text-center">
+                          <div className="inline-flex items-center justify-center">
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={tenant.status === 'suspended'}
+                              onClick={() => handleToggleSuspend(tenant)}
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none cursor-pointer ${
+                                tenant.status === 'suspended' ? 'bg-amber-500' : 'bg-slate-700 hover:bg-slate-600'
+                              }`}
+                              title={
+                                tenant.status === 'suspended'
+                                  ? 'Suspend ON: Bot dinonaktifkan (Klik untuk mengaktifkan kembali)'
+                                  : 'Suspend OFF: Bot aktif normal (Klik untuk men-suspend)'
+                              }
+                            >
+                              <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                  tenant.status === 'suspended' ? 'translate-x-6' : 'translate-x-1'
+                                }`}
+                              />
+                            </button>
+                          </div>
+                        </td>
+
+                        {/* 12. Reset (Reset Password) */}
+                        <td className="py-3.5 px-3.5 whitespace-nowrap text-center">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedTenantForReset(tenant);
+                              setNewResetPassword('');
+                              setResetSuccessData(null);
+                              setIsResetModalOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+                            title="Reset Password Akun Tenant"
+                          >
+                            <KeyRound className="w-3.5 h-3.5" />
+                            <span>Reset</span>
+                          </button>
+                        </td>
+
+                        {/* 13. Hapus */}
+                        <td className="py-3.5 px-3.5 whitespace-nowrap text-center">
+                          {tenant.tenant_id === 't_wanzt' ? (
+                            <span
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-500 bg-slate-800/40 border border-slate-700/40 rounded-lg cursor-not-allowed opacity-50 whitespace-nowrap"
+                              title="Tenant default sistem tidak dapat dihapus"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Hapus</span>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setTenantToDelete(tenant)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+                              title="Hapus Akun Tenant Permanen"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Hapus</span>
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -906,7 +1056,7 @@ export default function App() {
               <div className="text-slate-300 space-y-1">
                 <div>Nama Toko: <span className="font-semibold text-white">{tenantToDelete.store_name}</span></div>
                 <div>ID Unit: <span className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">{tenantToDelete.tenant_id}</span></div>
-                <div>Pemilik: <span className="text-slate-200">{tenantToDelete.owner_name} (+{tenantToDelete.owner_phone})</span></div>
+                <div>Pemilik: <span className="text-slate-200">{tenantToDelete.owner_name} ({formatIndonesianPhone(tenantToDelete.owner_phone).display})</span></div>
               </div>
               <p className="text-[11px] text-rose-400/90 pt-1">
                 Peringatan: Seluruh data transaksi, database SQLite tenant, dan riwayat sesi WhatsApp akan dihapus secara fisik dari server.
@@ -1000,6 +1150,144 @@ export default function App() {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Reset Password Tenant */}
+      {isResetModalOpen && selectedTenantForReset && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <KeyRound className="w-5 h-5 text-amber-400" />
+                <h3 className="text-base font-bold text-white">Reset Password Tenant</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsResetModalOpen(false);
+                  setResetSuccessData(null);
+                }}
+                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer transition-colors"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-800/60 border border-slate-700 text-xs space-y-1.5">
+              <div className="text-slate-400">
+                Toko: <span className="font-semibold text-white">{selectedTenantForReset.store_name}</span>
+              </div>
+              <div className="text-slate-400">
+                ID Unit: <span className="font-mono text-indigo-300 font-semibold">{selectedTenantForReset.tenant_id}</span>
+              </div>
+              <div className="text-slate-400">
+                Username: <span className="font-mono text-slate-200 font-semibold">{selectedTenantForReset.username}</span>
+              </div>
+            </div>
+
+            {resetSuccessData ? (
+              <div className="space-y-4">
+                <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/25 space-y-3">
+                  <div className="flex items-center gap-2 text-emerald-400 font-semibold text-xs">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>Password Berhasil Diperbarui</span>
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-slate-300 mb-1.5">Kredensial login baru untuk tenant:</p>
+                    <div className="flex items-center justify-between p-2.5 bg-slate-900/90 rounded-lg border border-slate-700 font-mono text-xs">
+                      <div className="space-y-1">
+                        <div>
+                          <span className="text-slate-400">Username: </span>
+                          <span className="text-white font-bold">{resetSuccessData.username}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400">Password: </span>
+                          <span className="text-amber-300 font-bold">{resetSuccessData.new_password}</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyPassword(resetSuccessData.new_password)}
+                        className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-md border border-slate-600 transition-colors inline-flex items-center gap-1 text-[11px] font-semibold cursor-pointer shrink-0"
+                        title="Salin password"
+                      >
+                        {copiedPassword ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <span className="text-emerald-400">Tersalin</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5 text-slate-300" />
+                            <span>Salin</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex justify-end pt-2 border-t border-slate-800 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsResetModalOpen(false);
+                      setResetSuccessData(null);
+                      fetchData();
+                    }}
+                    className="px-5 py-2 font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-all shadow-md shadow-indigo-600/20 cursor-pointer"
+                  >
+                    Selesai
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleResetPassword} className="space-y-4 text-xs">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-slate-400 font-medium">Password Baru</label>
+                    <button
+                      type="button"
+                      onClick={generateRandomPassword}
+                      className="text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors inline-flex items-center gap-1 cursor-pointer font-medium"
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      <span>Buat Acak Otomatis</span>
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    value={newResetPassword}
+                    onChange={(e) => setNewResetPassword(e.target.value)}
+                    placeholder="Masukkan kata sandi baru atau klik Buat Acak"
+                    className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono text-xs"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Tenant dapat menggunakan kata sandi ini untuk login ke dashboard tokonya.
+                  </p>
+                </div>
+
+                <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setIsResetModalOpen(false)}
+                    className="px-4 py-2 font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || !newResetPassword.trim()}
+                    className="px-5 py-2 font-semibold text-white bg-amber-600 hover:bg-amber-500 rounded-xl transition-all shadow-md shadow-amber-600/20 disabled:opacity-50 cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <KeyRound className="w-4 h-4" />
+                    <span>{isSubmitting ? 'Menyimpan...' : 'Simpan Password Baru'}</span>
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

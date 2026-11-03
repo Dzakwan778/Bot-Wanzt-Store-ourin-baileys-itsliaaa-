@@ -18,25 +18,33 @@ import { tenantContextStorage } from './database/tenantContext.ts';
 import { getSession } from './services/authManager.ts';
 import { impersonationTokens } from '../admin-backend/routes/adminRoutes.ts';
 
+import { seedDefaultMedia } from './services/mediaManager.ts';
+
 export function createServerApp(): Express {
-  // Pastikan database SQLite siap
+  // Pastikan database SQLite dan media siap
   initDatabase();
   initMasterDatabase();
   initTenantDb('t_wanzt');
+  try {
+    seedDefaultMedia();
+  } catch (err) {
+    console.error('[Media Seed Error]:', err);
+  }
 
   const app = express();
 
-  // Middleware CORS & Body Parser
+  // Middleware CORS & Body Parser (limit 25mb untuk upload gambar base64)
   app.use(cors());
   app.use(
     express.json({
+      limit: '25mb',
       verify: (req: Request, _res: Response, buf: Buffer) => {
         // Simpan rawBody untuk verifikasi signature HMAC-SHA256 LunasQRIS
         (req as any).rawBody = buf.toString('utf-8');
       },
     })
   );
-  app.use(express.urlencoded({ extended: true }));
+  app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
   // Middleware Identifikasi Tenant (Apartemen Multi-Tenancy)
   app.use((req: Request, _res: Response, next: NextFunction) => {

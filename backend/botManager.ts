@@ -253,6 +253,8 @@ export class BotManager {
         },
       });
 
+      (this.sock as any).tenantId = this.tenantId;
+
       // Lacak ID pesan yang dikirim bot secara otomatis agar tidak memicu respon berulang (loop)
       const originalSendMessage = this.sock.sendMessage.bind(this.sock);
       this.sock.sendMessage = async (...args: any[]) => {

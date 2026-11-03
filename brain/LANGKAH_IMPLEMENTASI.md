@@ -860,3 +860,177 @@ Rencana Pengujian:
 
 Hasil yang Diharapkan:
 Aplikasi berjalan normal di port 3000 dengan dual-routing fungsional. Semuanya menggunakan standar `import.meta.dirname`.
+
+---
+
+[28.0] - IMPLEMENTASI ISOLASI PENYIMPANAN MEDIA MULTI-TENANT & FITUR UPLOAD FOTO KUSTOM
+
+- Tanggal: 2026-11-03 08:35
+- Status: Completed
+Referensi SCHEDULE: 10.0
+
+Tujuan Implementasi:
+1. Mencegah kebocoran file gambar antar tenant dengan membuat direktori penyimpanan lokal terpisah per-tenant: `storage/tenants/<tenantId>/media/`.
+2. Menyediakan endpoint upload foto kustom berbasis Base64 JSON (`POST /api/media/upload`) tanpa dependensi tambahan, dengan validasi format dan sanitasi nama file.
+3. Mengisolasi endpoint `GET /api/media/pictures`, `GET /api/media/view`, dan `DELETE /api/media/:filename` sehingga tenant hanya dapat melihat dan mengelola foto miliknya sendiri.
+4. Menghubungkan pengiriman pesan bot WhatsApp (`menuMessage.ts` dan `carouselMessage.ts`) ke folder media tenant aktif dengan fallback ke media default sistem.
+5. Membangun antarmuka manajemen media di dashboard toko (`frontend/src/components/tabs/TabCommand.tsx`) dengan fitur upload file langsung dari browser, grid thumbnail interaktif, pemilihan foto aktif, dan tombol hapus file.
+
+Bagian yang Akan Diubah/Dibuat:
+- "backend/services/mediaManager.ts" - Modul helper baru untuk manajemen direktori media per-tenant, seed aset default, upload base64, dan pencarian path file.
+- "backend/routes/mediaRoutes.ts" - Memperbarui endpoint daftar gambar, upload, view, dan delete yang terikat dengan konteks `getActiveTenantId()`.
+- "backend/app.ts" - Menyesuaikan batas limit express json menjadi 25MB agar mendukung transfer data gambar base64.
+- "backend/messages/menuMessage.ts" - Mengarahkan pencarian file gambar menu ke folder tenant aktif.
+- "backend/messages/carouselMessage.ts" - Mengarahkan pencarian file gambar carousel ke folder tenant aktif.
+- "frontend/src/components/tabs/TabCommand.tsx" - Menambahkan komponen Upload Media, indikator loading, pratinjau thumbnail, dan tombol aksi hapus/pilih pada bagian Menu dan Carousel.
+
+Alasan Perubahan:
+Sebelumnya seluruh gambar diletakkan di satu folder publik frontend `/frontend/src/media/picture`. Akibatnya seluruh tenant melihat foto yang sama di dropdown dan tidak bisa mengunggah foto promosi mereka sendiri tanpa bantuan teknis di server.
+
+Strategi Implementasi:
+1. Buat `backend/services/mediaManager.ts` untuk menyediakan operasi file aman (mkdir recursive, path basename sanitization, seed media default dari aset yang sudah ada).
+2. Perbarui `backend/app.ts` untuk menaikkan limit json parser ke `25mb`.
+3. Perbarui `backend/routes/mediaRoutes.ts` dengan memanfaatkan helper `mediaManager`.
+4. Perbarui `backend/messages/menuMessage.ts` dan `carouselMessage.ts` untuk mengambil gambar via `getPicturePath(tenantId, filename)`.
+5. Perbarui `frontend/src/components/tabs/TabCommand.tsx` dengan komponen upload drag-and-drop / tombol pilih file, galeri mini interaktif, dan penghapusan foto.
+6. Uji kompilasi dengan `compile_applet` dan linting dengan `lint_applet`.
+7. Catat progres di `brain/PROGRESS.md`.
+
+Urutan Pengerjaan:
+1. Buat `backend/services/mediaManager.ts`.
+2. Edit `backend/app.ts`.
+3. Edit `backend/routes/mediaRoutes.ts`.
+4. Edit `backend/messages/menuMessage.ts`.
+5. Edit `backend/messages/carouselMessage.ts`.
+6. Edit `frontend/src/components/tabs/TabCommand.tsx`.
+7. Uji dengan `compile_applet` dan `lint_applet`.
+8. Catat di `brain/PROGRESS.md` dan update status [28.0] menjadi Completed.
+
+Dampak Perubahan:
+Setiap tenant dapat mengunggah foto promosi bot mereka sendiri secara mandiri dari browser dashboard. Foto milik satu tenant tidak akan terlihat atau dapat diakses oleh tenant lain, dan respon bot WhatsApp akan menggunakan foto kustom masing-masing tenant.
+
+Rencana Pengujian:
+1. Kompilasi TypeScript dan Vite build via `compile_applet`.
+2. Linting TypeScript via `lint_applet`.
+3. Uji upload media via API dan verifikasi file tersimpan di `storage/tenants/<tenantId>/media/`.
+4. Uji pemisahan data antara tenant `t_wanzt` dan tenant lainnya.
+
+---
+
+[29.0] - IMPLEMENTASI TABEL DAFTAR PENYEWA 13 KOLOM PADA DASHBOARD MASTER ADMIN
+
+- Tanggal: 2026-11-03 08:50
+- Status: Completed
+Referensi SCHEDULE: 11.0
+
+Tujuan Implementasi:
+1. Memperbarui tabel daftar penyewa di Dashboard Master Admin (`admin-frontend/src/App.tsx`) dengan struktur 13 kolom yang diminta pengguna secara presisi:
+   - Status (Status akun: Aktif, Suspend, Expired dengan badge warna)
+   - ID Bot (Kode unit bot, misal: t_berkahstore_450)
+   - Toko (Nama toko)
+   - Owner (Nama pemilik)
+   - No. WhatsApp (Nomor WhatsApp dengan tautan langsung wa.me)
+   - Username (Username login dashboard)
+   - Masa Sewa (Durasi masa sewa, misal: 360 Hari)
+   - Expired (Tanggal berakhirnya masa sewa dalam format Indonesia)
+   - Status Bot (Online dengan indikator hijau berkedip / Offline)
+   - Perpanjang (Tombol aksi membuka modal perpanjangan masa sewa)
+   - Suspend (Toggle switch interaktif: On = disuspend, Off = aktif/normal)
+   - Reset (Tombol aksi membuka modal reset password akun tenant)
+   - Hapus (Tombol aksi menghapus akun tenant dengan modal konfirmasi)
+2. Menghubungkan pembacaan status online/offline koneksi WhatsApp bot secara real-time dari Baileys socket (`getBotManager(tenantId).status === 'connected'`) pada endpoint `GET /api/admin/tenants`.
+3. Menambahkan endpoint backend baru `POST /api/admin/tenants/:id/reset-password` dan method `TenantManager.resetPassword` untuk mereset kata sandi tenant.
+4. Menambahkan modal interaktif tanpa window.alert untuk Reset Password, Perpanjang Sewa, dan Konfirmasi Hapus.
+
+Bagian yang Akan Diubah:
+- "admin-backend/services/tenantManager.ts":
+  - Tambahkan properti `bot_status: 'online' | 'offline'` dan `duration_days?: number` pada `TenantRecord`.
+  - Integrasikan pengecekan `getBotManager(tenant_id)` pada `getAllTenants()`.
+  - Tambahkan method `resetPassword(tenantId: string, newPassword?: string)` yang meng-hash password dan memperbarui tabel `tenants` di `master.db`.
+- "admin-backend/routes/adminRoutes.ts":
+  - Tambahkan route `POST /tenants/:id/reset-password` untuk mengeksekusi reset password tenant.
+- "admin-frontend/src/App.tsx":
+  - Perbarui interface `Tenant` untuk memuat `bot_status` dan `duration_days`.
+  - Susun ulang `<thead>` dan `<tbody>` tabel dengan 13 kolom yang rapi, elegan, dan terstruktur.
+  - Implementasikan toggle switch untuk kolom Suspend yang langsung memicu pembaruan status ke server secara responsif.
+  - Tambahkan modal dialog in-app untuk Reset Password dengan opsi custom password atau generate password otomatis.
+  - Perbarui modal Perpanjang Sewa dan modal Konfirmasi Hapus agar serasi dengan desain tema master admin.
+
+Alasan Perubahan:
+Pengguna ingin tabel master admin lebih fungsional, informatif, dan memiliki kontrol langsung atas status sewa, operasional bot Baileys, akun login, dan status suspensi unit toko dalam satu pandangan ringkas.
+
+Strategi Implementasi:
+1. Perbarui `admin-backend/services/tenantManager.ts` untuk melengkapi data bot_status dan fungsi reset password.
+2. Daftarkan endpoint reset password di `admin-backend/routes/adminRoutes.ts`.
+3. Rombak antarmuka tabel di `admin-frontend/src/App.tsx` dengan CSS Tailwind, komponen toggle modern, badge warna kontras tinggi, dan modal-modal konfirmasi in-app.
+4. Pastikan tidak ada karakter em-dash maupun en-dash di seluruh tampilan antarmuka.
+5. Uji dengan `compile_applet` dan pastikan build berjalan sukses.
+
+Urutan Pengerjaan:
+1. Edit `admin-backend/services/tenantManager.ts`.
+2. Edit `admin-backend/routes/adminRoutes.ts`.
+3. Edit `admin-frontend/src/App.tsx`.
+4. Jalankan `compile_applet`.
+5. Catat progres di `brain/PROGRESS.md` dan update status [29.0] menjadi Completed.
+
+Dampak Perubahan:
+Dashboard Master Admin memiliki tabel penyewa terlengkap dengan 13 kolom yang memudahkan pemantauan dan pengelolaan seluruh tenant secara real-time.
+
+Rencana Pengujian:
+1. Verifikasi `compile_applet` untuk build server dan client frontend.
+2. Pastikan tabel merender 13 kolom secara rapi di desktop dan responsif saat di-scroll horizontal.
+3. Uji fungsi toggle Suspend, modal Perpanjang Sewa, modal Reset Password, dan modal Hapus Tenant.
+
+Hasil yang Diharapkan:
+Tabel 13 kolom tampil elegan, interaktif, responsif, dengan fitur reset password dan toggle suspend yang berfungsi optimal.
+
+---
+
+[30.0] - STANDARDISASI DAN NORMALISASI FORMAT NOMOR WHATSAPP (+628xxxx) PADA TABEL MASTER ADMIN
+
+- Tanggal: 2026-11-03 09:05
+- Status: Completed
+
+Tujuan Implementasi:
+1. Memastikan setiap nomor WhatsApp pada kolom No. WhatsApp di tabel Master Admin (`admin-frontend/src/App.tsx`) selalu tampil dengan format internasional standar `+628xxxx`.
+2. Menangani berbagai variasi input dari tenant, baik yang mengawali nomor dengan `08...`, `8...`, `62...`, maupun `+62...`, sehingga hasil tampilan konsisten menjadi `+628xxxx`.
+3. Menyelaraskan tautan `https://wa.me/` agar menggunakan digit bersih hasil normalisasi (`628xxxx`) sehingga saat diklik dapat langsung membuka obrolan WhatsApp tanpa error.
+4. Menambahkan normalisasi nomor pada backend (`admin-backend/services/tenantManager.ts`) saat admin mendaftarkan unit toko baru agar data tersimpan dalam bentuk standar.
+
+Bagian yang Akan Diubah:
+- "admin-frontend/src/App.tsx":
+  - Menambahkan fungsi helper `formatIndonesianPhone(phone: string)` untuk mengubah input `08...`, `8...`, atau `62...` menjadi format tampilan `+628...` dan clean digits `628...`.
+  - Menggunakan helper ini pada render sel tabel "No. WhatsApp" dan pada tautan `href`.
+- "admin-backend/services/tenantManager.ts":
+  - Menerapkan sanitasi/normalisasi format nomor telepon pada fungsi `createTenant` agar nilai `owner_phone` yang disimpan ke database selalu seragam diawali dengan `628`.
+
+Alasan Perubahan:
+Tenant atau admin dapat menginput nomor dengan format yang beragam (seperti 0812..., 812..., atau 62812...). Format tampilan yang tidak seragam membuat tabel terlihat kurang konsisten dan tautan wa.me bisa bermasalah jika ada format 08 yang tidak dikonversi ke kode negara.
+
+Strategi Implementasi:
+1. Buat fungsi helper normalisasi di frontend:
+   - Bersihkan seluruh karakter selain angka (`\D`).
+   - Jika diawali `0`, potong angka `0` di awal lalu tambahkan `62`.
+   - Jika diawali `8`, tambahkan `62` di depan.
+   - Jika sudah diawali `62`, biarkan.
+   - Kembalikan objek `{ display: '+62...', cleanDigits: '62...' }`.
+2. Di backend, terapkan logika normalisasi serupa pada saat input tenant baru dibuat.
+3. Jalankan `compile_applet` dan `lint_applet` untuk memastikan tidak ada kesalahan kompilasi.
+
+Urutan Pengerjaan:
+1. Edit `admin-frontend/src/App.tsx`.
+2. Edit `admin-backend/services/tenantManager.ts`.
+3. Uji kompilasi dengan `compile_applet`.
+4. Catat penyelesaian di `brain/PROGRESS.md` dan update status [30.0] menjadi Completed.
+
+Dampak Perubahan:
+Tampilan nomor WhatsApp di tabel master admin akan 100% konsisten diawali `+628...` dan tautan direct chat WhatsApp bekerja lancar untuk seluruh tenant.
+
+Rencana Pengujian:
+1. Uji tampilan kolom nomor WhatsApp dengan berbagai bentuk nomor (contoh: 0812..., 812..., 62812...).
+2. Verifikasi tautan `wa.me` mengarah ke format nomor yang valid.
+3. Verifikasi build dengan `compile_applet`.
+
+Hasil yang Diharapkan:
+Seluruh nomor WhatsApp pada tabel master admin tampil rapi dengan awalan `+628...` dan tautan WhatsApp berfungsi sempurna.
+

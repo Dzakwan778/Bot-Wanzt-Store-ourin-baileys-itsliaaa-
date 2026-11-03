@@ -891,3 +891,99 @@ Potensi Penerapan:
 
 Catatan Tambahan:
 - Pastikan seluruh antarmuka tetap mematuhi prinsip anti-AI slop (kontras tinggi, tidak ada em-dash, tidak ada gradasi ungu klise, dan responsif).
+
+---
+
+[11.0] - ARSITEKTUR ISOLASI PENYIMPANAN MEDIA MULTI-TENANT & FITUR UPLOAD FOTO KUSTOM
+
+- Tanggal: 2026-11-03 08:20
+- Sumber: Diskusi Kebutuhan Pengguna & Analisis Keamanan Multi-Tenant
+
+Informasi yang Dipelajari:
+1. Akar Permasalahan Kebocoran Media Antar-Tenant:
+   - Saat ini file foto command Menu dan Carousel diletakkan di satu direktori bersama pada kode frontend: `/frontend/src/media/picture`.
+   - Endpoint `GET /api/media/pictures` membaca seluruh isi folder tersebut secara flat tanpa memfilter siapa pemilik file.
+   - Akibatnya, jika ada foto baru ditambahkan atau diakses, seluruh penyewa (Tenant A, Tenant B, dst.) dapat melihat file yang sama di dropdown pilihan foto dashboard.
+   - Selain itu, tidak ada mekanisme bagi tenant untuk mengunggah (upload) foto promosi mereka sendiri dari browser, sehingga penambahan foto baru harus melalui hardcode atau akses file server manual oleh pengelola.
+
+2. Solusi Arsitektur Penyimpanan Terisolasi (Per-Tenant Storage):
+   - Server menyediakan struktur folder khusus yang dipartisi berdasarkan `tenantId`:
+     `storage/tenants/<tenantId>/media/`
+     Contoh: `storage/tenants/t_wanzt/media/` dan `storage/tenants/t_pablo/media/`.
+   - Sediakan juga folder aset bawaan (default/fallback):
+     `storage/shared/default_media/`
+   - Setiap kali tenant baru dibuat, folder media tenant otomatis diinisialisasi di server.
+
+3. Desain API Terproteksi Konteks Tenant (Backend):
+   - `GET /api/media/pictures`: Mengambil daftar foto hanya dari direktori tenant aktif yang sedang login (`getActiveTenantId()`).
+   - `POST /api/media/upload`: Endpoint unggah file gambar (format `.jpg`, `.jpeg`, `.png`, `.webp` dengan limit ukuran misal 5MB) menggunakan middleware multipart (seperti multer) yang langsung menaruh file ke folder `storage/tenants/<tenantId>/media/`.
+   - `DELETE /api/media/:filename`: Menghapus foto milik tenant tersebut (dengan validasi sanitasi path untuk mencegah Directory Traversal `../`).
+   - `GET /api/media/view/:filename`: Menyajikan file gambar ke browser dashboard dengan verifikasi kepemilikan tenant.
+
+4. Integrasi ke Bot WhatsApp Baileys:
+   - Pada saat bot mengirim pesan Menu (`menuMessage.ts`) atau Carousel (`carouselMessage.ts`), fungsi pembaca file gambar tidak lagi membaca folder statis frontend, melainkan:
+     `path.resolve(process.cwd(), 'storage', 'tenants', tenantId, 'media', selectedPicture)`
+   - Jika foto kustom tenant belum ada atau file tidak ditemukan, bot otomatis fallback ke gambar default sistem agar pengiriman pesan tidak crash.
+
+5. Pengalaman Pengguna di Dashboard (Frontend):
+   - Di tab Command (Menu & Carousel), sediakan area Upload Media interaktif (Drag & Drop atau tombol Pilih File).
+   - Tampilkan galeri mini pratinjau (thumbnail preview) foto-foto yang sudah diunggah oleh tenant tersebut, lengkap dengan radio pilihan aktif dan tombol hapus file.
+   - Pengguna tidak perlu menyentuh kode sama sekali; cukup upload foto dari dashboard, pilih foto yang diinginkan, dan simpan.
+
+Pemahaman:
+Pemisahan fisik folder per tenant adalah pendekatan paling aman, efisien, dan bersih. Ini selaras dengan arsitektur Database-per-Tenant yang sudah diterapkan sebelumnya, tanpa menambah dependensi cloud berbayar (seperti AWS S3 atau Firebase Storage) karena seluruh file tersimpan terorganisir di server VPS lokal.
+
+Potensi Penerapan:
+1. Menyiapkan helper direktori `getTenantStoragePath(tenantId)` di backend.
+2. Memperbarui `backend/routes/mediaRoutes.ts` dengan multer untuk upload dan endpoint view yang aman.
+3. Menyesuaikan `menuMessage.ts`, `carouselMessage.ts`, dan `botManager.ts` untuk membaca foto dari direktori tenant.
+4. Menambahkan komponen Upload & Gallery Selector di tab Command pada `frontend/src/components/dashboard/tabs/CommandTab.tsx`.
+
+Catatan Tambahan:
+- Sanitasi nama file dan pencegahan path traversal (`path.basename()`) wajib diterapkan agar tenant tidak bisa mengakses file di luar folder mereka.
+- Jangan melakukan perubahan kode sebelum rencana disetujui pengguna.
+
+---
+
+[12.0] - SPESIFIKASI TABEL MANAJEMEN PENYEWA BARU PADA DASHBOARD MASTER ADMIN
+
+- Tanggal: 2026-11-03 08:40
+- Sumber: Permintaan Pengguna & Analisis Kebutuhan Operasional Master Admin
+
+Informasi yang Dipelajari:
+1. Kebutuhan Restrukturisasi Tabel Penyewa (Tenant Management Table):
+   Dashboard Master Admin (`/master` atau `admin-frontend/`) memerlukan pembaruan tampilan tabel penyewa agar lebih informatif, komprehensif, dan mudah dioperasikan dalam mengelola gedung apartemen bot.
+
+2. Struktur Kolom dan Aksi yang Dibutuhkan (13 Kolom Spesifik):
+   - Kolom 1: Status (Status akun: Aktif [Hijau], Suspend [Kuning/Oranye], Expired [Merah]).
+   - Kolom 2: ID Bot (ID unik unit penyewa, misal `t_berkahstore_450` dalam badge monospace).
+   - Kolom 3: Toko (Nama toko/unit bisnis penyewa).
+   - Kolom 4: Owner (Nama pemilik toko/penyewa).
+   - Kolom 5: No. WhatsApp (Nomor kontak WhatsApp owner, dapat dihubungi atau disalin).
+   - Kolom 6: Username (Username yang digunakan untuk login ke dashboard toko penyewa).
+   - Kolom 7: Masa Sewa (Total durasi masa sewa atau sisa hari aktif, misal "360 Hari").
+   - Kolom 8: Expired (Tanggal berakhirnya masa sewa dalam format tanggal Indonesia yang jelas, misal 28 Oktober 2026).
+   - Kolom 9: Status Bot (Indikator real-time koneksi bot WhatsApp ke Baileys: Online [Hijau berkedip] jika terhubung, Offline [Abu-abu] jika terputus).
+   - Kolom 10: Perpanjang (Tombol aksi yang memunculkan modal popup perpanjangan masa sewa bot).
+   - Kolom 11: Suspend (Toggle switch interaktif untuk suspend/aktifkan akun: jika toggle ON maka akun disuspend dan bot dinonaktifkan, jika toggle OFF maka akun aktif dan bot berjalan normal).
+   - Kolom 12: Reset (Tombol reset password akun dashboard penyewa yang disiapkan untuk alur pengembangan lanjutan).
+   - Kolom 13: Hapus (Tombol aksi hapus akun tenant beserta pembersihan database dan sesi dengan konfirmasi aman in-app).
+
+3. Kebutuhan Integrasi Data Backend:
+   - Endpoint `/api/admin/tenants` perlu menyuplai status bot real-time (`botStatus: 'online' | 'offline'`) dengan memeriksa status koneksi dari `getBotManager(tenantId).status === 'connected'`.
+   - Endpoint suspend/status toggle perlu mendukung integrasi toggle switch secara mulus (`POST /api/admin/tenants/:id/status` dengan payload `{ status: 'suspended' | 'active' }`).
+   - Endpoint perpanjangan (`POST /api/admin/tenants/:id/extend`) sudah siap dan dapat langsung dihubungkan dengan modal perpanjang.
+   - Endpoint reset password (`POST /api/admin/tenants/:id/reset-password`) dapat disiapkan untuk mendukung aksi reset.
+
+Pemahaman:
+Restrukturisasi tabel ini menyederhanakan pemantauan unit penyewa apartemen bot bagi Master Admin, memberikan visualisasi status akun dan status bot secara jelas, serta menyediakan kendali operasional langsung (perpanjang, suspend toggle, reset, hapus) dalam satu baris tabel yang rapi.
+
+Potensi Penerapan:
+1. Memperbarui `admin-backend/routes/adminRoutes.ts` dan `admin-backend/services/tenantManager.ts` untuk menyertakan `bot_status` ('online' / 'offline') pada respon daftar tenant.
+2. Memperbarui antarmuka `admin-frontend/src/App.tsx` dengan komponen tabel baru yang modern, responsif, berdesain dark-mode konsisten, dan memuat 13 kolom/aksi yang diminta.
+3. Menyiapkan modal Perpanjang Sewa, modal Reset Password, dan modal Hapus Tenant in-app yang aman tanpa `window.confirm`.
+
+Catatan Tambahan:
+- Pengguna meminta agar pemahaman dijelaskan terlebih dahulu sebelum kode diubah. Tidak ada perubahan kode aplikasi yang dilakukan sebelum konfirmasi dari pengguna.
+
+
