@@ -6,18 +6,18 @@ import tailwindcss from '@tailwindcss/vite';
 // https://vite.dev/config/
 export default defineConfig(() => {
   return {
-    root: path.resolve(__dirname, 'frontend'),
+    root: path.resolve(import.meta.dirname, 'frontend'),
     plugins: [
       react(),
       tailwindcss(),
     ],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, 'frontend', 'src'),
+        '@': path.resolve(import.meta.dirname, 'frontend', 'src'),
       },
     },
     build: {
-      outDir: path.resolve(__dirname, 'dist'),
+      outDir: path.resolve(import.meta.dirname, 'dist'),
       emptyOutDir: true,
     },
     server: {

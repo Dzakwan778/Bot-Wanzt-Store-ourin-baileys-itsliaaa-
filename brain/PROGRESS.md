@@ -831,3 +831,38 @@ Hasil:
 
 Kendala:
 Tidak ada.
+
+---
+
+[27.0] - PERBAIKAN ERROR VITE DEV SERVER (PORT CONFLICT & UNSUPPORTED __DIRNAME)
+
+- Tanggal: 2026-11-03 00:52
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 27.0
+
+Pekerjaan yang Dilakukan:
+1. Mengganti penggunaan `__dirname` dengan `import.meta.dirname` di `vite.config.ts` dan `admin-frontend/vite.config.ts` untuk mematuhi standar loader ES Module pada Vite 6+.
+2. Mengatasi konflik port WebSocket HMR (24678) dengan menetapkan port HMR yang unik untuk masing-masing instance Vite di `server.ts`:
+   - `viteTenant` (Dashboard Toko): Port 24678.
+   - `viteAdmin` (Master Admin): Port 24679.
+3. Memperbarui `server.ts` agar menggunakan `import.meta.dirname` alih-alih boilerplate `fileURLToPath(import.meta.url)`.
+4. Merestart dev server dan memverifikasi kesehatan aplikasi melalui curl.
+
+File yang Diubah:
+- "vite.config.ts" - Migrasi ke `import.meta.dirname`.
+- "admin-frontend/vite.config.ts" - Migrasi ke `import.meta.dirname`.
+- "server.ts" - Alokasi port HMR unik (24678 & 24679) dan migrasi ke `import.meta.dirname`.
+- "brain/LANGKAH_IMPLEMENTASI.md" - Entri [27.0] diselesaikan.
+- "brain/PROGRESS.md" - Entri [27.0] dicatat.
+
+Alasan Perubahan:
+Kesalahan "dev server process died" disebabkan oleh dua instance Vite yang mencoba mendengarkan pada port WebSocket yang sama (24678) secara bersamaan, menyebabkan tabrakan socket yang fatal di lingkungan sandbox AI Studio. Peringatan `__dirname` diperbaiki untuk menjaga kompatibilitas dengan standar Vite terbaru.
+
+Hasil:
+1. Dev server berjalan stabil di port 3000 tanpa crash.
+2. Log peringatan Vite mengenai `__dirname` hilang sepenuhnya.
+3. Dashboard Toko dan Master Admin dapat diakses secara bersamaan dengan fitur HMR yang tetap berfungsi (jika diaktifkan) tanpa konflik.
+4. Aplikasi lolos verifikasi kesehatan (HTTP 200) untuk seluruh jalur utama.
+
+Kendala:
+Tidak ada.

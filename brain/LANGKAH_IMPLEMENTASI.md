@@ -818,3 +818,44 @@ Rencana Pengujian:
 
 Hasil yang Diharapkan:
 Sistem multi-tenant 100% adil dan sama rata. Peringkat unit bot ditentukan murni oleh masa sewa.
+
+---
+
+[27.0] - PERBAIKAN ERROR VITE DEV SERVER (PORT CONFLICT & UNSUPPORTED __DIRNAME)
+
+- Tanggal: 2026-11-03 00:50
+- Status: Planned
+Referensi SCHEDULE: 7.0
+
+Tujuan Implementasi:
+Memperbaiki error "dev server process died" yang disebabkan oleh konflik port WebSocket HMR (24678) antara dua instance Vite (Tenant & Admin) dan mengganti penggunaan `__dirname` yang usang dengan `import.meta.dirname` di file konfigurasi Vite.
+
+Bagian yang Akan Diubah:
+- "vite.config.ts" - Mengganti `__dirname` dengan `import.meta.dirname`.
+- "admin-frontend/vite.config.ts" - Mengganti `__dirname` dengan `import.meta.dirname`.
+- "server.ts" - Menetapkan port HMR yang berbeda untuk `viteTenant` dan `viteAdmin` guna menghindari konflik WebSocket.
+
+Alasan Perubahan:
+1. `__dirname` tidak didukung secara native oleh loader Vite baru di lingkungan ES Module.
+2. Secara default, setiap instance Vite mencoba menggunakan port 24678 untuk HMR. Karena kita menjalankan dua server Vite dalam satu proses Node.js di `server.ts`, terjadi bentrok port yang menyebabkan proses terhenti.
+
+Strategi Implementasi:
+1. Perbarui kedua file `vite.config.ts`.
+2. Di `server.ts`, pada saat inisialisasi `createViteServer`, tambahkan konfigurasi `server: { hmr: { port: ... } }` dengan port yang berbeda (misal 24678 dan 24679).
+3. Jalankan `restart_dev_server`.
+
+Urutan Pengerjaan:
+1. Edit `vite.config.ts`.
+2. Edit `admin-frontend/vite.config.ts`.
+3. Edit `server.ts`.
+4. Restart dev server.
+
+Dampak Perubahan:
+Dev server akan berjalan stabil tanpa error port conflict dan peringatan deprecation.
+
+Rencana Pengujian:
+1. Verifikasi log dev server memastikan tidak ada error "Port already in use".
+2. Pastikan kedua antarmuka (Toko & Admin) dapat diakses di sandbox.
+
+Hasil yang Diharapkan:
+Aplikasi berjalan normal di port 3000 dengan dual-routing fungsional.
