@@ -849,7 +849,8 @@ Pekerjaan yang Dilakukan:
 4. Merestart dev server dan memverifikasi kesehatan aplikasi melalui curl.
 
 File yang Diubah:
-- "vite.config.ts" - Migrasi ke `import.meta.dirname`.
+- "vite.config.ts" (root) - Migrasi ke `import.meta.dirname`.
+- "frontend/vite.config.ts" - Migrasi ke `import.meta.dirname`.
 - "admin-frontend/vite.config.ts" - Migrasi ke `import.meta.dirname`.
 - "server.ts" - Alokasi port HMR unik (24678 & 24679) dan migrasi ke `import.meta.dirname`.
 - "brain/LANGKAH_IMPLEMENTASI.md" - Entri [27.0] diselesaikan.

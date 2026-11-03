@@ -845,10 +845,11 @@ Strategi Implementasi:
 3. Jalankan `restart_dev_server`.
 
 Urutan Pengerjaan:
-1. Edit `vite.config.ts`.
-2. Edit `admin-frontend/vite.config.ts`.
-3. Edit `server.ts`.
-4. Restart dev server.
+1. Edit `vite.config.ts` (root).
+2. Edit `/frontend/vite.config.ts`.
+3. Edit `admin-frontend/vite.config.ts`.
+4. Edit `server.ts`.
+5. Restart dev server.
 
 Dampak Perubahan:
 Dev server akan berjalan stabil tanpa error port conflict dan peringatan deprecation.
@@ -858,4 +859,4 @@ Rencana Pengujian:
 2. Pastikan kedua antarmuka (Toko & Admin) dapat diakses di sandbox.
 
 Hasil yang Diharapkan:
-Aplikasi berjalan normal di port 3000 dengan dual-routing fungsional.
+Aplikasi berjalan normal di port 3000 dengan dual-routing fungsional. Semuanya menggunakan standar `import.meta.dirname`.
