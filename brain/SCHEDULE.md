@@ -312,6 +312,77 @@ Rencana:
 Hasil yang Diharapkan:
 Sistem multi-tenant apartemen beroperasi penuh dengan isolasi database, sesi bot, dan antarmuka mandiri.
 
+---
 
+[7.0] - PERBAIKAN TOMBOL AKSI MANAJEMEN TENANT DI DASHBOARD ADMIN (MODAL KONFIRMASI IN-APP)
 
+- Tanggal: 2026-11-02 02:49
+- Status: Completed
 
+Tujuan:
+Memperbaiki tombol aksi pada tabel tenant Master Admin (`button:nth-of-type(4)` / tombol Hapus Tenant dan tombol Suspend/Aktifkan) agar dapat diklik dan berfungsi 100% tanpa terhambat oleh kebijakan blokir `window.confirm()` di browser sandbox iframe.
+
+Rencana:
+1. Menyiapkan dokumentasi langkah implementasi di `brain/LANGKAH_IMPLEMENTASI.md` (entri [8.0]).
+2. Menghapus pemanggilan `window.confirm(...)` pada `handleDeleteTenant` dan `handleToggleStatus` di `admin-frontend/src/App.tsx`.
+3. Menambahkan state modal konfirmasi hapus `tenantToDelete: Tenant | null` dan modal konfirmasi toggle status `tenantToToggleStatus: Tenant | null`.
+4. Merancang komponen Modal Konfirmasi Hapus Tenant yang aman, informatif, dan responsif dengan peringatan penghapusan database dan sesi WhatsApp.
+5. Memastikan semua tombol aksi pada tabel memiliki `type="button"`, `cursor-pointer`, dan visual feedback klik yang jelas.
+6. Menguji kompilasi dan linting (`compile_applet`, `lint_applet`), lalu mencatat penyelesaian di `brain/PROGRESS.md`.
+
+Hasil yang Diharapkan:
+Seluruh tombol aksi manajemen (termasuk tombol Hapus ke-4) dapat diklik secara responsif, memunculkan modal dialog konfirmasi in-app yang elegan, dan menjalankan proses penghapusan/perubahan status dengan lancar.
+
+---
+
+[8.0] - PERBAIKAN ISOLASI DASHBOARD MULTI-TENANT (CLEAN REMOUNT PER-TENANT & SYNC KONTEKS SESI)
+
+- Tanggal: 2026-11-02 03:26
+- Status: Completed
+
+Tujuan:
+Memastikan setiap pengguna/tenant (misal `berkah_erot` / Berkah Store) yang login ke dashboard bot langsung diarahkan ke dashboard mandiri miliknya (profil toko Mak Erot, data bot terpisah, transaksi terpisah, kupon terpisah) tanpa tercampur atau tertimpa data toko default Wanzt Store.
+
+Rencana:
+1. Memperbarui `frontend/src/hooks/useAuth.ts` agar menyimpan dan menyelaraskan `tenantId` pada tipe `UserSession`, state pengguna, dan `localStorage`.
+2. Memisahkan antarmuka dashboard toko utama ke komponen mandiri `frontend/src/components/dashboard/TenantDashboard.tsx`.
+3. Memperbarui `frontend/src/App.tsx`:
+   - `App` hanya menangani status sesi otentikasi.
+   - Saat `!isAuthenticated`, hanya menampilkan `LoginPage`. Hook toko tidak dieksekusi prematur saat berada di layar login.
+   - Saat `isAuthenticated`, merender `<TenantDashboard key={auth.user?.tenantId} auth={auth} />`.
+   - Menggunakan prop `key={tenantId}` untuk menjamin penghancuran (*unmount*) total instance lama dan pemuatan (*mount*) instan data baru yang 100% murni milik tenant yang login.
+4. Memastikan sinkronisasi API `/api/bot/status` dan interseptor header `x-tenant-id` serta cookie `tenant_id` mengalir mulus ke backend.
+5. Memverifikasi dengan `compile_applet` dan `lint_applet`.
+6. Mencatat hasil penyelesaian di `brain/PROGRESS.md`.
+
+Hasil yang Diharapkan:
+Saat login dengan `berkah_erot`, dashboard 100% menampilkan data Berkah Store (Mak Erot). Begitu pula jika login dengan `admin` / `wanzt`, dashboard menampilkan Wanzt Store. Masing-masing tenant dapat login bersamaan di perangkat berbeda dan bot tetap tersambung 24/7 di server meskipun user logout dari web.
+
+---
+
+[9.0] - PENGHAPUSAN SISTEM TIER/PAKET DAN PENYERAGAMAN SEMUA BOT BERBASIS MASA SEWA
+
+- Tanggal: 2026-11-02 04:15
+- Status: Completed
+
+Tujuan:
+Menghilangkan sistem tier/paket langganan (seperti Basic, Pro, Enterprise) pada arsitektur multi-tenant, dan menyeragamkan seluruh fitur serta kapabilitas bot agar 100% sama rata dan adil. Peringkat (ranking) atau klasifikasi bot murni ditentukan berdasarkan masa sewa (durasi aktif dan sisa hari sewa).
+
+Rencana:
+1. Menyusun dokumentasi rencana implementasi teknis di `brain/LANGKAH_IMPLEMENTASI.md` (entri [12.0]).
+2. Mencatat wawasan arsitektur kesetaraan fitur multi-tenant di `brain/IDEA.md` (entri [10.0]).
+3. Memperbarui antarmuka Master Admin di `admin-frontend/src/App.tsx`:
+   - Menghapus opsi dropdown pilihan paket (`newPackage` & `<select>`) pada Modal Tambah Unit Toko Baru.
+   - Menghapus kolom "Paket" pada tabel apartemen toko.
+   - Mengganti dan memperkaya kolom tabel dengan informasi Masa Sewa & Peringkat Durasi Sewa (sisa hari sewa, tanggal kedaluwarsa, dan indikator status aktif).
+   - Menambahkan pengurutan (sorting) peringkat bot berdasarkan sisa masa sewa (terpanjang ke terpendek atau terdekat ke kedaluwarsa) agar pengelola dapat melihat ranking masa sewa secara transparan dan adil.
+4. Memperbarui backend di `admin-backend/services/tenantManager.ts` dan `admin-backend/routes/adminRoutes.ts`:
+   - Menyeragamkan nilai default `package_name` menjadi 'Akses Penuh' untuk seluruh tenant tanpa pembedaan fitur.
+   - Menyeragamkan kuota grup (`max_groups`) ke batas yang setara untuk seluruh tenant.
+   - Menyediakan urutan peringkat berdasarkan masa sewa (`expires_at DESC` / `days_remaining`).
+5. Memperbarui konfigurasi default Base URL Xaviera di `backend/config/configManager.ts` menjadi domain resmi aktif `https://xavierastore.com/api/v1` dan menyelaraskan ke database tenant.
+6. Menjalankan pengujian dan kompilasi (`lint_applet`, `compile_applet`).
+7. Mencatat hasil penyelesaian di `brain/PROGRESS.md` dan memperbarui status rencana.
+
+Hasil yang Diharapkan:
+Seluruh unit bot memiliki hak akses dan fitur yang 100% setara tanpa diskriminasi tier/paket. Peringkat bot di dashboard murni mencerminkan durasi dan keaktifan masa sewa secara adil.

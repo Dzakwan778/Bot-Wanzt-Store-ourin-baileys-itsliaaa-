@@ -754,4 +754,140 @@ Catatan Tambahan:
 - Setiap pembuatan database tenant baru wajib mengaktifkan mode SQLite WAL (`PRAGMA journal_mode = WAL;`) dan `PRAGMA busy_timeout = 5000;`.
 - Middleware autentikasi pada backend tenant wajib memeriksa status `is_active` dan tanggal `expires_at` dari `master.db` sebelum memproses pesan WhatsApp atau akses dashboard.
 
+---
 
+[7.0] - LARANGAN WINDOW.CONFIRM / ALERT DI ENVIRONMENT IFRAME DAN POLA MODAL KONFIRMASI IN-APP
+
+- Tanggal: 2026-11-02 02:48
+- Sumber: Pengujian Langsung & Debugging UI Sandbox AI Studio
+
+Informasi yang Dipelajari:
+1. Perilaku `window.confirm()` dan `window.alert()` pada Iframe Sandbox:
+   - Di lingkungan pratinjau browser modern yang terisolasi dalam iframe (seperti sandbox AI Studio), browser secara default memblokir atau menolak eksekusi `window.confirm()` dan `window.alert()`.
+   - Pemanggilan `window.confirm()` langsung mengembalikan nilai `false` secara instan tanpa memunculkan dialog pop-up konfirmasi apapun di layar.
+   - Akibatnya, tombol-tombol yang memanggil `if (!window.confirm(...)) return;` (seperti tombol Hapus Tenant dan Suspend/Aktifkan pada Master Admin) terlihat macet atau "tidak dapat diklik" dari sudut pandang pengguna.
+2. Solusi Standar Aplikasi Web Modern (In-App Modal Confirmation):
+   - Mengganti seluruh dialog bawaan peramban (`window.confirm`) dengan Modal Konfirmasi khusus berbasis React state (misal `tenantToDelete: Tenant | null`).
+   - Dialog modal in-app ini 100% aman dari blokir sandbox iframe, memiliki desain dark mode yang selaras dengan tema Master Admin (slate-900 border slate-800), menyajikan informasi unit yang jelas (Nama Toko, ID Unit, Pemilik), serta tombol aksi tegas "Batal" dan "Hapus Permanen".
+
+Pemahaman:
+- Seluruh aksi destruktif atau mutasi status (Delete Tenant, Suspend, Reset) wajib menggunakan modal dialog kustom in-app atau inline two-step confirmation.
+- Selalu pastikan elemen `<button>` memiliki atribut `type="button"` dan class utilitas kursor `cursor-pointer` agar interaksi klik responsif dan tidak terganggu event bawaan browser.
+
+Potensi Penerapan:
+- Menggantikan pemanggilan `window.confirm` pada `handleDeleteTenant` dan `handleToggleStatus` di `admin-frontend/src/App.tsx` dengan modal konfirmasi React in-app.
+
+Catatan Tambahan:
+- Desain modal konfirmasi hapus harus memuat peringatan jelas bahwa file database dan kredensial WhatsApp penyewa akan terhapus secara fisik dari server.
+
+---
+
+[8.0] - ISOLASI STATE REACT MULTI-TENANT (CLEAN COMPONENT REMOUNT & PER-TENANT SESSION MANAGEMENT)
+
+- Tanggal: 2026-11-02 03:25
+- Sumber: Analisis Lifecycle React Frontend & Multi-Tenant Routing Sandbox
+
+Informasi yang Dipelajari:
+1. Masalah Kebocoran State Lifecycle React (Hook Premature Execution):
+   - Jika hook bisnis (`useStoreConfig`, `useBotConnection`, `useTransactions`, dsb.) dideklarasikan di level komponen root `App` sebelum kondisi `!auth.isAuthenticated`, hook-hook tersebut langsung tereksekusi saat halaman login pertama kali dimuat.
+   - Karena belum ada token otentikasi aktif, hook membaca konteks default (`t_wanzt` / Wanzt Store) dan mengunci state di memori.
+   - Saat pengguna berhasil login dengan akun tenant baru (`berkah_erot` / `t_berkahstore_469`), state React tidak ter-reset secara otomatis, menyebabkan data Wanzt Store tetap membekas di layar meskipun token dan database sebenarnya sudah berpindah.
+2. Pola Arsitektur Pemisahan Auth Shell dan Tenant Dashboard:
+   - Komponen root `App` hanya bertugas mengelola autentikasi (`useAuth`).
+   - Seluruh fungsionalitas dashboard toko dipindahkan ke komponen terisolasi `TenantDashboard`.
+   - Komponen `TenantDashboard` dirender dengan prop `key={auth.user?.tenantId || auth.user?.username}`.
+   - Dengan prop `key` berbasis `tenantId`, React secara native akan menghancurkan (*unmount*) instance lama dan membuat (*mount*) instance baru yang bersih dan terisolasi setiap kali tenant berganti atau login baru terjadi.
+3. Keberlangsungan Koneksi Bot WhatsApp saat Logout:
+   - Koneksi Baileys socket (`this.sock`) adalah proses server-side jangka panjang yang tersimpan di memori Node.js (`botInstances: Map<string, BotManager>`).
+   - Logout di web dashboard hanyalah penghapusan token browser (`localStorage.removeItem`).
+   - Oleh karena itu, bot WhatsApp tetap aktif 24 jam melayani pelanggan di background tanpa terpengaruh oleh aksi buka/tutup browser atau logout dari web dashboard.
+
+Pemahaman:
+- Pemisahan komponen dashboard dengan `key` unik per tenant menjamin 100% *clean state lifecycle* tanpa risiko kontaminasi data antar penyewa.
+- Interface sesi pengguna di frontend harus memuat `tenantId` agar routing dan interseptor API selalu sinkron.
+
+Potensi Penerapan:
+- Memisahkan tampilan dashboard toko ke `TenantDashboard.tsx` di `frontend/src/components/dashboard/TenantDashboard.tsx`.
+- Memperbarui `App.tsx` agar merender `<TenantDashboard key={auth.user.tenantId} auth={auth} />` saat `auth.isAuthenticated`.
+- Memastikan `useAuth` menyimpan dan memperbarui `tenantId` pada state dan `localStorage`.
+
+Catatan Tambahan:
+- Penautan sesi bot di folder `auth_info_baileys/tenant_{tenantId}/` sepenuhnya independen dan aman digunakan oleh banyak pemilik toko secara bersamaan.
+
+
+
+
+
+
+---
+
+[9.0] - ANALISIS PENYEBAB GAGALNYA PEMUATAN PRODUK XAVIERA (DOMAIN EXPIRED PADA XAVIERA.STORE VS XAVIERASTORE.COM)
+
+- Tanggal: 2026-11-02 03:44
+- Sumber: Investigasi Teknis & Pengujian Respon API Xaviera
+
+Informasi yang Dipelajari:
+1. Status Domain Resmi Xaviera:
+   - Domain lama `https://xaviera.store` telah kedaluwarsa (*expired*) oleh pihak penyedia domain. Ketika aplikasi mengirimkan HTTP request ke endpoint `https://xaviera.store/api/*`, server registrar mengembalikan dokumen HTML:
+     `<!doctype html><title>Your domain is expired</title>...`
+   - Domain resmi dan aktif dari Xaviera Store saat ini adalah:
+     `https://xavierastore.com/api/v1`
+2. Dampak Teknis terhadap Endpoint Produk, SMM, dan TopUp:
+   - Pada `backend/config/configManager.ts`, nilai default `DEFAULT_API_CONFIG.xavieraBaseUrl` masih mengarah ke domain lama `https://xaviera.store/api`.
+   - Ketika pengguna menyimpan konfigurasi API Key Xaviera melalui tab "Koneksi Layanan", input Base URL terisi otomatis dengan `https://xaviera.store/api` dan tersimpan ke tabel `api_config` di database tenant (`t_macam_984.db` atau tenant aktif).
+   - Saat backend menjalankan fungsi `fetch(baseUrl + '/products')`, `fetch(baseUrl + '/smm/services')`, atau `fetch(baseUrl + '/games')`, server Xaviera lama merespon dengan status 200 berupa HTML teks domain expired.
+   - Pemanggilan `response.json()` memicu fatal parsing error:
+     `SyntaxError: Unexpected token '<', "<!doctype "... is not valid JSON`
+   - Akibatnya, blok `catch (err)` menangkap error tersebut dan mengembalikan status gagal, sehingga daftar Aplikasi Premium, SMM, dan Top Up menjadi kosong di layar antarmuka pengguna.
+3. Hasil Pengujian Verifikasi dengan Domain Baru (`https://xavierastore.com/api/v1`):
+   - Pengujian langsung dengan API Key pengguna (`xvs_3bdb31b7...`) ke `https://xavierastore.com/api/v1`:
+     - `/me`: Berhasil (200 OK) - Terhubung ke akun "Mine Craft", Saldo Rp 3.529.
+     - `/products`: Berhasil (200 OK) - Memuat daftar lengkap ChatGPT, Canva, Netflix, CapCut, Spotify, dll.
+     - `/smm/services`: Berhasil (200 OK) - Memuat daftar layanan Instagram Views, TikTok Followers, dll.
+     - `/games`: Berhasil (200 OK) - Memuat katalog Mobile Legends, Free Fire, Arena of Valor, dll.
+   - Hal ini membuktikan 100% bahwa API Key yang dimasukkan oleh pengguna sudah benar dan valid. Masalah murni disebabkan oleh alamat Base URL yang mengarah ke domain kedaluwarsa `xaviera.store` alih-alih `xavierastore.com/api/v1`.
+
+Pemahaman:
+- API Key pengguna tidak bermasalah sama sekali.
+- Masalah terletak pada konfigurasi **Base URL** Xaviera yang terisi `https://xaviera.store/api`.
+- Begitu Base URL diarahkan ke `https://xavierastore.com/api/v1`, seluruh produk Aplikasi Premium, SMM, TopUp Game, serta saldo akun langsung muncul secara normal.
+
+Potensi Penerapan:
+- Memberikan penjelasan transparan dan jelas kepada pengguna mengenai hasil investigasi ini tanpa mengubah kode terlebih dahulu sesuai instruksi.
+- Jika pengguna mengizinkan perbaikan, solusi yang dapat dilakukan:
+  1. Pengguna dapat langsung mengubah Base URL di form tab "Koneksi Layanan" menjadi `https://xavierastore.com/api/v1` dan klik Simpan.
+  2. Atau memperbarui nilai default di `backend/config/configManager.ts` dan database tenant agar otomatis menggunakan `https://xavierastore.com/api/v1`.
+
+Catatan Tambahan:
+- Pengguna secara eksplisit meminta: "Jangan ubah kodenya terlebih dahulu". Oleh karena itu, tidak ada perubahan kode yang dilakukan sebelum pengguna memberikan konfirmasi instruksi berikutnya.
+
+---
+
+[10.0] - PRINSIP PENYERAGAMAN FITUR MULTI-TENANT & PERINGKAT ADIL BERBASIS MASA SEWA
+
+- Tanggal: 2026-11-02 04:18
+- Sumber: Permintaan Pengguna & Filosofi Layanan Multi-Tenant yang Adil
+
+Informasi yang Dipelajari:
+1. Eliminasi Kasta/Tier Layanan:
+   - Banyak sistem SaaS menerapkan pembatasan buatan (artificial gating / paywall) seperti "Paket Basic", "Paket Pro", dan "Paket Enterprise" dengan memangkas fitur (misal membatasi whitelist grup atau akses menu).
+   - Bagi platform penyewaan bot WhatsApp ini, pengguna menginginkan filosofi yang sepenuhnya setara dan adil (*fair & egalitarian architecture*): setiap penyewa yang menyewa bot mendapatkan kapabilitas terbaik 100% tanpa perbedaan kasta fitur.
+2. Peringkat Murni Berdasarkan Masa Sewa (*Rental Duration-Based Ranking*):
+   - Satu-satunya pembeda antar unit bot adalah **Masa Sewa** (sisa hari masa aktif sewa bot).
+   - Peringkat bot diurutkan dari durasi masa sewa aktif terpanjang (unit dengan komitmen sewa terlama memegang peringkat prioritas atas).
+   - Pengelola gedung apartemen bot dapat memantau dengan jelas unit mana yang memiliki masa sewa panjang vs unit yang mendekati tanggal kedaluwarsa tanpa bias nama paket.
+3. Dampak pada Antarmuka & Skema Data:
+   - Form pendaftaran unit tidak lagi membingungkan penyewa atau admin dengan opsi paket. Cukup tentukan durasi sewa (misal 30 hari, 60 hari, 90 hari, 365 hari).
+   - Tabel apartemen toko menyingkirkan badge paket, dan menonjolkan status keaktifan, sisa hari, serta peringkat durasi sewa secara elegan.
+   - Tetap menjaga backward-compatibility di SQLite `master.db` dengan mengisi kolom `package_name` sebagai label seragam 'Akses Penuh'.
+
+Pemahaman:
+Model ini sangat menyederhanakan alur pendaftaran, menghilangkan friksi mental bagi calon penyewa, dan memberikan rasa adil bagi setiap pengguna bot toko.
+
+Potensi Penerapan:
+1. Menghapus dropdown paket di `admin-frontend/src/App.tsx`.
+2. Menyajikan informasi sisa sewa dengan visualisasi ranking dan opsi sorting (Masa Sewa Terpanjang, Mendekati Habis, Terbaru).
+3. Menyeragamkan logika `tenantManager.ts` di backend.
+
+Catatan Tambahan:
+- Pastikan seluruh antarmuka tetap mematuhi prinsip anti-AI slop (kontras tinggi, tidak ada em-dash, tidak ada gradasi ungu klise, dan responsif).

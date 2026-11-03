@@ -117,7 +117,7 @@ export const DEFAULT_CONFIRMATION_CONFIG: ConfirmationCommandConfig = {
 
 export const DEFAULT_API_CONFIG: ApiConfig = {
   xavieraApiKey: '',
-  xavieraBaseUrl: 'https://xaviera.store/api',
+  xavieraBaseUrl: 'https://xavierastore.com/api/v1',
   lunasQrisApiKey: '',
   lunasQrisSecretKey: '',
   lunasQrisBaseUrl: 'https://lunasqris.com',

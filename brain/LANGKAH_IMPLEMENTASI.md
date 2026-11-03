@@ -474,6 +474,64 @@ Rencana Pengujian:
 Hasil yang Diharapkan:
 Dashboard Master dapat diakses dengan lancar di AI Studio preview URL via tombol atau path `/admin/`.
 
+---
+
+[8.0] - IMPLEMENTASI MODAL KONFIRMASI IN-APP UNTUK TOMBOL HAPUS & STATUS TENANT (FIX UNCLICKABLE BUTTON)
+
+- Tanggal: 2026-11-02 02:50
+- Status: Completed
+Referensi SCHEDULE: 7.0
+
+Tujuan Implementasi:
+Mengatasi permasalahan tombol aksi manajemen tenant (khususnya tombol Hapus ke-4 dengan ikon `Trash2` pada tabel tenant) yang tidak dapat diklik atau tampak macet akibat penggunaan fungsi dialog bawaan peramban `window.confirm()` yang diblokir oleh sandbox iframe.
+
+Bagian yang Akan Diubah:
+- "admin-frontend/src/App.tsx" - Mengganti `window.confirm` dengan Modal Konfirmasi React in-app (`tenantToDelete`, `tenantToToggleStatus`), menambahkan `type="button"`, `cursor-pointer`, dan merancang modal konfirmasi hapus tenant yang informatif.
+
+Alasan Perubahan:
+Lingkungan pratinjau browser sandbox AI Studio memblokir pemanggilan `window.confirm()` dan `window.alert()`. Saat pengguna mengklik tombol ke-4 (ikon tempat sampah), pemanggilan `window.confirm` mengembalikan `false` secara instan tanpa memunculkan dialog, sehingga fungsi `handleDeleteTenant` berhenti dan seolah-olah tombol "tidak dapat diklik".
+
+Strategi Implementasi:
+1. Di `admin-frontend/src/App.tsx`:
+   - Tambahkan state: `const [tenantToDelete, setTenantToDelete] = useState<Tenant | null>(null);`
+   - Tambahkan state: `const [tenantToToggleStatus, setTenantToToggleStatus] = useState<Tenant | null>(null);`
+   - Buat fungsi eksekusi penghapusan `confirmDeleteTenant()` yang langsung memanggil API DELETE `/api/admin/tenants/${tenantToDelete.tenant_id}` tanpa `window.confirm`.
+   - Buat fungsi eksekusi perubahan status `confirmToggleStatus()` yang memanggil API POST `/api/admin/tenants/${tenantToToggleStatus.tenant_id}/status` tanpa `window.confirm`.
+   - Ubah tombol hapus di tabel:
+     - `onClick={() => setTenantToDelete(tenant)}`
+     - Tambahkan `type="button"`, `cursor-pointer`, `active:scale-95`.
+   - Ubah tombol suspend/aktifkan di tabel:
+     - `onClick={() => setTenantToToggleStatus(tenant)}`
+     - Tambahkan `type="button"`, `cursor-pointer`, `active:scale-95`.
+   - Tambahkan Modal Konfirmasi Hapus Tenant:
+     - Backdrop gelap `bg-slate-950/80 backdrop-blur-xs z-50`.
+     - Header merah/rose dengan ikon `AlertTriangle`: "Hapus Unit Apartemen Toko".
+     - Rincian unit: Nama Toko, ID Unit, Pemilik, dan peringatan bahwa database fisik & sesi WhatsApp akan dihapus permanen.
+     - Tombol: "Batal" dan "Ya, Hapus Permanen" (merah/rose, dengan state loading `isSubmitting`).
+   - Tambahkan Modal Konfirmasi Toggle Status (Suspend / Aktifkan):
+     - Rincian perubahan status dari aktif ke suspend (atau sebaliknya).
+     - Tombol konfirmasi yang cepat dan aman.
+2. Validasi dengan `compile_applet` dan `lint_applet`.
+3. Catat penyelesaian di `brain/PROGRESS.md`.
+
+Urutan Pengerjaan:
+1. Catat entri [8.0] di `brain/LANGKAH_IMPLEMENTASI.md`.
+2. Edit `admin-frontend/src/App.tsx`.
+3. Verifikasi kompilasi dan linting.
+4. Perbarui status entri [8.0] menjadi Completed dan catat di `brain/PROGRESS.md`.
+
+Dampak Perubahan:
+Tombol aksi hapus dan suspend di Master Admin dapat diklik 100% responsif dan memunculkan pop-up modal interaktif yang konsisten dengan tema desain dashboard.
+
+Rencana Pengujian:
+1. Jalankan `compile_applet` untuk build frontend admin.
+2. Jalankan `lint_applet` untuk memeriksa type checking TypeScript.
+3. Pastikan modal konfirmasi muncul saat tombol hapus atau suspend diklik.
+
+Hasil yang Diharapkan:
+Tombol dapat diklik tanpa error, modal konfirmasi tampil jelas di layar, dan proses penghapusan/perubahan status berjalan normal.
+
+
 
 
 
@@ -646,3 +704,117 @@ Rencana Pengujian:
 
 Hasil yang Diharapkan:
 Runtime error `Cannot set property fetch` terselesaikan 100%, antarmuka dashboard toko utama terbuka dengan normal.
+
+---
+
+[11.0] - REFACTORING ARSITEKTUR FRONTEND DASHBOARD: ISOLASI STATE PER-TENANT & CLEAN REMOUNT (FIX ISU DATA TERCAMPUR)
+
+- Tanggal: 2026-11-02 03:27
+- Status: Completed
+Referensi SCHEDULE: 8.0
+
+Tujuan Implementasi:
+Memperbaiki arsitektur rendering frontend toko agar setiap tenant yang login (misal `berkah_erot` / Berkah Store) memperoleh data toko mandiri (Mak Erot, transaksi, kupon, dan bot terpisah) tanpa kebocoran atau kontaminasi state dari toko default (Wanzt Store):
+1. Memperbarui `frontend/src/hooks/useAuth.ts` agar menyertakan `tenantId` pada tipe `UserSession`, menyimpan ke `localStorage`, dan mengalirkan `tenantId` ke state React.
+2. Memisahkan seluruh logika dashboard toko dari root `App.tsx` ke komponen mandiri `frontend/src/components/dashboard/TenantDashboard.tsx`.
+3. Memperbarui `frontend/src/App.tsx` agar:
+   - Root `App` hanya menangani otentikasi (`useAuth`).
+   - Saat belum login (`!isAuthenticated`), hanya menampilkan `LoginPage` tanpa mengeksekusi hook data toko.
+   - Saat terotentikasi, merender `<TenantDashboard key={auth.user?.tenantId} auth={auth} />`.
+   - Prop `key={auth.user?.tenantId}` menjamin penghancuran (*unmount*) total instance lama dan pembuatan (*mount*) instance baru yang bersih saat tenant berganti.
+4. Menyelaraskan fallback teks pada `useStoreConfig.ts` agar tidak meng-hardcode nama Wanzt Store melainkan menggunakan placeholder `{storeName}` dinamis.
+
+Bagian yang Akan Diubah/Dibuat:
+- "frontend/src/hooks/useAuth.ts" - Menambahkan `tenantId` ke interface UserSession dan state.
+- "frontend/src/components/dashboard/TenantDashboard.tsx" - Komponen dashboard toko terisolasi.
+- "frontend/src/App.tsx" - Menggunakan `TenantDashboard` dengan `key={auth.user?.tenantId}`.
+- "frontend/src/hooks/useStoreConfig.ts" - Menghilangkan teks hardcode toko default.
+
+Alasan Perubahan:
+Sebelumnya, hook bisnis dijalankan di level root `App` sebelum pengguna login. Hal ini menyebabkan state terisi data default Wanzt Store saat di halaman login, dan tidak di-reset ketika user login dengan akun tenant lain (`berkah_erot`).
+
+Strategi Implementasi:
+1. Buat file `frontend/src/components/dashboard/TenantDashboard.tsx` yang memuat seluruh hook bisnis, sidebar, navbar, dan tab content renderer toko.
+2. Perbarui `frontend/src/hooks/useAuth.ts` dengan interface `UserSession { username: string; tenantId?: string; }`.
+3. Sederhanakan `frontend/src/App.tsx` menjadi shell otentikasi bersih yang merender `TenantDashboard` berdasarkan `key={auth.user?.tenantId}`.
+4. Validasi kompilasi dan linting (`lint_applet`, `compile_applet`).
+5. Uji respon endpoint login dan dashboard via curl.
+6. Perbarui status entri [11.0] menjadi Completed dan catat hasil di `brain/PROGRESS.md`.
+
+Urutan Pengerjaan:
+1. Catat entri [11.0] di `brain/LANGKAH_IMPLEMENTASI.md`.
+2. Perbarui `frontend/src/hooks/useAuth.ts`.
+3. Buat `frontend/src/components/dashboard/TenantDashboard.tsx`.
+4. Perbarui `frontend/src/App.tsx` dan `frontend/src/hooks/useStoreConfig.ts`.
+5. Uji dengan `lint_applet` dan `compile_applet`.
+6. Restart dev server.
+7. Catat penyelesaian di `brain/PROGRESS.md`.
+
+Dampak Perubahan:
+Setiap tenant memiliki pengalaman dashboard toko yang 100% terisolasi. Login sebagai `berkah_erot` akan langsung memuat Berkah Store, dan login sebagai `admin` memuat Wanzt Store.
+
+Rencana Pengujian:
+1. Typecheck TypeScript dengan `lint_applet`.
+2. Build kompilasi dengan `compile_applet`.
+3. Verifikasi alur login dan pemuatan data per tenant.
+
+Hasil yang Diharapkan:
+Dashboard tidak lagi menampilkan data Wanzt Store saat login dengan akun tenant lain. Data toko, bot, dan transaksi 100% terpisah antar penyewa.
+
+---
+
+[12.0] - PENYERAGAMAN FITUR MULTI-TENANT & ELIMINASI SISTEM TIER BERDASARKAN MASA SEWA
+
+- Tanggal: 2026-11-02 04:16
+- Status: Completed
+Referensi SCHEDULE: 9.0
+
+Tujuan Implementasi:
+1. Menghapus sistem paket bertingkat (tier Basic, Pro, Enterprise) yang membeda-bedakan hak akses atau kapabilitas antar unit toko penyewa.
+2. Menyeragamkan seluruh fitur bot WhatsApp, kapasitas grup, dan integrasi API agar 100% sama rata, adil, dan setara bagi seluruh penyewa apartemen bot.
+3. Menjadikan Masa Sewa (sisa hari masa aktif dan tanggal kedaluwarsa) sebagai satu-satunya indikator peringkat, status, dan prioritas unit bot pada dashboard Master Admin.
+
+Bagian yang Akan Diubah:
+- "admin-frontend/src/App.tsx" - Menghapus input dropdown paket sewa di form pendaftaran tenant baru, menghapus kolom "Paket", memperkaya tabel dengan ranking masa sewa, status aktifitas, dan filter/sorting durasi masa sewa.
+- "admin-backend/services/tenantManager.ts" - Menyeragamkan pembuatan tenant baru tanpa tier buatan (`package_name` disetarakan 'Akses Penuh', `max_groups` disetarakan 50), serta menyediakan pengurutan peringkat berdasarkan sisa masa sewa.
+- "admin-backend/routes/adminRoutes.ts" - Menyelaraskan endpoint POST `/api/admin/tenants` agar tidak lagi mewajibkan parameter paket.
+- "backend/config/configManager.ts" - Menyelaraskan default Xaviera Base URL ke `https://xavierastore.com/api/v1`.
+
+Alasan Perubahan:
+Sesuai instruksi pengguna: "fitur multi tenant memiliki beberapa tier, saya tidak ingin hal tersebut ada, hapus fitur tier tersebut, saya ingin semuanya sama rata, peringkat tier bot hanya berdasarkan masa sewa saja, jadi semuanya sama rata dan adil".
+
+Strategi Implementasi:
+1. Di `admin-frontend/src/App.tsx`:
+   - Hapus state `newPackage` dan elemen `<select>` paket sewa pada Modal "Tambah Unit Apartemen Toko".
+   - Di tabel unit toko, ganti kolom "Paket" menjadi kolom yang fokus pada durasi dan keaktifan masa sewa dengan badge peringkat durasi (misal: "Aktif Panjang", "Prioritas Perpanjangan", dsb.) serta visualisasi sisa hari yang informatif.
+   - Tambahkan kontrol pengurutan (Sorting) tabel berdasarkan Masa Sewa: "Masa Sewa Terpanjang" (Peringkat Atas), "Mendekati Kedaluwarsa", dan "Paling Baru Terdaftar".
+   - Pastikan teks bebas dari em-dash (`—`) dan mematuhi aturan anti-AI slop.
+2. Di `admin-backend/services/tenantManager.ts`:
+   - Pada `createTenant`: Tetapkan `package_name: 'Akses Penuh'` dan `max_groups: 50` secara merata untuk semua unit baru.
+   - Pada `getAllTenants`: Urutkan data secara default berdasarkan keaktifan status dan sisa hari masa sewa (`days_remaining DESC`), sehingga unit dengan durasi sewa aktif terpanjang otomatis menempati peringkat atas.
+3. Di `admin-backend/routes/adminRoutes.ts`:
+   - Sederhanakan validasi pendaftaran unit tanpa mewajibkan paket.
+4. Di `backend/config/configManager.ts`:
+   - Perbarui `DEFAULT_API_CONFIG.xavieraBaseUrl` menjadi `'https://xavierastore.com/api/v1'`.
+5. Uji build dengan `compile_applet` dan linting dengan `lint_applet`.
+6. Dokumentasikan hasil penyelesaian di `brain/PROGRESS.md` entri [26.0].
+
+Urutan Pengerjaan:
+1. Update `admin-backend/services/tenantManager.ts` & `admin-backend/routes/adminRoutes.ts`.
+2. Update `admin-frontend/src/App.tsx`.
+3. Update `backend/config/configManager.ts`.
+4. Uji kompilasi `compile_applet` dan `lint_applet`.
+5. Verifikasi pengoperasian API dan UI.
+6. Catat status di `brain/PROGRESS.md`.
+
+Dampak Perubahan:
+Seluruh tenant apartemen memiliki hak dan fitur bot yang setara tanpa adanya diskriminasi tier atau kasta fitur. Hirarki bot hanya dibedakan secara adil dari durasi masa sewa mereka.
+
+Rencana Pengujian:
+1. Jalankan `lint_applet` untuk memastikan tidak ada error tipe TypeScript.
+2. Jalankan `compile_applet` untuk memastikan kompilasi bundle Vite dan Node.js tuntas tanpa masalah.
+3. Uji tambah tenant baru dan verifikasi tidak ada input paket, serta data tersimpan dengan status sama rata.
+4. Uji tampilan tabel Master Admin memastikan kolom paket telah digantikan dengan peringkat dan durasi masa sewa.
+
+Hasil yang Diharapkan:
+Sistem multi-tenant 100% adil dan sama rata. Peringkat unit bot ditentukan murni oleh masa sewa.

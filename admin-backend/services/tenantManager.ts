@@ -44,18 +44,26 @@ export class TenantManager {
     const rows = db.prepare(`
       SELECT id, tenant_id, store_name, owner_name, owner_phone, username, package_name, status, max_groups, created_at, expires_at, notes
       FROM tenants
-      ORDER BY id DESC
+      ORDER BY expires_at DESC, id DESC
     `).all() as TenantRecord[];
 
     const now = new Date().getTime();
-    return rows.map((row) => {
+    const mapped = rows.map((row) => {
       const exp = new Date(row.expires_at).getTime();
       const diffDays = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
       return {
         ...row,
         days_remaining: diffDays > 0 ? diffDays : 0,
-        status: exp < now && row.status === 'active' ? 'expired' : row.status,
+        status: exp < now && row.status === 'active' ? ('expired' as const) : row.status,
       };
+    });
+
+    // Urutkan peringkat masa sewa secara adil: unit aktif dengan sisa sewa terpanjang berada di peringkat teratas
+    return mapped.sort((a, b) => {
+      // Prioritaskan active dibanding expired/suspended
+      if (a.status === 'active' && b.status !== 'active') return -1;
+      if (a.status !== 'active' && b.status === 'active') return 1;
+      return (b.days_remaining || 0) - (a.days_remaining || 0);
     });
   }
 
@@ -89,7 +97,7 @@ export class TenantManager {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + duration);
 
-    // 1. Simpan di master.db
+    // 1. Simpan di master.db (Semua unit bot mendapatkan Akses Penuh dan kapabilitas setara)
     db.prepare(`
       INSERT INTO tenants (
         tenant_id, store_name, owner_name, owner_phone, username, password_hash, package_name, status, max_groups, created_at, expires_at, notes
@@ -101,12 +109,12 @@ export class TenantManager {
       input.owner_phone,
       input.username,
       passwordHash,
-      input.package_name || 'Pro',
+      'Akses Penuh',
       'active',
-      input.max_groups || 10,
+      input.max_groups || 50,
       createdAt.toISOString(),
       expiresAt.toISOString(),
-      input.notes || `Unit apartemen untuk ${input.store_name}`
+      input.notes || `Unit bot toko untuk ${input.store_name}`
     );
 
     // 2. Inisialisasi Database mandiri untuk tenant baru

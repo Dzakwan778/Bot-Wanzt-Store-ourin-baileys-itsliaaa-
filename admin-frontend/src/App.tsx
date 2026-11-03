@@ -18,7 +18,10 @@ import {
   XCircle,
   Phone,
   KeyRound,
-  FileText
+  FileText,
+  Award,
+  ArrowUpDown,
+  Sparkles
 } from 'lucide-react';
 
 interface Tenant {
@@ -57,6 +60,8 @@ export default function App() {
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [isExtendModalOpen, setIsExtendModalOpen] = useState<boolean>(false);
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
+  const [tenantToDelete, setTenantToDelete] = useState<Tenant | null>(null);
+  const [tenantToToggleStatus, setTenantToToggleStatus] = useState<Tenant | null>(null);
 
   // Form New Tenant
   const [newStoreName, setNewStoreName] = useState<string>('');
@@ -64,10 +69,10 @@ export default function App() {
   const [newOwnerPhone, setNewOwnerPhone] = useState<string>('');
   const [newUsername, setNewUsername] = useState<string>('');
   const [newPassword, setNewPassword] = useState<string>('');
-  const [newPackage, setNewPackage] = useState<string>('Pro');
   const [newDuration, setNewDuration] = useState<number>(30);
   const [newNotes, setNewNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [sortBy, setSortBy] = useState<'duration_desc' | 'duration_asc' | 'newest'>('duration_desc');
 
   // Form Extend
   const [extendDays, setExtendDays] = useState<number>(30);
@@ -123,7 +128,6 @@ export default function App() {
           owner_phone: newOwnerPhone,
           username: newUsername,
           password: newPassword || 'toko12345',
-          package_name: newPackage,
           duration_days: newDuration,
           notes: newNotes,
         }),
@@ -178,16 +182,12 @@ export default function App() {
     }
   };
 
-  const handleToggleStatus = async (tenant: Tenant) => {
-    const nextStatus = tenant.status === 'active' ? 'suspended' : 'active';
-    const confirmMsg = tenant.status === 'active'
-      ? `Bekukan (suspend) unit toko "${tenant.store_name}"? Bot toko akan dihentikan sementara.`
-      : `Aktifkan kembali unit toko "${tenant.store_name}"?`;
-
-    if (!window.confirm(confirmMsg)) return;
-
+  const confirmToggleStatus = async () => {
+    if (!tenantToToggleStatus) return;
+    const nextStatus = tenantToToggleStatus.status === 'active' ? 'suspended' : 'active';
+    setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/admin/tenants/${tenant.tenant_id}/status`, {
+      const res = await fetch(`/api/admin/tenants/${tenantToToggleStatus.tenant_id}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nextStatus }),
@@ -195,37 +195,43 @@ export default function App() {
       const data = await res.json();
       if (data.success) {
         showToast(data.message);
+        setTenantToToggleStatus(null);
         fetchData();
       } else {
         showToast(data.message || 'Gagal mengubah status');
       }
     } catch (err: any) {
       showToast('Error: ' + err.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleDeleteTenant = async (tenant: Tenant) => {
-    if (tenant.tenant_id === 't_wanzt') {
+  const confirmDeleteTenant = async () => {
+    if (!tenantToDelete) return;
+    if (tenantToDelete.tenant_id === 't_wanzt') {
       showToast('Unit default "t_wanzt" tidak boleh dihapus!');
+      setTenantToDelete(null);
       return;
     }
 
-    const confirmMsg = `PERINGATAN: Hapus permanen unit toko "${tenant.store_name}" (${tenant.tenant_id})?\n\nFile database dan riwayat sesi WhatsApp toko ini akan dihapus secara fisik dari server.`;
-    if (!window.confirm(confirmMsg)) return;
-
+    setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/admin/tenants/${tenant.tenant_id}`, {
+      const res = await fetch(`/api/admin/tenants/${tenantToDelete.tenant_id}`, {
         method: 'DELETE',
       });
       const data = await res.json();
       if (data.success) {
         showToast(data.message);
+        setTenantToDelete(null);
         fetchData();
       } else {
         showToast(data.message || 'Gagal menghapus tenant');
       }
     } catch (err: any) {
       showToast('Error: ' + err.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -247,18 +253,61 @@ export default function App() {
     }
   };
 
-  // Filter tenants
-  const filteredTenants = tenants.filter((t) => {
-    const matchesSearch =
-      t.store_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.owner_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.owner_phone.includes(searchQuery) ||
-      t.tenant_id.toLowerCase().includes(searchQuery.toLowerCase());
+  function getRentalTierInfo(daysRemaining: number, status: string) {
+    if (status === 'expired' || daysRemaining <= 0) {
+      return {
+        tier: 'Masa Sewa Habis',
+        color: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
+        badge: 'Kedaluwarsa',
+      };
+    }
+    if (daysRemaining >= 90) {
+      return {
+        tier: 'Tier Panjang (90+ Hari)',
+        color: 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30',
+        badge: 'Prioritas Tinggi',
+      };
+    }
+    if (daysRemaining >= 30) {
+      return {
+        tier: 'Tier Standar (30-89 Hari)',
+        color: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
+        badge: 'Aktif Reguler',
+      };
+    }
+    return {
+      tier: 'Tier Singkat (<30 Hari)',
+      color: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
+      badge: 'Mendekati Habis',
+    };
+  }
 
-    if (!matchesSearch) return false;
-    if (statusFilter === 'all') return true;
-    return t.status === statusFilter;
-  });
+  // Filter & Urutkan Peringkat Tenants Berdasarkan Masa Sewa
+  const filteredTenants = tenants
+    .filter((t) => {
+      const matchesSearch =
+        t.store_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        t.owner_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        t.owner_phone.includes(searchQuery) ||
+        t.tenant_id.toLowerCase().includes(searchQuery.toLowerCase());
+
+      if (!matchesSearch) return false;
+      if (statusFilter === 'all') return true;
+      return t.status === statusFilter;
+    })
+    .sort((a, b) => {
+      if (sortBy === 'duration_desc') {
+        if (a.status === 'active' && b.status !== 'active') return -1;
+        if (a.status !== 'active' && b.status === 'active') return 1;
+        return (b.days_remaining || 0) - (a.days_remaining || 0);
+      }
+      if (sortBy === 'duration_asc') {
+        if (a.status === 'active' && b.status !== 'active') return -1;
+        if (a.status !== 'active' && b.status === 'active') return 1;
+        return (a.days_remaining || 0) - (b.days_remaining || 0);
+      }
+      return b.id - a.id;
+    });
 
   return (
     <div className="min-h-[100dvh] bg-slate-950 text-slate-100 flex flex-col font-sans">
@@ -404,16 +453,35 @@ export default function App() {
             ))}
           </div>
 
-          {/* Search Box */}
-          <div className="relative w-full sm:w-72">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari toko, pemilik, no WA..."
-              className="w-full bg-slate-900/80 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
-            />
+          {/* Controls: Sorting & Search */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            {/* Sorting Peringkat */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs">
+              <ArrowUpDown className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+              <label htmlFor="sort-select" className="text-slate-400 text-[11px] whitespace-nowrap">Urutan:</label>
+              <select
+                id="sort-select"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer"
+              >
+                <option value="duration_desc" className="bg-slate-900 text-white">Masa Sewa Terpanjang (#1)</option>
+                <option value="duration_asc" className="bg-slate-900 text-white">Mendekati Kedaluwarsa</option>
+                <option value="newest" className="bg-slate-900 text-white">Terbaru Didaftarkan</option>
+              </select>
+            </div>
+
+            {/* Search Box */}
+            <div className="relative w-full sm:w-64">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Cari toko, pemilik, no WA..."
+                className="w-full bg-slate-900/80 border border-slate-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+              />
+            </div>
           </div>
         </section>
 
@@ -423,47 +491,70 @@ export default function App() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-800 text-[11px] font-semibold text-slate-400 uppercase tracking-wider bg-slate-900/90">
-                  <th className="py-3.5 px-4">ID Unit / Slug</th>
-                  <th className="py-3.5 px-4">Nama Toko & Pemilik</th>
+                  <th className="py-3.5 px-4">Peringkat Sewa</th>
+                  <th className="py-3.5 px-4">ID Unit & Toko</th>
                   <th className="py-3.5 px-4">No. WhatsApp</th>
-                  <th className="py-3.5 px-4">Paket</th>
-                  <th className="py-3.5 px-4">Sisa Sewa</th>
-                  <th className="py-3.5 px-4">Status</th>
+                  <th className="py-3.5 px-4">Tier & Masa Sewa</th>
+                  <th className="py-3.5 px-4">Status Layanan</th>
                   <th className="py-3.5 px-4 text-right">Aksi Manajemen</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/80 text-xs text-slate-300">
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-slate-400">
+                    <td colSpan={6} className="py-12 text-center text-slate-400">
                       <RefreshCw className="w-6 h-6 animate-spin mx-auto text-indigo-400 mb-2" />
                       Memuat data apartemen...
                     </td>
                   </tr>
                 ) : filteredTenants.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-slate-400">
+                    <td colSpan={6} className="py-12 text-center text-slate-400">
                       Tidak ada data unit apartemen yang cocok.
                     </td>
                   </tr>
                 ) : (
-                  filteredTenants.map((tenant) => {
+                  filteredTenants.map((tenant, index) => {
                     const isExp = tenant.status === 'expired';
                     const isSusp = tenant.status === 'suspended';
+                    const tierInfo = getRentalTierInfo(tenant.days_remaining || 0, tenant.status);
 
                     return (
                       <tr key={tenant.id} className="hover:bg-slate-800/30 transition-colors">
-                        {/* ID Unit */}
+                        {/* Peringkat Sewa */}
                         <td className="py-3.5 px-4">
-                          <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 font-semibold">
-                            {tenant.tenant_id}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`inline-flex items-center justify-center font-mono font-bold text-xs w-7 h-7 rounded-lg border ${
+                                index === 0 && tenant.status === 'active'
+                                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-xs'
+                                  : index === 1 && tenant.status === 'active'
+                                  ? 'bg-slate-700/60 text-slate-200 border-slate-600'
+                                  : index === 2 && tenant.status === 'active'
+                                  ? 'bg-amber-700/20 text-amber-400 border-amber-700/30'
+                                  : 'bg-slate-800 text-slate-400 border-slate-700'
+                              }`}
+                            >
+                              #{index + 1}
+                            </span>
+                            {index === 0 && tenant.status === 'active' && (
+                              <span className="text-[10px] font-semibold text-amber-400 flex items-center gap-0.5">
+                                <Sparkles className="w-3 h-3 text-amber-400" />
+                                Peringkat 1
+                              </span>
+                            )}
+                          </div>
                         </td>
 
-                        {/* Nama Toko & Pemilik */}
+                        {/* ID Unit & Toko */}
                         <td className="py-3.5 px-4">
                           <div className="font-semibold text-white">{tenant.store_name}</div>
-                          <div className="text-[11px] text-slate-400">Pemilik: {tenant.owner_name} ({tenant.username})</div>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 font-semibold">
+                              {tenant.tenant_id}
+                            </span>
+                            <span className="text-[11px] text-slate-400">Owner: {tenant.owner_name} ({tenant.username})</span>
+                          </div>
                         </td>
 
                         {/* No WA */}
@@ -479,23 +570,19 @@ export default function App() {
                           </a>
                         </td>
 
-                        {/* Paket */}
+                        {/* Tier & Masa Sewa (Semua Bot Sama Rata, Peringkat Berdasarkan Masa Sewa) */}
                         <td className="py-3.5 px-4">
-                          <span className="px-2 py-0.5 text-[10px] font-semibold bg-slate-800 text-indigo-300 border border-indigo-500/20 rounded-md">
-                            {tenant.package_name}
-                          </span>
-                        </td>
-
-                        {/* Sisa Durasi Sewa */}
-                        <td className="py-3.5 px-4">
-                          <div className="flex items-center gap-1.5">
-                            <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                            <span className={`font-semibold ${isExp ? 'text-rose-400' : 'text-slate-200'}`}>
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-md border ${tierInfo.color}`}>
+                              {tierInfo.tier}
+                            </span>
+                            <span className={`font-semibold text-xs ${isExp ? 'text-rose-400' : 'text-slate-200'}`}>
                               {tenant.days_remaining} Hari
                             </span>
                           </div>
-                          <div className="text-[10px] text-slate-500 mt-0.5">
-                            Exp: {new Date(tenant.expires_at).toLocaleDateString('id-ID')}
+                          <div className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
+                            <Calendar className="w-3 h-3 text-slate-500" />
+                            <span>Aktif s/d {new Date(tenant.expires_at).toLocaleDateString('id-ID')}</span>
                           </div>
                         </td>
 
@@ -526,8 +613,9 @@ export default function App() {
                           <div className="inline-flex items-center gap-1.5 justify-end">
                             {/* Impersonate Button */}
                             <button
+                              type="button"
                               onClick={() => handleImpersonate(tenant)}
-                              className="px-2.5 py-1 text-[11px] font-medium text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg transition-colors active:scale-[0.98]"
+                              className="px-2.5 py-1 text-[11px] font-medium text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg transition-all active:scale-95 cursor-pointer shrink-0"
                               title="Masuk sebagai tenant (1-klik)"
                             >
                               Buka Toko
@@ -535,12 +623,13 @@ export default function App() {
 
                             {/* Extend Button */}
                             <button
+                              type="button"
                               onClick={() => {
                                 setSelectedTenant(tenant);
                                 setExtendDays(30);
                                 setIsExtendModalOpen(true);
                               }}
-                              className="px-2.5 py-1 text-[11px] font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors active:scale-[0.98]"
+                              className="px-2.5 py-1 text-[11px] font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-all active:scale-95 cursor-pointer shrink-0"
                               title="Perpanjang sewa"
                             >
                               Perpanjang
@@ -548,8 +637,9 @@ export default function App() {
 
                             {/* Suspend/Activate Toggle */}
                             <button
-                              onClick={() => handleToggleStatus(tenant)}
-                              className={`p-1 rounded-lg border transition-colors ${
+                              type="button"
+                              onClick={() => setTenantToToggleStatus(tenant)}
+                              className={`p-1.5 rounded-lg border transition-all active:scale-95 cursor-pointer shrink-0 flex items-center justify-center ${
                                 tenant.status === 'active'
                                   ? 'text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30'
                                   : 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/30'
@@ -566,8 +656,9 @@ export default function App() {
                             {/* Delete Button (disabled for t_wanzt) */}
                             {tenant.tenant_id !== 't_wanzt' && (
                               <button
-                                onClick={() => handleDeleteTenant(tenant)}
-                                className="p-1 rounded-lg text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 transition-colors"
+                                type="button"
+                                onClick={() => setTenantToDelete(tenant)}
+                                className="p-1.5 rounded-lg text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 hover:text-rose-300 border border-rose-500/30 transition-all active:scale-95 cursor-pointer shrink-0 flex items-center justify-center"
                                 title="Hapus tenant permanen"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -628,30 +719,16 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-400 mb-1 font-medium">No. WhatsApp Pemilik *</label>
-                  <input
-                    type="text"
-                    required
-                    value={newOwnerPhone}
-                    onChange={(e) => setNewOwnerPhone(e.target.value.replace(/[^0-9]/g, ''))}
-                    placeholder="628123456789"
-                    className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-400 mb-1 font-medium">Paket Sewa</label>
-                  <select
-                    value={newPackage}
-                    onChange={(e) => setNewPackage(e.target.value)}
-                    className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                  >
-                    <option value="Basic">Paket Basic (Rp 50.000 / bln)</option>
-                    <option value="Pro">Paket Pro (Rp 100.000 / bln)</option>
-                    <option value="Enterprise">Paket Enterprise (Rp 250.000 / bln)</option>
-                  </select>
-                </div>
+              <div>
+                <label className="block text-slate-400 mb-1 font-medium">No. WhatsApp Pemilik *</label>
+                <input
+                  type="text"
+                  required
+                  value={newOwnerPhone}
+                  onChange={(e) => setNewOwnerPhone(e.target.value.replace(/[^0-9]/g, ''))}
+                  placeholder="628123456789"
+                  className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
+                />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -803,6 +880,130 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Modal: Konfirmasi Hapus Tenant */}
+      {tenantToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5 text-rose-400">
+                <AlertTriangle className="w-5 h-5 text-rose-500" />
+                <h3 className="text-base font-bold text-white">Hapus Unit Apartemen Toko</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTenantToDelete(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer transition-colors"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs space-y-2">
+              <p className="font-semibold text-rose-300">
+                Apakah Anda yakin ingin menghapus unit toko ini secara permanen?
+              </p>
+              <div className="text-slate-300 space-y-1">
+                <div>Nama Toko: <span className="font-semibold text-white">{tenantToDelete.store_name}</span></div>
+                <div>ID Unit: <span className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">{tenantToDelete.tenant_id}</span></div>
+                <div>Pemilik: <span className="text-slate-200">{tenantToDelete.owner_name} (+{tenantToDelete.owner_phone})</span></div>
+              </div>
+              <p className="text-[11px] text-rose-400/90 pt-1">
+                Peringatan: Seluruh data transaksi, database SQLite tenant, dan riwayat sesi WhatsApp akan dihapus secara fisik dari server.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-800 text-xs">
+              <button
+                type="button"
+                onClick={() => setTenantToDelete(null)}
+                disabled={isSubmitting}
+                className="px-4 py-2 font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={confirmDeleteTenant}
+                className="px-5 py-2 font-semibold text-white bg-rose-600 hover:bg-rose-500 rounded-xl transition-all shadow-md shadow-rose-600/20 disabled:opacity-50 cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{isSubmitting ? 'Menghapus...' : 'Ya, Hapus Permanen'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Konfirmasi Toggle Status (Suspend / Aktifkan) */}
+      {tenantToToggleStatus && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5 text-amber-400">
+                <AlertTriangle className="w-5 h-5 text-amber-500" />
+                <h3 className="text-base font-bold text-white">
+                  {tenantToToggleStatus.status === 'active' ? 'Bekukan (Suspend) Unit Toko' : 'Aktifkan Kembali Unit Toko'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTenantToToggleStatus(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer transition-colors"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-800/60 border border-slate-700 text-xs space-y-2">
+              <p className="text-slate-300">
+                {tenantToToggleStatus.status === 'active'
+                  ? `Unit toko "${tenantToToggleStatus.store_name}" akan ditangguhkan. Bot WhatsApp toko ini akan dinonaktifkan sementara waktu.`
+                  : `Unit toko "${tenantToToggleStatus.store_name}" akan diaktifkan kembali. Bot WhatsApp toko dapat melanjutkan operasional.`}
+              </p>
+              <div className="text-slate-400 space-y-0.5 text-[11px]">
+                <div>Unit: <span className="font-semibold text-white">{tenantToToggleStatus.store_name} ({tenantToToggleStatus.tenant_id})</span></div>
+                <div>Status Saat Ini: <span className="uppercase font-semibold text-slate-300">{tenantToToggleStatus.status}</span></div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-800 text-xs">
+              <button
+                type="button"
+                onClick={() => setTenantToToggleStatus(null)}
+                disabled={isSubmitting}
+                className="px-4 py-2 font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={confirmToggleStatus}
+                className={`px-5 py-2 font-semibold text-white rounded-xl transition-all shadow-md disabled:opacity-50 cursor-pointer inline-flex items-center gap-1.5 ${
+                  tenantToToggleStatus.status === 'active'
+                    ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-600/20'
+                    : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
+                }`}
+              >
+                {tenantToToggleStatus.status === 'active' ? (
+                  <>
+                    <PauseCircle className="w-4 h-4" />
+                    <span>{isSubmitting ? 'Memproses...' : 'Bekukan Unit'}</span>
+                  </>
+                ) : (
+                  <>
+                    <PlayCircle className="w-4 h-4" />
+                    <span>{isSubmitting ? 'Memproses...' : 'Aktifkan Unit'}</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

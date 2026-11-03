@@ -4,6 +4,7 @@ const TOKEN_KEY = 'wanzt_bot_auth_token';
 
 export interface UserSession {
   username: string;
+  tenantId?: string;
 }
 
 export function useAuth() {
@@ -47,12 +48,14 @@ export function useAuth() {
       const data = await res.json();
       if (data.authenticated) {
         setIsAuthenticated(true);
-        setUser(data.user || { username: 'admin' });
-        if (data.user?.tenantId) {
-          try {
-            localStorage.setItem('wanzt_tenant_id', data.user.tenantId);
-          } catch {}
-        }
+        const tenantId = data.user?.tenantId || 't_wanzt';
+        setUser({
+          username: data.user?.username || 'admin',
+          tenantId,
+        });
+        try {
+          localStorage.setItem('wanzt_tenant_id', tenantId);
+        } catch {}
       } else {
         setIsAuthenticated(false);
         setUser(null);
@@ -89,14 +92,16 @@ export function useAuth() {
 
       const data = await res.json();
       if (data.success && data.token) {
+        const tenantId = data.user?.tenantId || 't_wanzt';
         try {
           localStorage.setItem(TOKEN_KEY, data.token);
-          if (data.user?.tenantId) {
-            localStorage.setItem('wanzt_tenant_id', data.user.tenantId);
-          }
+          localStorage.setItem('wanzt_tenant_id', tenantId);
         } catch {}
         setToken(data.token);
-        setUser(data.user || { username: usernameInput.trim() });
+        setUser({
+          username: data.user?.username || usernameInput.trim(),
+          tenantId,
+        });
         setIsAuthenticated(true);
         return { success: true };
       }
