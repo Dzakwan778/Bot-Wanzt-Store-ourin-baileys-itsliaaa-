@@ -454,4 +454,106 @@ Rencana:
 Hasil yang Diharapkan:
 Tabel daftar penyewa di Dashboard Master Admin tampil modern, rapi, responsif, dan menyajikan kendali lengkap atas seluruh unit bot apartemen sesuai kebutuhan pengguna.
 
+---
+
+[12.0] - PENEGAKAN SUSPEND AKUN TENANT: PEMUTUSAN KONEKSI BOT WHATSAPP & MODAL PEMBERITAHUAN NON-DISMISSIBLE
+
+- Tanggal: 2026-11-03 16:50
+- Status: Completed
+
+
+Tujuan:
+Menerapkan sistem penegakan suspensi (akun dibekukan) secara menyeluruh:
+1. Ketika akun tenant disuspend oleh Master Admin di dashboard admin:
+   - Jika bot WhatsApp tenant sedang terhubung (Baileys socket online), server secara otomatis langsung memutus/mematikan koneksi bot (`forceDisconnect`), sehingga bot tidak dapat menerima atau merespon pesan WhatsApp sama sekali.
+2. Ketika penyewa (tenant) yang berstatus suspended melakukan login ke dashboard bot:
+   - Tenant tetap berhasil login dan masuk ke dashboard bot miliknya terlebih dahulu.
+   - Sesaat setelah masuk, sistem langsung menampilkan popup modal peringatan bahwa akun toko telah ditangguhkan (suspended) oleh Master Admin.
+   - Popup modal tersebut bersifat terkunci permanen (non-dismissible): tidak memiliki tombol close (X), tidak dapat ditutup dengan klik backdrop, dan tidak dapat ditutup dengan tombol Escape keyboard.
+   - Di dalam modal tersedia 2 tombol aksi:
+     * Tombol 1: "Hubungi Master Admin" yang mengarahkan langsung ke WhatsApp `https://wa.me/6285712439395`.
+     * Tombol 2: "Keluar / Logout" untuk keluar dari dashboard toko.
+3. Menyiapkan konfigurasi terpusat untuk nomor WhatsApp Master Admin agar mudah diganti sewaktu-waktu di kemudian hari.
+
+Rencana:
+1. Menyusun catatan teknis di `brain/LANGKAH_IMPLEMENTASI.md` (entri [31.0]).
+2. Menyimpan konfigurasi nomor WhatsApp Master Admin di file konfigurasi bersama (`constants/adminConfig.ts`).
+3. Menambahkan method pemutus koneksi bot (`forceDisconnect()`) di `backend/botManager.ts`.
+4. Memperbarui `admin-backend/services/tenantManager.ts` pada `setStatus` agar saat status `suspended`, bot WhatsApp tenant langsung dimatikan paksa.
+5. Memperbarui `backend/routes/authRoutes.ts` dan `backend/services/authManager.ts` agar mengizinkan login akun suspended namun menyertakan flag `accountStatus: 'suspended'` pada sesi dan endpoint `/api/auth/store-status`.
+6. Membuat komponen `SuspendedAccountModal.tsx` di `frontend/src/components/modals/SuspendedAccountModal.tsx`.
+7. Menghubungkan modal tersebut ke `frontend/src/components/dashboard/TenantDashboard.tsx`.
+8. Menguji kompilasi dan linting (`compile_applet`, `lint_applet`).
+9. Mencatat hasil akhir di `brain/PROGRESS.md`.
+
+Hasil yang Diharapkan:
+Akun yang disuspend tidak dapat menjalankan bot WhatsApp sama sekali, dan dashboard terkunci total dengan popup modal non-dismissible yang mengarahkan penyewa ke nomor WhatsApp Master Admin (+6285712439395).
+
+---
+
+[13.0] - PEMBUATAN AKUN TENANT INSTAN OTOMATIS & TOMBOL TUTUP SEMENTARA POPUP SUSPEND
+
+- Tanggal: 2026-11-03 17:05
+- Status: Completed
+
+
+Tujuan:
+1. Menyederhanakan pembuatan akun tenant baru di Dashboard Master Admin sehingga admin tidak wajib mengisi data Nama Store, Nama Owner, No WhatsApp Owner, Username, maupun Password:
+   - Sistem otomatis membuatkan ID Unit, Username acak terstruktur (misal: `tenant_8421` atau `toko_5823`), dan Password acak yang rapi.
+   - Kolom Nama Store, Nama Owner, dan No. WhatsApp dikosongkan di awal (atau admin bisa opsi isi cepat jika mau, namun tidak wajib).
+   - Setelah akun terbuat, tampilkan modal sukses berisi Username & Password yang digenerate dengan tombol salin (copy kredensial).
+   - Saat tenant login pertama kali dengan username & password tersebut, dashboard toko otomatis menampilkan popup modal wajib isi Store Info (`MandatoryStoreSetupModal`) untuk melengkapi Nama Toko, Nama Owner, dan Nomor WhatsApp.
+2. Menambahkan tombol "Tutup Sementara" atau tautan akses darurat pada Popup Modal Suspend (`SuspendedAccountModal`) agar admin/pengguna tetap dapat menutup modal sementara waktu untuk bernavigasi ke portal Master Admin atau keperluan darurat lainnya.
+
+Rencana:
+1. Catat rincian implementasi teknis di `brain/LANGKAH_IMPLEMENTASI.md` (entri [32.0]).
+2. Perbarui backend pembuatan tenant di `admin-backend/services/tenantManager.ts` & `admin-backend/routes/adminRoutes.ts` agar mendukung auto-generation username dan password acak terstruktur, serta mengizinkan field store_name, owner_name, owner_phone kosong di awal.
+3. Perbarui modal "Tambah Unit Apartemen Toko" di `admin-frontend/src/App.tsx` dengan mode otomatis 1-klik / form sederhana hanya memilih durasi masa sewa, dan dialog sukses kredensial baru dengan tombol salin.
+4. Perbarui `frontend/src/components/modals/SuspendedAccountModal.tsx` dengan menambahkan tombol "Tutup Sementara" (minimize / dismiss temporary) dan tombol pintas langsung ke Portal Master Admin (`/admin/`).
+5. Uji build dan linting (`compile_applet` dan `lint_applet`).
+6. Catat hasil akhir di `brain/PROGRESS.md`.
+
+Hasil yang Diharapkan:
+Admin dapat membuat akun unit toko baru dalam 1-klik tanpa repot memikirkan username, password, dan nama toko. Penyewa melengkapi profil toko secara mandiri saat login. Modal suspend dapat ditutup sementara jika admin ingin berpindah ke dashboard master.
+
+---
+
+[14.0] - IMPLEMENTASI HALAMAN KUSTOMISASI USERNAME & PASSWORD TENANT DARI FOTO PROFIL SIDEBAR
+
+- Tanggal: 2026-11-03 20:39
+- Status: Planned
+
+Tujuan:
+Menyediakan fitur mandiri bagi tenant untuk mengubah username dan password toko mereka sendiri dari dalam dashboard, dengan titik masuk (entry point) berupa klik pada foto/kartu profil di bagian bawah sidebar.
+
+Rencana:
+1. Merancang Endpoint Backend Baru di `/backend/routes/authRoutes.ts` & `/backend/services/authManager.ts`:
+   - Endpoint `POST /api/auth/profile/update-username`:
+     * Memvalidasi format username baru (minimal 3 karakter, alfanumerik/underscore).
+     * Memeriksa apakah username sudah dipakai oleh tenant lain (harus unik).
+     * Mengupdate username di `database/master.db` (tabel `tenants`) dan database tenant aktif (`bot.db`).
+     * Memperbarui username di objek sesi aktif (`activeSessions`).
+   - Endpoint `POST /api/auth/profile/update-password`:
+     * Menerima 3 input: `currentPassword`, `newPassword`, dan `confirmPassword`.
+     * Memvalidasi kesamaan `newPassword` dan `confirmPassword`.
+     * Memverifikasi kebenaran `currentPassword` terhadap hash password yang aktif saat ini. Jika salah, kirim respon error 400 "Password saat ini tidak valid!".
+     * Jika valid, hash `newPassword` baru dan simpan ke `master.db` serta database tenant aktif.
+2. Penyesuaian Antarmuka Frontend:
+   - Menambahkan tab baru `'Akun'` atau `'Keamanan Akun'` pada `TabContentRenderer.tsx` dan `dashboard.types.ts`.
+   - Mengubah area foto profil dan teks admin di footer `DesktopSidebar.tsx` menjadi elemen interaktif (tombol klik dengan hover state, efek tactile, dan tooltip petunjuk "Klik untuk ubah kredensial akun").
+   - Ketika diklik, state `selectedTab` berpindah ke tab `'Akun'`.
+   - Membuat komponen halaman `TabAccountSecurity.tsx`:
+     * Kartu 1: Form Ubah Username dengan preview username aktif dan tombol "Simpan Username".
+     * Kartu 2: Form Ubah Password dengan 3 form input (Password Saat Ini, Password Baru, Konfirmasi Password Baru) disertai toggle intip password (ikon mata) dan tombol "Ubah Password".
+3. Validasi & Pengujian:
+   - Tes verifikasi jika password saat ini salah.
+   - Tes verifikasi jika konfirmasi password baru tidak cocok.
+   - Tes perubahan username ke username unik dan penolakan jika duplikat.
+   - Pengujian kompilasi (`compile_applet`, `lint_applet`).
+
+Hasil yang Diharapkan:
+Tenant dapat dengan mudah dan aman mengkustomisasi username dan password toko mereka sendiri langsung melalui klik foto profil di sidebar bawah.
+
+
+
 

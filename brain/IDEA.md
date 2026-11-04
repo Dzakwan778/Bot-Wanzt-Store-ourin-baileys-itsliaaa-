@@ -1021,5 +1021,83 @@ Potensi Penerapan:
 Catatan Tambahan:
 - Karena proyek ini masih dalam fase pengembangan aktif (alpha/open-source), beberapa ekosistem plugin komunitas pihak ketiga masih terus bertumbuh dibandingkan platform mature seperti Figma.
 
+---
 
+[14.0] - ARSITEKTUR PEMISAHAN SUBDOMAIN DASHBOARD BOT (dashboard.example.com) DAN DASHBOARD MASTER (admin.example.com)
 
+- Tanggal: 2026-11-03 10:15
+- Sumber: Diskusi Kebutuhan Pengguna & Praktik Standar Reverse Proxy Web Architecture
+
+Informasi yang Dipelajari:
+1. Kebutuhan Pemisahan Akses Pengguna vs Master Admin:
+   - Dashboard Bot Tenant ditujukan untuk para pemilik toko/penyewa (tenant) pada domain publik, misalnya `dashboard.example.com`.
+   - Dashboard Master Admin ditujukan khusus untuk pemilik server (Super Admin) untuk mengelola seluruh gedung apartemen bot pada subdomain terproteksi, misalnya `admin.example.com`.
+   - Tombol pintas masuk ke "Dashboard Master" yang saat ini ada di dashboard tenant hanyalah alat bantu (shortcut) selama tahap pengembangan (development), dan wajib disembunyikan/dihapus pada mode produksi agar tenant tidak mengetahui atau mencoba mengakses antarmuka Master Admin.
+
+2. Opsi Arsitektur Pemisahan Subdomain:
+   A. Metode Reverse Proxy (Nginx / Caddy / Cloudflare) - Sangat Direkomendasikan untuk Production VPS:
+      - Satu proses backend Node.js (`server.ts`) berjalan di port internal (misal port 3000).
+      - Nginx / Caddy membaca Host Header dari request pengunjung:
+        - Jika Host = `admin.example.com`:
+          Arahkan request root `/` ke path `/admin/` di backend, dan izinkan rute API `/api/admin/*`.
+        - Jika Host = `dashboard.example.com`:
+          Arahkan request ke root `/` (frontend tenant), tetapi blokir secara ketat (`return 404` atau `return 403`) seluruh akses ke path `/admin` dan `/api/admin/*`.
+      - Keuntungan: Sangat aman karena lapisan isolasi terjadi di level web server (reverse proxy), sebelum paket request masuk ke aplikasi.
+
+   B. Metode Host-Based Routing di Express Middleware (`server.ts`):
+      - Di dalam file `server.ts`, pasang middleware pemeriksa `req.hostname`:
+        - Jika subdomain berawalan `admin.`, maka layani admin SPA di root `/` dan izinkan `/api/admin/*`.
+        - Jika subdomain berawalan `dashboard.` (atau domain tenant), tolak akses `/admin` dan `/api/admin/*` dengan status 404 Not Found.
+      - Keuntungan: Berjalan tanpa konfigurasi web server yang rumit, portabel di berbagai platform.
+
+3. Strategi Pengamanan Tombol Dev Master Admin:
+   - Tombol pintas pengembangan (seperti tombol "Dashboard Master" di modal suspended atau menu navigasi) dikontrol melalui environment variable `VITE_ENABLE_DEV_ADMIN_SHORTCUT=false` di file `.env` produksi.
+   - Atau menggunakan pengecekan otomatis `import.meta.env.DEV` (hanya aktif saat `npm run dev` di sandbox/localhost, dan otomatis hilang saat dibuild untuk production `npm run build`).
+
+Pemahaman:
+- Pemisahan domain tidak mengharuskan pemecahan project menjadi dua server terpisah yang rumit. Arsitektur unified monorepo saat ini dapat tetap dipertahankan dengan routing berbasis virtual host / reverse proxy.
+- Mengisolasi rute `/admin` dan `/api/admin/*` di level reverse proxy menjamin keamanan data master admin 100% dari rasa penasaran penyewa toko.
+
+Potensi Penerapan:
+1. Menyediakan dokumentasi konfigurasi Nginx dan Caddy siap pakai untuk pengguna.
+2. Mengamankan tombol shortcut Master Admin di frontend tenant dengan conditional flag `import.meta.env.DEV` atau flag konfigurasi.
+3. Menyiapkan middleware opsional di `server.ts` untuk mendeteksi `req.hostname`.
+
+Catatan Tambahan:
+- Pastikan sertifikat SSL (HTTPS) disediakan untuk kedua subdomain (`admin.example.com` dan `dashboard.example.com`) menggunakan Let's Encrypt / Certbot atau Cloudflare.
+
+---
+
+[15.0] - FITUR MANDIRI KUSTOMISASI KREDENSIAL TENANT (UBAH USERNAME & GANTI PASSWORD 3-FORM)
+
+- Tanggal: 2026-11-03 20:38
+- Sumber: Pengguna
+
+Informasi yang Dipelajari:
+1. Kebutuhan Tenant Mengubah Kredensial Sendiri:
+   - Saat ini akun tenant dibuatkan oleh Master Admin (atau sistem generate otomatis) dengan username dan password default yang statis.
+   - Tenant membutuhkan kebebasan dan privasi untuk mengkustomisasi username dan password mereka sendiri langsung dari dalam dashboard.
+2. Titik Masuk (Trigger / Entry Point):
+   - Terletak pada bagian footer navbar sidebar (bagian bawah), tepatnya pada area foto profil / avatar profil penyewa (sesuai lampiran tangkapan layar pengguna).
+   - Area avatar dan info profil tersebut harus interaktif (dapat diklik) dan mengarahkan tampilan ke halaman / tab "Kredensial Akun" (Keamanan & Akun).
+3. Spesifikasi Form yang Diminta:
+   - Form 1: Pengubahan Username (nama pengguna).
+   - Form 2: Pengubahan Password yang wajib memiliki 3 kolom input:
+     * Kolom 1: Password Saat Ini (Current Password) — wajib diverifikasi dengan kredensial aktif saat ini. Jika salah/tidak valid, permintaan ganti password ditolak.
+     * Kolom 2: Password Baru (New Password).
+     * Kolom 3: Konfirmasi Password Baru (Confirm New Password) — tenant harus mengetikkan password baru sebanyak 2 kali untuk memastikan tidak ada salah ketik.
+4. Keamanan dan Sinkronisasi Data:
+   - Pembaruan kredensial harus tersinkronisasi di SQLite master (`database/master.db` tabel `tenants`) dan database lokal tenant (`auth` / `tenants`).
+   - Sesi aktif pengguna di memori dan cookie/token perlu diperbarui agar sesi tetap valid dengan identitas baru.
+
+Pemahaman:
+- Pemisahan form username dan password memberikan fleksibilitas: tenant bisa hanya mengganti username tanpa harus mengganti password, atau mengganti password dengan verifikasi ketat password lama.
+- Verifikasi password lama mutlak diperlukan untuk mencegah pengubahan akun tanpa izin jika sesi browser ditinggalkan terbuka.
+
+Potensi Penerapan:
+1. Menambahkan endpoint backend aman `/api/auth/profile/update-username` dan `/api/auth/profile/update-password` (atau `/api/tenant/credentials`).
+2. Menghubungkan klik profil di `DesktopSidebar.tsx` ke tab baru (misalnya tab `'Akun'` atau `'Keamanan'`).
+3. Merancang komponen antarmuka form yang bersih, aman, responsif, dan bebas AI-slop.
+
+Catatan Tambahan:
+- Pastikan ada validasi kesamaan password baru dan konfirmasi password di frontend dan backend sebelum disimpan ke database.

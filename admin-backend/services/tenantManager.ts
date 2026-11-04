@@ -24,10 +24,10 @@ export interface TenantRecord {
 
 export interface CreateTenantInput {
   tenant_id?: string;
-  store_name: string;
-  owner_name: string;
-  owner_phone: string;
-  username: string;
+  store_name?: string;
+  owner_name?: string;
+  owner_phone?: string;
+  username?: string;
   password?: string;
   package_name?: string;
   duration_days?: number;
@@ -35,7 +35,12 @@ export interface CreateTenantInput {
   notes?: string;
 }
 
-export function normalizeIndonesianPhone(raw: string): string {
+export interface CreateTenantResult extends TenantRecord {
+  generated_username?: string;
+  generated_password?: string;
+}
+
+export function normalizeIndonesianPhone(raw?: string): string {
   if (!raw) return '';
   let digits = raw.replace(/\D/g, '');
   if (digits.startsWith('0')) {
@@ -49,11 +54,41 @@ export function normalizeIndonesianPhone(raw: string): string {
 }
 
 export class TenantManager {
-  private static cleanId(name: string): string {
-    const slug = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const random = Math.floor(100 + Math.random() * 900);
-    return `t_${slug || 'store'}_${random}`;
+  private static cleanId(name?: string): string {
+    const slug = (name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const random = Math.floor(1000 + Math.random() * 9000);
+    return `t_${slug || 'unit'}_${random}`;
   }
+
+  public static generateStructuredUsername(): string {
+    const db = getMasterDb();
+    let username = '';
+    let exists = true;
+    let attempts = 0;
+
+    while (exists && attempts < 20) {
+      attempts++;
+      // Format terstruktur: tenant_xxxx (4 digit angka)
+      const randomDigits = Math.floor(1000 + Math.random() * 9000);
+      username = `tenant_${randomDigits}`;
+      const row = db.prepare('SELECT id FROM tenants WHERE username = ?').get(username);
+      if (!row) {
+        exists = false;
+      }
+    }
+    return username || `tenant_${Date.now().toString().slice(-4)}`;
+  }
+
+  public static generateRandomPassword(): string {
+    // Format terstruktur yang rapi dan mudah dibaca: pass_xxxx
+    const chars = '23456789abcdefghjkmnpqrstuvwxyz';
+    let code = '';
+    for (let i = 0; i < 4; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return `pass_${code}`;
+  }
+
 
   static getAllTenants(): TenantRecord[] {
     const db = getMasterDb();
@@ -134,13 +169,19 @@ export class TenantManager {
     };
   }
 
-  static createTenant(input: CreateTenantInput): TenantRecord {
+  static createTenant(input: CreateTenantInput): CreateTenantResult {
     const db = getMasterDb();
-    const tenantId = input.tenant_id || this.cleanId(input.store_name);
-    const password = input.password || 'toko12345';
+    const rawUsername = input.username?.trim();
+    const username = rawUsername || this.generateStructuredUsername();
+    const rawPassword = input.password?.trim();
+    const password = rawPassword || this.generateRandomPassword();
     const passwordHash = hashPassword(password);
-    const duration = input.duration_days || 30;
+    const duration = input.duration_days || 365;
+
+    const storeName = input.store_name?.trim() || '';
+    const ownerName = input.owner_name?.trim() || '';
     const normalizedPhone = normalizeIndonesianPhone(input.owner_phone);
+    const tenantId = input.tenant_id || this.cleanId(storeName || username);
 
     const createdAt = new Date();
     const expiresAt = new Date();
@@ -153,17 +194,17 @@ export class TenantManager {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       tenantId,
-      input.store_name,
-      input.owner_name,
+      storeName,
+      ownerName,
       normalizedPhone,
-      input.username,
+      username,
       passwordHash,
       'Akses Penuh',
       'active',
       input.max_groups || 50,
       createdAt.toISOString(),
       expiresAt.toISOString(),
-      input.notes || `Unit bot toko untuk ${input.store_name}`
+      input.notes || (storeName ? `Unit bot toko untuk ${storeName}` : `Unit bot tenant baru (${username})`)
     );
 
     // 2. Inisialisasi Database mandiri untuk tenant baru
@@ -175,8 +216,14 @@ export class TenantManager {
       fs.mkdirSync(authFolder, { recursive: true });
     }
 
-    return this.getTenant(tenantId)!;
+    const tenantRecord = this.getTenant(tenantId)!;
+    return {
+      ...tenantRecord,
+      generated_username: username,
+      generated_password: password,
+    };
   }
+
 
   static extendDuration(tenantId: string, days: number, note?: string): TenantRecord {
     const db = getMasterDb();
@@ -211,6 +258,20 @@ export class TenantManager {
       SET status = ?
       WHERE tenant_id = ?
     `).run(status, tenantId);
+
+    // Jika disuspend, putuskan koneksi bot WhatsApp secara paksa
+    if (status === 'suspended') {
+      try {
+        const bot = getBotManager(tenantId);
+        if (bot) {
+          bot.forceDisconnect().catch((err: any) => {
+            console.error(`Gagal memutuskan koneksi bot tenant ${tenantId} saat suspend:`, err);
+          });
+        }
+      } catch (err: any) {
+        console.error(`Error mencari botManager tenant ${tenantId}:`, err);
+      }
+    }
 
     return this.getTenant(tenantId)!;
   }
@@ -275,5 +336,29 @@ export class TenantManager {
       suspendedTenants,
       serverTime: new Date().toISOString(),
     };
+  }
+
+  /**
+   * Menyinkronkan pembaruan identitas toko (Nama Toko, Nama Owner, No. WhatsApp)
+   * dari pengisian tenant ke tabel tenants di database master (master.db)
+   */
+  static updateStoreInfo(tenantId: string, storeName: string, ownerName: string, ownerPhone: string): boolean {
+    try {
+      const db = getMasterDb();
+      const result = db.prepare(`
+        UPDATE tenants
+        SET store_name = ?, owner_name = ?, owner_phone = ?
+        WHERE tenant_id = ?
+      `).run(
+        storeName ? storeName.trim() : '',
+        ownerName ? ownerName.trim() : '',
+        ownerPhone ? ownerPhone.trim() : '',
+        tenantId
+      );
+      return result.changes > 0;
+    } catch (err: any) {
+      console.error(`Gagal menyinkronkan store_info ke master.db untuk tenant ${tenantId}:`, err);
+      return false;
+    }
   }
 }

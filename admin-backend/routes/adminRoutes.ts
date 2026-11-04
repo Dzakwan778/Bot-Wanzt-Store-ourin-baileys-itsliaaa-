@@ -71,29 +71,31 @@ adminRouter.get('/tenants', (_req: Request, res: Response) => {
   }
 });
 
-// 4. Buat Tenant Baru
+// 4. Buat Tenant Baru (Mendukung pembuatan otomatis tanpa wajib isi profil toko)
 adminRouter.post('/tenants', (req: Request, res: Response) => {
   try {
-    const { store_name, owner_name, owner_phone, username, password, duration_days, notes } = req.body;
-    if (!store_name || !owner_name || !owner_phone || !username) {
-      return res.status(400).json({ success: false, message: 'Nama toko, pemilik, nomor WA, dan username wajib diisi' });
-    }
+    const { store_name, owner_name, owner_phone, username, password, duration_days, notes } = req.body || {};
 
     const newTenant = TenantManager.createTenant({
-      store_name,
-      owner_name,
-      owner_phone,
-      username,
-      password,
-      duration_days: parseInt(duration_days || '30', 10),
-      notes,
+      store_name: store_name ? String(store_name).trim() : '',
+      owner_name: owner_name ? String(owner_name).trim() : '',
+      owner_phone: owner_phone ? String(owner_phone).trim() : '',
+      username: username ? String(username).trim() : undefined,
+      password: password ? String(password).trim() : undefined,
+      duration_days: parseInt(duration_days || '365', 10),
+      notes: notes ? String(notes).trim() : undefined,
     });
 
-    res.json({ success: true, message: 'Unit tenant berhasil dibuat', data: newTenant });
+    res.json({
+      success: true,
+      message: 'Unit tenant berhasil dibuat',
+      data: newTenant,
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
+
 
 // 5. Perpanjang Durasi Sewa Tenant
 adminRouter.post('/tenants/:id/extend', (req: Request, res: Response) => {

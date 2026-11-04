@@ -16,6 +16,7 @@ import { usePromos } from '../../hooks/usePromos';
 // Modals
 import { MandatoryStoreSetupModal } from '../modals/MandatoryStoreSetupModal';
 import { AddEditButtonModal } from '../modals/AddEditButtonModal';
+import { SuspendedAccountModal } from '../modals/SuspendedAccountModal';
 
 // Layout components
 import { DesktopSidebar } from '../layout/DesktopSidebar';
@@ -24,12 +25,14 @@ import { DesktopTopNav } from '../layout/DesktopTopNav';
 // Tab Renderer component
 import { TabContentRenderer } from '../tabs/TabContentRenderer';
 
+
 interface TenantDashboardProps {
   auth: {
     token: string | null;
     user: UserSession | null;
     isAuthenticated: boolean | null;
     logout: () => Promise<void>;
+    updateUsernameState?: (newUsername: string) => void;
   };
 }
 
@@ -68,11 +71,20 @@ export function TenantDashboard({ auth }: TenantDashboardProps) {
     }
   );
 
+  const [accountStatus, setAccountStatus] = useState<'active' | 'suspended' | 'expired'>(() => {
+    return auth.user?.accountStatus || 'active';
+  });
+  const [isSuspendModalDismissed, setIsSuspendModalDismissed] = useState<boolean>(false);
+
+
   // Ambil store info awal tenant secara langsung saat mount
   useEffect(() => {
     fetch('/api/auth/store-status')
       .then((res) => res.json())
       .then((data) => {
+        if (data.accountStatus) {
+          setAccountStatus(data.accountStatus);
+        }
         if (data.storeInfo && (data.storeInfo.storeName || data.storeInfo.ownerName)) {
           storeConfig.setStoreInfo((prev) => ({
             ...prev,
@@ -82,6 +94,7 @@ export function TenantDashboard({ auth }: TenantDashboardProps) {
       })
       .catch(() => {});
   }, []);
+
 
   // 5. Whitelist Grup WhatsApp
   const groupsData = useWhatsAppGroups(selectedTab, botConn.botData.status, showToast);
@@ -173,6 +186,12 @@ export function TenantDashboard({ auth }: TenantDashboardProps) {
               promosState={promosState}
               lunasQrisData={lunasQrisData}
               showToast={showToast}
+              currentUsername={auth.user?.username}
+              onUsernameUpdated={(newUsername) => {
+                if (auth.updateUsernameState) {
+                  auth.updateUsernameState(newUsername);
+                }
+              }}
             />
           </div>
         </main>
@@ -209,7 +228,7 @@ export function TenantDashboard({ auth }: TenantDashboardProps) {
         />
 
         {/* Pop-up Modal Wajib Isi Store Info (Non-dismissible) */}
-        {!isStoreInfoComplete && (
+        {!isStoreInfoComplete && accountStatus !== 'suspended' && (
           <MandatoryStoreSetupModal
             initialStoreInfo={storeConfig.storeInfo}
             onSuccess={(updated) => {
@@ -218,6 +237,18 @@ export function TenantDashboard({ auth }: TenantDashboardProps) {
             }}
           />
         )}
+
+        {/* Pop-up Modal Pemberitahuan Akun Ditangguhkan / Suspended (dengan opsi tutup sementara) */}
+        {accountStatus === 'suspended' && !isSuspendModalDismissed && (
+          <SuspendedAccountModal
+            storeName={storeConfig.storeInfo?.storeName || displayStoreName}
+            tenantUsername={auth.user?.username}
+            onLogout={auth.logout}
+            onCloseTemporary={() => setIsSuspendModalDismissed(true)}
+          />
+        )}
+
+
 
         {/* Footer */}
         <footer className="bg-white border-t border-slate-200 py-3.5 px-6 text-xs text-slate-500">

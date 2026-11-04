@@ -12,6 +12,8 @@ import {
   ApiConfig,
   PricingConfig,
 } from '../types/bot.types.ts';
+import { getActiveTenantId } from '../database/tenantContext.ts';
+import { TenantManager } from '../../admin-backend/services/tenantManager.ts';
 
 function resolveDbDir(): string {
   const localDb = path.join(process.cwd(), 'database');
@@ -180,6 +182,21 @@ export function saveStoreInfo(update: Partial<StoreInfoConfig>): StoreInfoConfig
     );
   } catch (err) {
     console.error('Gagal menyimpan store_info ke SQLite:', err);
+  }
+
+  // Sinkronkan pembaruan identitas toko secara otomatis ke master.db
+  try {
+    const tenantId = getActiveTenantId();
+    if (tenantId) {
+      TenantManager.updateStoreInfo(
+        tenantId,
+        merged.storeName || '',
+        merged.ownerName || '',
+        merged.ownerNumber || ''
+      );
+    }
+  } catch (syncErr) {
+    console.error('Gagal menyinkronkan store_info ke master.db:', syncErr);
   }
 
   return merged;

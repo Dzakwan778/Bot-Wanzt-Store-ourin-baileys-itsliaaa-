@@ -73,15 +73,24 @@ export default function App() {
   const [copiedPassword, setCopiedPassword] = useState<boolean>(false);
 
   // Form New Tenant
+  const [creationMode, setCreationMode] = useState<'auto' | 'custom'>('auto');
   const [newStoreName, setNewStoreName] = useState<string>('');
   const [newOwnerName, setNewOwnerName] = useState<string>('');
   const [newOwnerPhone, setNewOwnerPhone] = useState<string>('');
   const [newUsername, setNewUsername] = useState<string>('');
   const [newPassword, setNewPassword] = useState<string>('');
-  const [newDuration, setNewDuration] = useState<number>(30);
+  const [newDuration, setNewDuration] = useState<number>(365);
   const [newNotes, setNewNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [sortBy, setSortBy] = useState<'duration_desc' | 'duration_asc' | 'newest'>('duration_desc');
+  const [createdTenantResult, setCreatedTenantResult] = useState<{
+    username: string;
+    password?: string;
+    tenant_id: string;
+    store_name?: string;
+    duration_days?: number;
+  } | null>(null);
+  const [copiedNewTenant, setCopiedNewTenant] = useState<boolean>(false);
 
   // Form Extend
   const [extendDays, setExtendDays] = useState<number>(30);
@@ -121,38 +130,47 @@ export default function App() {
 
   const handleCreateTenant = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newStoreName || !newOwnerName || !newOwnerPhone || !newUsername) {
-      showToast('Harap lengkapi semua data wajib!');
-      return;
-    }
 
     setIsSubmitting(true);
     try {
+      const payload: any = {
+        duration_days: newDuration,
+        notes: newNotes,
+      };
+
+      if (creationMode === 'custom') {
+        if (newStoreName.trim()) payload.store_name = newStoreName.trim();
+        if (newOwnerName.trim()) payload.owner_name = newOwnerName.trim();
+        if (newOwnerPhone.trim()) payload.owner_phone = formatIndonesianPhone(newOwnerPhone).cleanDigits;
+        if (newUsername.trim()) payload.username = newUsername.trim();
+        if (newPassword.trim()) payload.password = newPassword.trim();
+      }
+
       const res = await fetch('/api/admin/tenants', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          store_name: newStoreName,
-          owner_name: newOwnerName,
-          owner_phone: formatIndonesianPhone(newOwnerPhone).cleanDigits,
-          username: newUsername,
-          password: newPassword || 'toko12345',
-          duration_days: newDuration,
-          notes: newNotes,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
-      if (data.success) {
-        showToast(`Unit toko "${newStoreName}" berhasil didaftarkan!`);
-        setIsAddModalOpen(false);
-        // Reset form
+      if (data.success && data.data) {
+        const result = data.data;
+        setCreatedTenantResult({
+          username: result.generated_username || result.username,
+          password: result.generated_password || newPassword || 'toko12345',
+          tenant_id: result.tenant_id,
+          store_name: result.store_name || 'Toko Baru (Belum Diisi)',
+          duration_days: newDuration,
+        });
+        showToast('Unit tenant baru berhasil dibuat!');
+        // Reset form inputs
         setNewStoreName('');
         setNewOwnerName('');
         setNewOwnerPhone('');
         setNewUsername('');
         setNewPassword('');
         setNewNotes('');
+        setCopiedNewTenant(false);
         fetchData();
       } else {
         showToast(data.message || 'Gagal mendaftarkan unit');
@@ -163,6 +181,7 @@ export default function App() {
       setIsSubmitting(false);
     }
   };
+
 
   const handleExtendDuration = async () => {
     if (!selectedTenant) return;
@@ -649,7 +668,13 @@ export default function App() {
                         {/* 3. Toko */}
                         <td className="py-3.5 px-3.5 whitespace-nowrap">
                           <div className="flex items-center gap-1.5 font-semibold text-white">
-                            <span>{tenant.store_name}</span>
+                            <span>
+                              {tenant.store_name ? (
+                                tenant.store_name
+                              ) : (
+                                <span className="text-slate-500 italic font-normal text-[11px]">Belum diisi tenant</span>
+                              )}
+                            </span>
                             <button
                               type="button"
                               onClick={() => handleImpersonate(tenant)}
@@ -663,12 +688,21 @@ export default function App() {
 
                         {/* 4. Owner */}
                         <td className="py-3.5 px-3.5 whitespace-nowrap">
-                          <span className="text-slate-200 font-medium">{tenant.owner_name}</span>
+                          <span className="text-slate-200 font-medium">
+                            {tenant.owner_name ? (
+                              tenant.owner_name
+                            ) : (
+                              <span className="text-slate-500 italic font-normal text-[11px]">-</span>
+                            )}
+                          </span>
                         </td>
 
                         {/* 5. No. WhatsApp */}
                         <td className="py-3.5 px-3.5 whitespace-nowrap">
                           {(() => {
+                            if (!tenant.owner_phone || !tenant.owner_phone.trim()) {
+                              return <span className="text-slate-500 italic font-normal text-[11px]">-</span>;
+                            }
                             const phone = formatIndonesianPhone(tenant.owner_phone);
                             return (
                               <a
@@ -829,133 +863,255 @@ export default function App() {
       {/* Modal: Tambah Tenant Baru */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-5">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2.5">
                 <Building2 className="w-5 h-5 text-indigo-400" />
-                <h3 className="text-base font-bold text-white">Tambah Unit Apartemen Toko</h3>
+                <h3 className="text-base font-bold text-white">
+                  {createdTenantResult ? 'Akun Tenant Berhasil Dibuat' : 'Tambah Unit Apartemen Toko'}
+                </h3>
               </div>
               <button
-                onClick={() => setIsAddModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg"
+                type="button"
+                onClick={() => {
+                  setIsAddModalOpen(false);
+                  setCreatedTenantResult(null);
+                }}
+                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer transition-colors"
               >
                 <XCircle className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateTenant} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {createdTenantResult ? (
+              /* Tampilan Sukses Kredensial Baru */
+              <div className="space-y-4 text-xs">
+                <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/25 space-y-3">
+                  <div className="flex items-center gap-2 text-emerald-400 font-semibold text-xs">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>Unit Berhasil Terdaftar (Akses Penuh)</span>
+                  </div>
+                  <p className="text-slate-300 text-[11px] leading-relaxed">
+                    Data Nama Store, Nama Owner, dan Nomor WhatsApp dikosongkan terlebih dahulu. Saat penyewa login pertama kali, popup wajib isi profil toko akan muncul otomatis di dashboard mereka.
+                  </p>
+
+                  <div className="p-3 bg-slate-950 rounded-xl border border-slate-700/80 space-y-2 font-mono">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-400">ID Unit:</span>
+                      <span className="text-indigo-400 font-bold">{createdTenantResult.tenant_id}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-400">Username:</span>
+                      <span className="text-white font-bold bg-slate-800 px-2 py-0.5 rounded">{createdTenantResult.username}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-400">Password:</span>
+                      <span className="text-amber-300 font-bold bg-slate-800 px-2 py-0.5 rounded">{createdTenantResult.password}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-400">Masa Sewa:</span>
+                      <span className="text-emerald-400 font-bold">{createdTenantResult.duration_days} Hari</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const textToCopy = `Kredensial Akses Bot WhatsApp Store:\nUsername: ${createdTenantResult.username}\nPassword: ${createdTenantResult.password}\nDurasi: ${createdTenantResult.duration_days} Hari\nSilakan login dan lengkapi profil toko Anda.`;
+                      navigator.clipboard.writeText(textToCopy);
+                      setCopiedNewTenant(true);
+                      showToast('Kredensial berhasil disalin ke clipboard!');
+                      setTimeout(() => setCopiedNewTenant(false), 3000);
+                    }}
+                    className="flex-1 py-2.5 px-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl transition-all shadow-md inline-flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    {copiedNewTenant ? (
+                      <>
+                        <Check className="w-4 h-4 text-white" />
+                        <span>Kredensial Tersalin!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4 text-white" />
+                        <span>Salin Kredensial untuk Tenant</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddModalOpen(false);
+                      setCreatedTenantResult(null);
+                    }}
+                    className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-semibold rounded-xl transition-colors cursor-pointer"
+                  >
+                    Tutup
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Form Pembuatan Tenant */
+              <form onSubmit={handleCreateTenant} className="space-y-4 text-xs">
+                {/* Switcher Mode: Otomatis Instan vs Kustom */}
+                <div className="flex items-center p-1 bg-slate-800/80 rounded-xl border border-slate-700">
+                  <button
+                    type="button"
+                    onClick={() => setCreationMode('auto')}
+                    className={`flex-1 py-2 text-center rounded-lg font-semibold transition-all cursor-pointer ${
+                      creationMode === 'auto'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    ⚡ Otomatis Instan (Rekomendasi)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCreationMode('custom')}
+                    className={`flex-1 py-2 text-center rounded-lg font-semibold transition-all cursor-pointer ${
+                      creationMode === 'custom'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    ✍️ Input Manual (Kustom)
+                  </button>
+                </div>
+
+                {creationMode === 'auto' ? (
+                  /* Mode Otomatis Instan */
+                  <div className="p-3.5 rounded-xl bg-slate-800/50 border border-slate-700/60 space-y-2.5">
+                    <div className="flex items-start gap-2.5 text-slate-300">
+                      <Sparkles className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      <div className="text-[11px] leading-relaxed">
+                        <p className="font-semibold text-white">Sistem Otomatis:</p>
+                        <ul className="list-disc list-inside space-y-0.5 text-slate-400 mt-1">
+                          <li>Username acak terstruktur akan dibuat otomatis (misal: <code className="text-indigo-300 font-mono">tenant_4829</code>).</li>
+                          <li>Password acak aman akan dibuat otomatis (misal: <code className="text-amber-300 font-mono">pass_k72x</code>).</li>
+                          <li>Nama Toko, Nama Owner, dan Nomor WhatsApp dikosongkan agar diisi mandiri oleh tenant via popup modal saat pertama kali login.</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* Mode Input Kustom */
+                  <div className="space-y-3 p-3.5 rounded-xl bg-slate-800/40 border border-slate-700/60">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-slate-400 mb-1 font-medium">Nama Toko (Opsional)</label>
+                        <input
+                          type="text"
+                          value={newStoreName}
+                          onChange={(e) => setNewStoreName(e.target.value)}
+                          placeholder="Kosongkan jika diisi penyewa"
+                          className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-400 mb-1 font-medium">Nama Pemilik (Opsional)</label>
+                        <input
+                          type="text"
+                          value={newOwnerName}
+                          onChange={(e) => setNewOwnerName(e.target.value)}
+                          placeholder="Kosongkan jika diisi penyewa"
+                          className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-medium">No. WhatsApp Pemilik (Opsional)</label>
+                      <input
+                        type="text"
+                        value={newOwnerPhone}
+                        onChange={(e) => setNewOwnerPhone(e.target.value.replace(/[^0-9]/g, ''))}
+                        placeholder="08123456789 (Kosongkan jika diisi penyewa)"
+                        className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-slate-400 mb-1 font-medium">Username Login (Opsional)</label>
+                        <input
+                          type="text"
+                          value={newUsername}
+                          onChange={(e) => setNewUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                          placeholder="Kosongkan untuk auto-generate"
+                          className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-400 mb-1 font-medium">Password Awal (Opsional)</label>
+                        <input
+                          type="text"
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          placeholder="Kosongkan untuk auto-generate"
+                          className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div>
-                  <label className="block text-slate-400 mb-1 font-medium">Nama Toko *</label>
-                  <input
-                    type="text"
-                    required
-                    value={newStoreName}
-                    onChange={(e) => setNewStoreName(e.target.value)}
-                    placeholder="Contoh: Berkah Store"
-                    className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  <label className="block text-slate-400 mb-1.5 font-medium">Pilih Masa Sewa Awal *</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[30, 60, 90, 365].map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setNewDuration(d)}
+                        className={`py-2 text-center rounded-xl font-semibold border transition-all cursor-pointer ${
+                          newDuration === d
+                            ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500 shadow-2xs'
+                            : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                        }`}
+                      >
+                        {d === 365 ? '1 Tahun' : `${d} Hari`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1 font-medium">Catatan Sewa (Opsional)</label>
+                  <textarea
+                    value={newNotes}
+                    onChange={(e) => setNewNotes(e.target.value)}
+                    placeholder="Catatan pengelola..."
+                    rows={2}
+                    className="w-full bg-slate-800/80 border border-slate-700 rounded-xl p-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
-                <div>
-                  <label className="block text-slate-400 mb-1 font-medium">Nama Pemilik *</label>
-                  <input
-                    type="text"
-                    required
-                    value={newOwnerName}
-                    onChange={(e) => setNewOwnerName(e.target.value)}
-                    placeholder="Nama lengkap owner"
-                    className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                  />
+
+                <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddModalOpen(false)}
+                    className="px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="px-5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-all shadow-md shadow-indigo-600/20 disabled:opacity-50 cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                    <span>{isSubmitting ? 'Membuat Unit...' : 'Buat Akun Unit Baru'}</span>
+                  </button>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-400 mb-1 font-medium">No. WhatsApp Pemilik *</label>
-                <input
-                  type="text"
-                  required
-                  value={newOwnerPhone}
-                  onChange={(e) => setNewOwnerPhone(e.target.value.replace(/[^0-9]/g, ''))}
-                  placeholder="628123456789"
-                  className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-400 mb-1 font-medium">Username Login *</label>
-                  <input
-                    type="text"
-                    required
-                    value={newUsername}
-                    onChange={(e) => setNewUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
-                    placeholder="username_toko"
-                    className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-400 mb-1 font-medium">Password Awal</label>
-                  <input
-                    type="text"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Default: toko12345"
-                    className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-400 mb-1 font-medium">Durasi Sewa Awal</label>
-                <div className="grid grid-cols-4 gap-2">
-                  {[30, 60, 90, 365].map((d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => setNewDuration(d)}
-                      className={`py-2 text-center rounded-xl font-semibold border transition-all ${
-                        newDuration === d
-                          ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500'
-                          : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
-                      }`}
-                    >
-                      {d === 365 ? '1 Tahun' : `${d} Hari`}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-400 mb-1 font-medium">Catatan Sewa (Opsional)</label>
-                <textarea
-                  value={newNotes}
-                  onChange={(e) => setNewNotes(e.target.value)}
-                  placeholder="Catatan internal pengelola apartemen..."
-                  rows={2}
-                  className="w-full bg-slate-800/80 border border-slate-700 rounded-xl p-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-all shadow-md shadow-indigo-600/20 disabled:opacity-50"
-                >
-                  {isSubmitting ? 'Mendaftarkan...' : 'Daftarkan Unit Toko'}
-                </button>
-              </div>
-            </form>
+              </form>
+            )}
           </div>
         </div>
       )}
+
 
       {/* Modal: Perpanjang Sewa */}
       {isExtendModalOpen && selectedTenant && (
