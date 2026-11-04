@@ -77,7 +77,9 @@ export interface AuthVerificationResult {
   success: boolean;
   username: string;
   tenantId?: string;
+  accountStatus?: 'active' | 'suspended' | 'expired';
 }
+
 
 /**
  * Verifikasi login dengan perbandingan waktu konstan (constant-time comparison)
@@ -111,15 +113,18 @@ export function verifyLogin(usernameInput: string, passwordInput: string): AuthV
       `).get(trimmedInputUser) as any;
 
       if (masterTenant && masterTenant.password_hash) {
-        if (masterTenant.status === 'suspended') {
-          return false;
-        }
         const masterHash = hashMasterPassword(passwordInput);
         if (masterHash === masterTenant.password_hash) {
-          return { success: true, username: masterTenant.username, tenantId: masterTenant.tenant_id };
+          return {
+            success: true,
+            username: masterTenant.username,
+            tenantId: masterTenant.tenant_id,
+            accountStatus: masterTenant.status || 'active',
+          };
         }
       }
     } catch {}
+
 
     // 3. Verifikasi Tenant di database lokal (jika ada unit terdaftar di tabel tenants bot.db)
     try {
@@ -130,18 +135,21 @@ export function verifyLogin(usernameInput: string, passwordInput: string): AuthV
       `).get(trimmedInputUser) as any;
 
       if (localTenant && localTenant.password_hash && localTenant.salt) {
-        if (localTenant.status === 'suspended') {
-          return false;
-        }
         const tenantHash = crypto.pbkdf2Sync(passwordInput, localTenant.salt, 100000, 64, 'sha512').toString('hex');
         const hashBuffer = Buffer.from(localTenant.password_hash, 'hex');
         const inputBuffer = Buffer.from(tenantHash, 'hex');
 
         if (hashBuffer.length === inputBuffer.length && crypto.timingSafeEqual(hashBuffer, inputBuffer)) {
-          return { success: true, username: localTenant.username, tenantId: localTenant.id };
+          return {
+            success: true,
+            username: localTenant.username,
+            tenantId: localTenant.id,
+            accountStatus: localTenant.status || 'active',
+          };
         }
       }
     } catch {}
+
 
     return false;
   } catch (err) {

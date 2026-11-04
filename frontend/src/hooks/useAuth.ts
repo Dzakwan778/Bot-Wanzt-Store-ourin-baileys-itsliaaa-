@@ -5,6 +5,7 @@ const TOKEN_KEY = 'wanzt_bot_auth_token';
 export interface UserSession {
   username: string;
   tenantId?: string;
+  accountStatus?: 'active' | 'suspended' | 'expired';
 }
 
 export function useAuth() {
@@ -49,9 +50,11 @@ export function useAuth() {
       if (data.authenticated) {
         setIsAuthenticated(true);
         const tenantId = data.user?.tenantId || 't_wanzt';
+        const accountStatus = data.user?.accountStatus || 'active';
         setUser({
           username: data.user?.username || 'admin',
           tenantId,
+          accountStatus,
         });
         try {
           localStorage.setItem('wanzt_tenant_id', tenantId);
@@ -93,6 +96,7 @@ export function useAuth() {
       const data = await res.json();
       if (data.success && data.token) {
         const tenantId = data.user?.tenantId || 't_wanzt';
+        const accountStatus = data.user?.accountStatus || 'active';
         try {
           localStorage.setItem(TOKEN_KEY, data.token);
           localStorage.setItem('wanzt_tenant_id', tenantId);
@@ -101,10 +105,12 @@ export function useAuth() {
         setUser({
           username: data.user?.username || usernameInput.trim(),
           tenantId,
+          accountStatus,
         });
         setIsAuthenticated(true);
         return { success: true };
       }
+
 
       return {
         success: false,

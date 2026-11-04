@@ -27,6 +27,7 @@ authRouter.post('/login', (req: Request, res: Response) => {
     }
     const resolvedUsername = authResult.username || username;
     const resolvedTenantId = authResult.tenantId || 't_wanzt';
+    const accountStatus = authResult.accountStatus || 'active';
     const token = createSession(resolvedUsername, resolvedTenantId);
 
     // Set cookie untuk memastikan request selanjutnya otomatis teridentifikasi tenant-nya
@@ -36,7 +37,7 @@ authRouter.post('/login', (req: Request, res: Response) => {
     return res.json({
       success: true,
       token,
-      user: { username: resolvedUsername, tenantId: resolvedTenantId },
+      user: { username: resolvedUsername, tenantId: resolvedTenantId, accountStatus },
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err?.message || 'Server error' });
@@ -54,8 +55,9 @@ authRouter.get('/session', (req: Request, res: Response) => {
     if (imp && Date.now() < imp.expiresAt) {
       const tenant = TenantManager.getTenant(imp.tenantId);
       const username = tenant?.username || `Tenant-${imp.tenantId}`;
+      const accountStatus = tenant?.status || 'active';
       res.cookie('tenant_id', imp.tenantId, { path: '/', httpOnly: false, maxAge: 7 * 24 * 3600 * 1000 });
-      return res.json({ authenticated: true, user: { username, tenantId: imp.tenantId } });
+      return res.json({ authenticated: true, user: { username, tenantId: imp.tenantId, accountStatus } });
     } else if (imp) {
       impersonationTokens.delete(token);
     }
@@ -64,8 +66,10 @@ authRouter.get('/session', (req: Request, res: Response) => {
   // B. Cek sesi reguler pengguna / tenant
   const session = getSession(token);
   if (session) {
+    const tenant = TenantManager.getTenant(session.tenantId);
+    const accountStatus = tenant?.status || 'active';
     res.cookie('tenant_id', session.tenantId, { path: '/', httpOnly: false, maxAge: 7 * 24 * 3600 * 1000 });
-    return res.json({ authenticated: true, user: { username: session.username, tenantId: session.tenantId } });
+    return res.json({ authenticated: true, user: { username: session.username, tenantId: session.tenantId, accountStatus } });
   }
 
   return res.json({ authenticated: false, user: null });
@@ -82,15 +86,22 @@ authRouter.post('/logout', (req: Request, res: Response) => {
 });
 
 // 4. Cek Kelengkapan Data Store Info Wajib (GET /api/auth/store-status)
-authRouter.get('/store-status', (_req: Request, res: Response) => {
+authRouter.get('/store-status', (req: Request, res: Response) => {
   const currentInfo = loadStoreInfo();
   const isComplete = Boolean(
     currentInfo.storeName && currentInfo.storeName.trim() &&
     currentInfo.ownerName && currentInfo.ownerName.trim() &&
     currentInfo.ownerNumber && currentInfo.ownerNumber.trim()
   );
-  return res.json({ complete: isComplete, storeInfo: currentInfo });
+
+  // Ambil juga status akun tenant aktif dari master.db
+  const tenantId = (req as any).tenantId || req.cookies?.tenant_id || 't_wanzt';
+  const tenant = TenantManager.getTenant(tenantId);
+  const accountStatus = tenant?.status || 'active';
+
+  return res.json({ complete: isComplete, storeInfo: currentInfo, accountStatus, tenantId });
 });
+
 
 // 5. Setup Wajib Data Store Info (POST /api/auth/store-setup)
 authRouter.post('/store-setup', (req: Request, res: Response) => {

@@ -1034,3 +1034,189 @@ Rencana Pengujian:
 Hasil yang Diharapkan:
 Seluruh nomor WhatsApp pada tabel master admin tampil rapi dengan awalan `+628...` dan tautan WhatsApp berfungsi sempurna.
 
+---
+
+[31.0] - PENEGAKAN SUSPEND: PEMUTUSAN KONEKSI BOT WHATSAPP & MODAL PEMBERITAHUAN NON-DISMISSIBLE
+
+- Tanggal: 2026-11-03 16:51
+- Status: Completed
+Referensi SCHEDULE: 12.0
+
+
+Tujuan Implementasi:
+1. Menerapkan pemutusan koneksi paksa bot WhatsApp (`forceDisconnect`) saat Master Admin mengubah status akun tenant menjadi `suspended`. Jika bot sedang berstatus `connected` / socket aktif, socket langsung ditutup sehingga bot berhenti menerima dan merespons seluruh pesan di WhatsApp.
+2. Mengizinkan tenant suspended untuk tetap login dan masuk ke dashboard toko miliknya, namun dashboard langsung mengunci layar dengan popup modal pemberitahuan non-dismissible (tidak ada tombol close X, tidak bisa ditutup klik backdrop, tidak bisa ditutup Escape).
+3. Di dalam popup modal, sediakan 2 tombol aksi:
+   - Tombol 1: "Hubungi Master Admin" dengan tautan ke WhatsApp `https://wa.me/6285712439395`.
+   - Tombol 2: "Keluar / Logout" untuk keluar dari sesi akun.
+4. Membuat file konfigurasi nomor WhatsApp Master Admin terpusat (`frontend/src/config/adminContact.ts` dan backend) agar pemilik dapat dengan mudah mengganti nomor telepon Master Admin sewaktu-waktu di satu tempat tanpa perlu mengedit komponen kode lainnya.
+
+Bagian yang Akan Diubah/Dibuat:
+- "frontend/src/config/adminContact.ts" - File konfigurasi terpusat nomor WhatsApp Master Admin (default: 085712439395).
+- "backend/botManager.ts" - Menambahkan method `forceDisconnect()` pada class `BotManager`.
+- "admin-backend/services/tenantManager.ts" - Pada method `setStatus`, saat status diubah menjadi `suspended`, panggil `forceDisconnect()` pada bot manager tenant terkait.
+- "backend/services/authManager.ts" - Perbarui `verifyLogin()` agar akun berstatus `suspended` tetap dapat login, namun mengembalikan status akun `accountStatus: 'suspended'`.
+- "backend/routes/authRoutes.ts" - Perbarui endpoint `/api/auth/login`, `/api/auth/session`, dan `/api/auth/store-status` agar menyertakan status akun tenant (`accountStatus: 'active' | 'suspended' | 'expired'`).
+- "frontend/src/components/modals/SuspendedAccountModal.tsx" - Komponen modal pemberitahuan akun ditangguhkan yang non-dismissible dengan tombol WhatsApp dan Logout.
+- "frontend/src/components/dashboard/TenantDashboard.tsx" - Mengecek `accountStatus` tenant saat memuat dashboard dan merender `SuspendedAccountModal` jika status adalah `suspended`.
+
+Alasan Perubahan:
+Sesuai instruksi pengguna:
+1. Saat akun tenant disuspend, jika bot sedang online terhubung ke WhatsApp, seluruh sambungan harus diputus agar bot tidak berfungsi.
+2. Saat tenant suspended login, tenant harus masuk ke dashboard terlebih dahulu lalu muncul popup pemberitahuan akun disuspend yang tidak dapat ditutup.
+3. Tombol diarahkan ke link `wa.me/6285712439395` dengan nomor Master Admin yang dapat diubah dengan mudah jika suatu saat berganti.
+
+Strategi Implementasi:
+1. Buat file `frontend/src/config/adminContact.ts` berisi konstanta `MASTER_ADMIN_PHONE = '085712439395'` dan helper `getMasterAdminWaLink()`.
+2. Di `backend/botManager.ts`:
+   - Tambahkan method `forceDisconnect()`:
+     ```ts
+     async forceDisconnect() {
+       if (this.sock) {
+         try {
+           this.sock.ev.removeAllListeners('connection.update');
+           this.sock.ev.removeAllListeners('messages.upsert');
+           await this.sock.end(undefined);
+         } catch {}
+         this.sock = null;
+       }
+       this.status = 'closed';
+       this.pairingCode = '';
+       this.addLog('warning', 'Koneksi WhatsApp bot diputus paksa oleh Master Admin karena akun toko disuspend.');
+     }
+     ```
+3. Di `admin-backend/services/tenantManager.ts`:
+   - Pada `setStatus(tenantId, status)`:
+     ```ts
+     if (status === 'suspended') {
+       try {
+         const bot = getBotManager(tenantId);
+         if (bot) {
+           await bot.forceDisconnect();
+         }
+       } catch (err) {
+         console.error('Gagal memutus koneksi bot saat suspend:', err);
+       }
+     }
+     ```
+4. Di `backend/services/authManager.ts`:
+   - Pada `verifyLogin()`, izinkan tenant yang berstatus `suspended` tetap login dan sertakan `status: masterTenant.status` pada kembalian.
+5. Di `backend/routes/authRoutes.ts`:
+   - Sertakan `accountStatus` pada respon `/api/auth/session`, `/api/auth/login`, dan `/api/auth/store-status`.
+6. Di `frontend/src/components/modals/SuspendedAccountModal.tsx`:
+   - Desain modal popup non-dismissible dengan background overlay gelap `fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4`.
+   - Ikon peringatan `AlertTriangle` / `PauseCircle` bernuansa oranye/amber elegan.
+   - Pesan jelas: Akun toko telah ditangguhkan oleh Master Admin. Bot WhatsApp telah dinonaktifkan.
+   - Tombol "Hubungi Master Admin" membuka `https://wa.me/6285712439395` di tab baru.
+   - Tombol "Keluar / Logout" memicu fungsi `onLogout()`.
+7. Di `frontend/src/components/dashboard/TenantDashboard.tsx`:
+   - Ambil `accountStatus` dari `/api/auth/store-status` atau dari props sesi auth.
+   - Jika `accountStatus === 'suspended'`, render `<SuspendedAccountModal onLogout={auth.logout} />`.
+
+Urutan Pengerjaan:
+1. Buat `frontend/src/config/adminContact.ts`.
+2. Edit `backend/botManager.ts` untuk method `forceDisconnect()`.
+3. Edit `admin-backend/services/tenantManager.ts` untuk pemutusan bot saat suspend.
+4. Edit `backend/services/authManager.ts` & `backend/routes/authRoutes.ts` untuk informasi `accountStatus`.
+5. Buat `frontend/src/components/modals/SuspendedAccountModal.tsx`.
+6. Edit `frontend/src/components/dashboard/TenantDashboard.tsx` untuk render modal.
+7. Uji build dan linting (`compile_applet` dan `lint_applet`).
+8. Catat progres di `brain/PROGRESS.md`.
+
+Dampak Perubahan:
+Akun yang disuspend tidak akan bisa memanfaatkan bot WhatsApp (koneksi diputus), dan dashboard akan terkunci dengan popup peringatan non-dismissible yang mengarahkan komunikasi ke nomor WhatsApp Master Admin.
+
+Rencana Pengujian:
+1. Jalankan `compile_applet` dan `lint_applet`.
+2. Login sebagai tenant aktif, periksa bot berjalan normal.
+3. Di Master Admin, nyalakan toggle Suspend untuk tenant tersebut, pastikan status bot langsung menjadi Offline/closed.
+4. Login kembali sebagai tenant tersebut di dashboard toko, pastikan berhasil masuk ke dashboard dan popup modal Suspend langsung muncul di tengah layar serta tidak bisa ditutup.
+5. Klik tombol Hubungi Admin, pastikan tautan mengarah ke `https://wa.me/6285712439395`.
+6. Klik tombol Logout, pastikan berhasil keluar ke halaman login.
+
+Hasil yang Diharapkan:
+Sistem penegakan suspend bekerja 100% presisi sesuai instruksi pengguna, aman, dan nomor Master Admin mudah diganti sewaktu-waktu di satu file konfigurasi.
+
+---
+
+[32.0] - PEMBUATAN AKUN TENANT INSTAN OTOMATIS & TOMBOL TUTUP SEMENTARA POPUP SUSPEND
+
+- Tanggal: 2026-11-03 17:06
+- Status: Completed
+Referensi SCHEDULE: 13.0
+
+
+Tujuan Implementasi:
+1. Menyederhanakan form pendaftaran tenant baru di Dashboard Master Admin (`admin-frontend/src/App.tsx` & `admin-backend`):
+   - Admin tidak lagi wajib mengisi Nama Toko, Nama Owner, Nomor WhatsApp, Username, dan Password.
+   - Sistem menyediakan opsi "Generate Otomatis Akun Baru" (1-klik):
+     * Username acak terstruktur unik: format `tenant_` diikuti 4 digit angka acak (contoh: `tenant_4829`, `tenant_7193`).
+     * Password acak yang rapi dan mudah dibaca: format `pass_` diikuti 4-6 karakter alfanumerik acak (contoh: `pass_8392`).
+     * Field Nama Toko, Nama Owner, dan Nomor WhatsApp dikosongkan (`""`) pada database tenant dan master.
+     * Admin cukup memilih Durasi Masa Sewa (default 365 hari, opsi 30/60/90/365 hari atau custom).
+   - Setelah akun berhasil dibuat, tampilkan Modal Pop-up Sukses yang memperlihatkan Username, Password, dan Durasi Sewa lengkap dengan tombol "Salin Kredensial" agar admin bisa langsung membagikannya ke calon penyewa bot.
+   - Saat tenant login pertama kali dengan username dan password tersebut, dashboard toko mendeteksi data profil kosong dan langsung menampilkan popup modal wajib isi Store Info (`MandatoryStoreSetupModal`) untuk diisi mandiri oleh tenant.
+2. Memperbarui `SuspendedAccountModal.tsx`:
+   - Menambahkan tombol "Tutup Sementara" (atau ikon minimize/close sementara) di sudut atau bagian bawah modal.
+   - Menyediakan tombol pintas langsung "Akses Portal Master Admin" (`/admin/`) agar admin yang sedang menguji atau memeriksa akun tidak terkunci selamanya dan dapat kembali ke dashboard master dengan mudah.
+
+Bagian yang Akan Diubah/Dibuat:
+- "admin-backend/services/tenantManager.ts":
+  - Izinkan `store_name`, `owner_name`, `owner_phone` bernilai kosong atau opsional.
+  - Implementasikan helper generator username acak terstruktur unik: `generateStructuredUsername()`.
+  - Implementasikan helper generator password acak: `generateRandomPassword()`.
+- "admin-backend/routes/adminRoutes.ts":
+  - Buat handler pembuatan tenant fleksibel (tidak wajib me-require store_name jika menggunakan auto-generate).
+  - Kembalikan `raw_password` pada respon sukses penambahan tenant agar modal admin bisa menampilkannya.
+- "admin-frontend/src/App.tsx":
+  - Sederhanakan modal "Tambah Unit Apartemen Toko":
+    * Opsi default: "Buat Akun Otomatis (Instan)" yang hanya meminta Durasi Masa Sewa dan Catatan opsional.
+    * Opsi kustom (opsional accordion/toggle jika admin ingin isi manual).
+    * Modal Dialog Kredensial Baru: Menampilkan Username, Password, Masa Sewa, dan tombol "Salin Akun ke Clipboard".
+- "frontend/src/components/modals/SuspendedAccountModal.tsx":
+  - Tambahkan prop `onCloseTemporary?: () => void`.
+  - Tambahkan tombol "Tutup Sementara" dan tombol "Buka Master Admin" (`/admin/`).
+- "frontend/src/components/dashboard/TenantDashboard.tsx":
+  - Kelola state `isSuspendModalDismissedTemporary` sehingga jika ditutup sementara pada sesi browser tersebut, modal dapat ditutup sementara.
+
+Alasan Perubahan:
+Pengguna meminta proses penambahan akun dipermudah (tidak wajib isi profil toko, dibuatkan username acak terstruktur dan password otomatis), serta modal suspend diberi opsi tutup sementara agar admin tidak terhalang saat ingin kembali ke dashboard master.
+
+Strategi Implementasi:
+1. Di `admin-backend/services/tenantManager.ts`:
+   - Jika `input.username` tidak diisi, generate `tenant_${Math.floor(1000 + Math.random() * 9000)}`.
+   - Jika `input.password` tidak diisi, generate `pass_${Math.random().toString(36).substring(2, 7)}`.
+   - Jika `input.store_name` tidak diisi, gunakan `Toko Baru` atau kosong.
+   - Kembalikan `{ ...tenant, generated_password }`.
+2. Di `admin-frontend/src/App.tsx`:
+   - Tambahkan state `createdCredential: { username: string; password: string; storeName: string; durationDays: number } | null`.
+   - Tampilkan modal hasil pembuatan akun dengan kartu kredensial yang siap dicopy.
+3. Di `frontend/src/components/modals/SuspendedAccountModal.tsx`:
+   - Tambahkan tombol "Tutup Sementara" dan tautan "Masuk Portal Master Admin".
+4. Jalankan `compile_applet` dan `lint_applet`.
+5. Catat hasil akhir di `brain/PROGRESS.md`.
+
+Urutan Pengerjaan:
+1. Update `admin-backend/services/tenantManager.ts`.
+2. Update `admin-backend/routes/adminRoutes.ts`.
+3. Update `admin-frontend/src/App.tsx`.
+4. Update `frontend/src/components/modals/SuspendedAccountModal.tsx`.
+5. Update `frontend/src/components/dashboard/TenantDashboard.tsx`.
+6. Uji kompilasi dan linting.
+7. Catat di `brain/PROGRESS.md`.
+
+Dampak Perubahan:
+Pembuatan tenant baru menjadi instan (1-klik), profil diisi mandiri oleh tenant di dashboard toko mereka, dan admin leluasa berpindah ke dashboard master meskipun akun sedang berstatus suspend.
+
+Rencana Pengujian:
+1. Uji pembuatan akun tenant baru di `/admin/` tanpa mengisi nama toko, nama owner, nomor wa, username, dan password.
+2. Pastikan akun berhasil terbuat dengan username acak terstruktur dan password muncul di layar.
+3. Login ke dashboard toko menggunakan akun baru tersebut, pastikan popup wajib isi Store Info muncul otomatis.
+4. Uji popup suspend, pastikan terdapat tombol tutup sementara dan tombol akses master admin.
+5. Verifikasi kelulusan `compile_applet` dan `lint_applet`.
+
+Hasil yang Diharapkan:
+Seluruh fitur penambahan akun instan otomatis dan tombol tutup sementara popup suspend berjalan mulus dan elegan.
+
+
+

@@ -381,6 +381,23 @@ export class BotManager {
     this.addLog('info', 'Koneksi WhatsApp bot dimatikan oleh admin.');
   }
 
+  async forceDisconnect() {
+    if (this.sock) {
+      try {
+        if (this.sock.ev) {
+          this.sock.ev.removeAllListeners('connection.update');
+          this.sock.ev.removeAllListeners('messages.upsert');
+          this.sock.ev.removeAllListeners('creds.update');
+        }
+        await this.sock.end(undefined);
+      } catch {}
+      this.sock = null;
+    }
+    this.status = 'closed';
+    this.pairingCode = '';
+    this.addLog('warning', '⛔ Koneksi WhatsApp bot diputus paksa karena akun toko telah ditangguhkan (suspended) oleh Master Admin.');
+  }
+
   async reset() {
     await this.stop();
     if (fs.existsSync(this.sessionDir)) {

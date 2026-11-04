@@ -1021,5 +1021,47 @@ Potensi Penerapan:
 Catatan Tambahan:
 - Karena proyek ini masih dalam fase pengembangan aktif (alpha/open-source), beberapa ekosistem plugin komunitas pihak ketiga masih terus bertumbuh dibandingkan platform mature seperti Figma.
 
+---
 
+[14.0] - ARSITEKTUR PEMISAHAN SUBDOMAIN DASHBOARD BOT (dashboard.example.com) DAN DASHBOARD MASTER (admin.example.com)
 
+- Tanggal: 2026-11-03 10:15
+- Sumber: Diskusi Kebutuhan Pengguna & Praktik Standar Reverse Proxy Web Architecture
+
+Informasi yang Dipelajari:
+1. Kebutuhan Pemisahan Akses Pengguna vs Master Admin:
+   - Dashboard Bot Tenant ditujukan untuk para pemilik toko/penyewa (tenant) pada domain publik, misalnya `dashboard.example.com`.
+   - Dashboard Master Admin ditujukan khusus untuk pemilik server (Super Admin) untuk mengelola seluruh gedung apartemen bot pada subdomain terproteksi, misalnya `admin.example.com`.
+   - Tombol pintas masuk ke "Dashboard Master" yang saat ini ada di dashboard tenant hanyalah alat bantu (shortcut) selama tahap pengembangan (development), dan wajib disembunyikan/dihapus pada mode produksi agar tenant tidak mengetahui atau mencoba mengakses antarmuka Master Admin.
+
+2. Opsi Arsitektur Pemisahan Subdomain:
+   A. Metode Reverse Proxy (Nginx / Caddy / Cloudflare) - Sangat Direkomendasikan untuk Production VPS:
+      - Satu proses backend Node.js (`server.ts`) berjalan di port internal (misal port 3000).
+      - Nginx / Caddy membaca Host Header dari request pengunjung:
+        - Jika Host = `admin.example.com`:
+          Arahkan request root `/` ke path `/admin/` di backend, dan izinkan rute API `/api/admin/*`.
+        - Jika Host = `dashboard.example.com`:
+          Arahkan request ke root `/` (frontend tenant), tetapi blokir secara ketat (`return 404` atau `return 403`) seluruh akses ke path `/admin` dan `/api/admin/*`.
+      - Keuntungan: Sangat aman karena lapisan isolasi terjadi di level web server (reverse proxy), sebelum paket request masuk ke aplikasi.
+
+   B. Metode Host-Based Routing di Express Middleware (`server.ts`):
+      - Di dalam file `server.ts`, pasang middleware pemeriksa `req.hostname`:
+        - Jika subdomain berawalan `admin.`, maka layani admin SPA di root `/` dan izinkan `/api/admin/*`.
+        - Jika subdomain berawalan `dashboard.` (atau domain tenant), tolak akses `/admin` dan `/api/admin/*` dengan status 404 Not Found.
+      - Keuntungan: Berjalan tanpa konfigurasi web server yang rumit, portabel di berbagai platform.
+
+3. Strategi Pengamanan Tombol Dev Master Admin:
+   - Tombol pintas pengembangan (seperti tombol "Dashboard Master" di modal suspended atau menu navigasi) dikontrol melalui environment variable `VITE_ENABLE_DEV_ADMIN_SHORTCUT=false` di file `.env` produksi.
+   - Atau menggunakan pengecekan otomatis `import.meta.env.DEV` (hanya aktif saat `npm run dev` di sandbox/localhost, dan otomatis hilang saat dibuild untuk production `npm run build`).
+
+Pemahaman:
+- Pemisahan domain tidak mengharuskan pemecahan project menjadi dua server terpisah yang rumit. Arsitektur unified monorepo saat ini dapat tetap dipertahankan dengan routing berbasis virtual host / reverse proxy.
+- Mengisolasi rute `/admin` dan `/api/admin/*` di level reverse proxy menjamin keamanan data master admin 100% dari rasa penasaran penyewa toko.
+
+Potensi Penerapan:
+1. Menyediakan dokumentasi konfigurasi Nginx dan Caddy siap pakai untuk pengguna.
+2. Mengamankan tombol shortcut Master Admin di frontend tenant dengan conditional flag `import.meta.env.DEV` atau flag konfigurasi.
+3. Menyiapkan middleware opsional di `server.ts` untuk mendeteksi `req.hostname`.
+
+Catatan Tambahan:
+- Pastikan sertifikat SSL (HTTPS) disediakan untuk kedua subdomain (`admin.example.com` dan `dashboard.example.com`) menggunakan Let's Encrypt / Certbot atau Cloudflare.
