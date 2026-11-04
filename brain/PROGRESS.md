@@ -1146,6 +1146,113 @@ Hasil:
 Kendala:
 Tidak ada.
 
+---
+
+[33.0] - IMPLEMENTASI HALAMAN KUSTOMISASI USERNAME & PASSWORD TENANT DARI FOTO PROFIL SIDEBAR
+
+- Tanggal: 2026-11-03 20:50
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 33.0
+
+Pekerjaan yang Dilakukan:
+1. Membangun Logika Backend Pembaruan Kredensial di `backend/services/authManager.ts`:
+   - `updateTenantUsername(tenantId, currentUsername, newUsername)`: Validasi format (3-32 karakter, alfanumerik), validasi keunikan username di `database/master.db` (tabel `tenants`) dan `super_admins`. Menyinkronkan pembaruan ke `master.db`, tabel `auth` database tenant lokal, serta seluruh sesi aktif yang sedang berjalan di memori.
+   - `updateTenantPassword(tenantId, username, currentPassword, newPassword, confirmPassword)`: Memvalidasi 3 form input, memverifikasi kecocokan `currentPassword` terhadap hash yang tersimpan di `master.db` maupun `auth` lokal (ditolak jika password saat ini salah), dan memvalidasi bahwa `newPassword === confirmPassword`. Jika valid, men-generate hash PBKDF2 baru dan memperbarui database.
+2. Membuka Endpoint API di `backend/routes/authRoutes.ts`:
+   - `POST /api/auth/profile/update-username`
+   - `POST /api/auth/profile/update-password`
+   - Dilengkapi fungsi helper `getAuthSessionFromReq()` untuk mengekstrak identitas sesi tenant secara aman dari Bearer token atau cookie.
+3. Mengubah Area Foto Profil di Sidebar Menjadi Elemen Interaktif (`frontend/src/components/layout/DesktopSidebar.tsx`):
+   - Area avatar profil (inisial toko, nama pemilik toko, dan status bot) di bagian bawah sidebar kini berfungsi sebagai tombol interaktif yang memicu tab `'Keamanan Akun'`.
+   - Ditambahkan badge "Ubah Akun", efek hover, transisi skala, dan tooltip penjelas.
+   - Bekerja mulus baik pada mode desktop normal, mode collapsed (ikon avatar tetap dapat diklik), maupun mobile drawer drawer.
+4. Membangun Halaman Antarmuka Mandiri `frontend/src/components/tabs/TabAccountSecurity.tsx`:
+   - **Form 1 (Ubah Username)**: Input nama pengguna baru dengan validasi instan, preview login saat ini, dan tombol simpan.
+   - **Form 2 (Ubah Password - 3 Kolom Input)**:
+     * Kolom 1: Password Saat Ini (wajib untuk verifikasi keamanan).
+     * Kolom 2: Password Baru.
+     * Kolom 3: Konfirmasi Password Baru (wajib diketik ulang oleh tenant).
+     * Disertai fitur toggle lihat/sembunyikan karakter password (ikon mata) dan indikator kecocokan password real-time.
+5. Mengintegrasikan Tab ke `frontend/src/components/tabs/TabContentRenderer.tsx` dan `frontend/src/components/dashboard/TenantDashboard.tsx`:
+   - Mendaftarkan tab `'Keamanan Akun'`.
+   - Menambahkan helper `updateUsernameState` di `frontend/src/hooks/useAuth.ts` sehingga nama username pengguna di header/sidebar otomatis terupdate secara reaktif saat diubah tanpa reload halaman.
+6. Pengujian Komprehensif:
+   - Verifikasi penolakan password saat ini yang salah (HTTP 400).
+   - Verifikasi penolakan konfirmasi password yang tidak cocok (HTTP 400).
+   - Verifikasi penolakan username duplikat (HTTP 400).
+   - Verifikasi keberhasilan update password dan pengujian login menggunakan password baru.
+   - Verifikasi kompilasi `compile_applet` dan `lint_applet` lulus 100% tanpa error.
+
+File yang Diubah / Dibuat:
+- "backend/services/authManager.ts" - Logika verifikasi password lama, update password baru, dan update username unik.
+- "backend/routes/authRoutes.ts" - Endpoint REST `/api/auth/profile/update-username` dan `/api/auth/profile/update-password`.
+- "frontend/src/components/tabs/TabAccountSecurity.tsx" - Komponen UI baru form ubah username dan 3 form password.
+- "frontend/src/components/tabs/TabContentRenderer.tsx" - Pendaftaran rendering tab `'Keamanan Akun'`.
+- "frontend/src/components/layout/DesktopSidebar.tsx" - Mengubah foto profil sidebar bawah menjadi tombol interaktif menuju tab Keamanan Akun.
+- "frontend/src/components/dashboard/TenantDashboard.tsx" - Menghubungkan state username dan handler update ke tab.
+- "frontend/src/hooks/useAuth.ts" - Helper `updateUsernameState` reaktif.
+- "brain/LANGKAH_IMPLEMENTASI.md" - Entri [33.0] diselesaikan.
+- "brain/PROGRESS.md" - Entri [33.0] dicatat.
+
+Alasan Perubahan:
+Memenuhi instruksi pengguna agar tenant dapat mengkustomisasi username dan password toko mereka sendiri secara mandiri melalui klik foto profil di sidebar bawah, dengan pengamanan ketat 3 kolom form password (verifikasi password lama, password baru, dan konfirmasi password baru).
+
+Hasil:
+1. Tenant cukup mengklik foto profil mereka di sidebar bawah untuk membuka halaman Keamanan & Kredensial Akun.
+2. Tenant dapat mengubah username dengan proteksi keunikan nama.
+3. Tenant dapat mengubah password dengan verifikasi ketat 3 form input (password saat ini, password baru, konfirmasi password baru).
+4. Seluruh fungsionalitas teruji 100% dan siap digunakan di browser.
+
+Kendala:
+Tidak ada.
+
+---
+
+[34.0] - SINKRONISASI OTOMATIS DATA PROFIL TOKO TENANT (TOKO, OWNER, NO. WA) KE TABEL MASTER ADMIN (MASTER.DB)
+
+- Tanggal: 2026-11-03 21:32
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 34.0
+
+Pekerjaan yang Dilakukan:
+1. Membangun Method Pembaruan di `admin-backend/services/tenantManager.ts`:
+   - Menambahkan method statis `TenantManager.updateStoreInfo(tenantId, storeName, ownerName, ownerPhone)`.
+   - Menjalankan perintah SQL `UPDATE tenants SET store_name = ?, owner_name = ?, owner_phone = ? WHERE tenant_id = ?` ke database `master.db`.
+2. Menyinkronkan Pengisian Wajib dari Popup Toko di `backend/routes/authRoutes.ts`:
+   - Pada endpoint `POST /api/auth/store-setup`, setelah data disimpan ke database lokal tenant, sistem otomatis memanggil `TenantManager.updateStoreInfo()` untuk memperbarui baris data tenant di `master.db`.
+3. Menyinkronkan Pembaruan dari Menu "Info Profil" di `backend/config/configManager.ts`:
+   - Pada fungsi `saveStoreInfo()`, menambahkan sinkronisasi otomatis ke `master.db` menggunakan `getActiveTenantId()`. Sehingga jika penyewa di kemudian hari mengubah nama toko, nama pemilik, atau nomor WhatsApp di tab Info Profil, perubahan tersebut otomatis tersinkronisasi ke database Master Admin.
+4. Menyempurnakan Tampilan Tabel Unit di Master Admin (`admin-frontend/src/App.tsx`):
+   - Memberikan placeholder miring elegan `"Belum diisi tenant"` atau `"-"` jika unit baru dibuat via mode instan dan belum sempat diisi oleh penyewa.
+   - Begitu penyewa mengisi dan menyimpan profilnya, kolom Toko, Owner, dan link WhatsApp langsung otomatis muncul dan aktif.
+5. Pengujian Alur Penuh (End-to-End Test):
+   - Membuat unit tenant baru dengan mode instan tanpa data toko (`t_tenant3222_9292`).
+   - Login menggunakan akun tenant tersebut dan mengirimkan identitas toko: Nama Toko: "Toko Bunga Makmur", Owner: "Budi Santoso", No WA: "081234567890".
+   - Memeriksa respon API `/api/admin/tenants` dan tabel Master Admin: Data unit langsung terisi lengkap secara otomatis dan akurat.
+   - Menguji pengubahan lanjutan nama toko menjadi "Toko Bunga Makmur Abadi" via `/api/bot/save-config`: Master Admin langsung membaca nama toko baru tersebut.
+   - Menjalankan verifikasi kompilasi (`compile_applet`) dan linting (`lint_applet`) dengan hasil lulus 100%.
+
+File yang Diubah:
+- "admin-backend/services/tenantManager.ts" - Method statis `updateStoreInfo()` untuk update baris data tenant di `master.db`.
+- "backend/routes/authRoutes.ts" - Pemanggilan `TenantManager.updateStoreInfo()` pada route `/store-setup`.
+- "backend/config/configManager.ts" - Auto-sync ke `master.db` pada `saveStoreInfo()`.
+- "admin-frontend/src/App.tsx" - Peningkatan fallback visual untuk kolom Toko, Owner, dan No. WA saat data belum diisi.
+- "brain/LANGKAH_IMPLEMENTASI.md" - Entri [34.0] diselesaikan.
+- "brain/PROGRESS.md" - Entri [34.0] dicatat.
+
+Alasan Perubahan:
+Menghilangkan diskoneksi data antara database lokal tenant dan database Master Admin, sehingga setiap kali tenant mengisi atau memperbarui profil toko mereka, Dashboard Master Admin selalu menampilkan informasi yang lengkap, akurat, dan mutakhir.
+
+Hasil:
+1. Akun tenant yang dibuat dengan mode instan (data kosong) kini otomatis memiliki data Toko, Owner, dan No. WhatsApp di Dashboard Master Admin segera setelah tenant mengisi popup profil toko mereka.
+2. Setiap perubahan identitas toko di tab Info Profil juga tersinkronisasi secara otomatis dan real-time.
+3. Seluruh alur teruji dan berjalan normal.
+
+Kendala:
+Tidak ada.
+
+
+
 
 
 

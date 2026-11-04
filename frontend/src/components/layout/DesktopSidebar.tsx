@@ -372,24 +372,48 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({
           </div>
         </div>
 
-        {/* Bagian Bawah: Profile Card / Quick Status */}
+        {/* Bagian Bawah: Profile Card / Quick Status (Dapat diklik untuk Ubah Kredensial Akun) */}
         <div className="border-t border-slate-100 p-2.5 bg-slate-50/50">
           {collapsed ? (
             <div className="flex justify-center">
-              <div className="relative">
-                <div className="w-9 h-9 rounded-xl bg-sky-100 text-[#0084D1] font-bold flex items-center justify-center text-xs border border-sky-200">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedTab('Keamanan Akun');
+                  if (isMobileView && onCloseMobile) onCloseMobile();
+                }}
+                className={`relative p-1 rounded-xl transition cursor-pointer group ${
+                  selectedTab === 'Keamanan Akun' ? 'ring-2 ring-[#0084D1] bg-sky-50' : 'hover:bg-slate-200/60'
+                }`}
+                title="Klik untuk mengubah Username & Password Akun"
+              >
+                <div className="w-9 h-9 rounded-xl bg-sky-100 text-[#0084D1] font-bold flex items-center justify-center text-xs border border-sky-200 group-hover:border-[#0084D1] group-hover:scale-105 transition-all">
                   {username.slice(0, 2).toUpperCase()}
                 </div>
                 <span
-                  className={`w-2.5 h-2.5 rounded-full border-2 border-white absolute -bottom-0.5 -right-0.5 ${statusBadge.bg}`}
+                  className={`w-2.5 h-2.5 rounded-full border-2 border-white absolute bottom-0.5 right-0.5 ${statusBadge.bg}`}
                 />
-              </div>
+              </button>
             </div>
           ) : (
-            <div className="flex items-center justify-between p-1.5 rounded-xl hover:bg-slate-100/60 transition">
-              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <div
+              className={`flex items-center justify-between p-1.5 rounded-xl transition ${
+                selectedTab === 'Keamanan Akun'
+                  ? 'bg-sky-50/80 border border-sky-200 shadow-2xs'
+                  : 'hover:bg-slate-100/80'
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedTab('Keamanan Akun');
+                  if (isMobileView && onCloseMobile) onCloseMobile();
+                }}
+                className="flex items-center gap-2.5 min-w-0 flex-1 text-left cursor-pointer group"
+                title="Klik untuk mengubah Username & Password Akun"
+              >
                 <div className="relative shrink-0">
-                  <div className="w-8.5 h-8.5 rounded-xl bg-sky-100 text-[#0084D1] font-bold flex items-center justify-center text-xs border border-sky-200">
+                  <div className="w-8.5 h-8.5 rounded-xl bg-sky-100 text-[#0084D1] font-bold flex items-center justify-center text-xs border border-sky-200 group-hover:border-[#0084D1] group-hover:scale-105 transition-all">
                     {username.slice(0, 2).toUpperCase()}
                   </div>
                   <span
@@ -397,21 +421,26 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({
                   />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-slate-900 truncate">
-                    {storeInfo.ownerName || username}
-                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs font-bold text-slate-900 truncate group-hover:text-[#0084D1] transition-colors">
+                      {storeInfo.ownerName || username}
+                    </p>
+                    <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 group-hover:bg-sky-100 group-hover:text-sky-700 transition">
+                      Ubah Akun
+                    </span>
+                  </div>
                   <p className="text-[10px] text-slate-500 truncate">
                     Admin Store · {statusBadge.label}
                   </p>
                 </div>
-              </div>
+              </button>
 
               {/* Tombol Logout khusus Mobile Drawer */}
               {isMobileView && onLogout && (
                 <button
                   type="button"
                   onClick={onLogout}
-                  className="p-2 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition cursor-pointer"
+                  className="p-2 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition cursor-pointer shrink-0 ml-1"
                   title="Keluar"
                 >
                   <LogOut className="w-4 h-4" />

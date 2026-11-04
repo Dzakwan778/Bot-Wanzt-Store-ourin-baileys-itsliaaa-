@@ -146,6 +146,10 @@ export function useAuth() {
     setIsAuthenticated(false);
   };
 
+  const updateUsernameState = useCallback((newUsername: string) => {
+    setUser((prev) => (prev ? { ...prev, username: newUsername } : null));
+  }, []);
+
   return {
     token,
     user,
@@ -153,5 +157,6 @@ export function useAuth() {
     authLoading,
     login,
     logout,
+    updateUsernameState,
   };
 }

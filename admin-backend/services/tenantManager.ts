@@ -337,4 +337,28 @@ export class TenantManager {
       serverTime: new Date().toISOString(),
     };
   }
+
+  /**
+   * Menyinkronkan pembaruan identitas toko (Nama Toko, Nama Owner, No. WhatsApp)
+   * dari pengisian tenant ke tabel tenants di database master (master.db)
+   */
+  static updateStoreInfo(tenantId: string, storeName: string, ownerName: string, ownerPhone: string): boolean {
+    try {
+      const db = getMasterDb();
+      const result = db.prepare(`
+        UPDATE tenants
+        SET store_name = ?, owner_name = ?, owner_phone = ?
+        WHERE tenant_id = ?
+      `).run(
+        storeName ? storeName.trim() : '',
+        ownerName ? ownerName.trim() : '',
+        ownerPhone ? ownerPhone.trim() : '',
+        tenantId
+      );
+      return result.changes > 0;
+    } catch (err: any) {
+      console.error(`Gagal menyinkronkan store_info ke master.db untuk tenant ${tenantId}:`, err);
+      return false;
+    }
+  }
 }

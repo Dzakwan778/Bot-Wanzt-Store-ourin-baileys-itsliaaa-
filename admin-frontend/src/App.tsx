@@ -668,7 +668,13 @@ export default function App() {
                         {/* 3. Toko */}
                         <td className="py-3.5 px-3.5 whitespace-nowrap">
                           <div className="flex items-center gap-1.5 font-semibold text-white">
-                            <span>{tenant.store_name}</span>
+                            <span>
+                              {tenant.store_name ? (
+                                tenant.store_name
+                              ) : (
+                                <span className="text-slate-500 italic font-normal text-[11px]">Belum diisi tenant</span>
+                              )}
+                            </span>
                             <button
                               type="button"
                               onClick={() => handleImpersonate(tenant)}
@@ -682,12 +688,21 @@ export default function App() {
 
                         {/* 4. Owner */}
                         <td className="py-3.5 px-3.5 whitespace-nowrap">
-                          <span className="text-slate-200 font-medium">{tenant.owner_name}</span>
+                          <span className="text-slate-200 font-medium">
+                            {tenant.owner_name ? (
+                              tenant.owner_name
+                            ) : (
+                              <span className="text-slate-500 italic font-normal text-[11px]">-</span>
+                            )}
+                          </span>
                         </td>
 
                         {/* 5. No. WhatsApp */}
                         <td className="py-3.5 px-3.5 whitespace-nowrap">
                           {(() => {
+                            if (!tenant.owner_phone || !tenant.owner_phone.trim()) {
+                              return <span className="text-slate-500 italic font-normal text-[11px]">-</span>;
+                            }
                             const phone = formatIndonesianPhone(tenant.owner_phone);
                             return (
                               <a

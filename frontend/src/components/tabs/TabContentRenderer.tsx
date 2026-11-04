@@ -10,6 +10,7 @@ import { TabConnectionDedicated } from './TabConnectionDedicated';
 import { TabKoneksiLayanan } from './TabKoneksiLayanan';
 import { TabGrup } from './TabGrup';
 import { TabTransaksi } from './TabTransaksi';
+import { TabAccountSecurity } from './TabAccountSecurity';
 import { useStoreConfig } from '../../hooks/useStoreConfig';
 import { useXavieraData } from '../../hooks/useXavieraData';
 import { useWhatsAppGroups } from '../../hooks/useWhatsAppGroups';
@@ -33,6 +34,8 @@ interface TabContentRendererProps {
   promosState: ReturnType<typeof usePromos>;
   lunasQrisData?: ReturnType<typeof useLunasQrisData>;
   showToast: (msg: string) => void;
+  currentUsername?: string;
+  onUsernameUpdated?: (newUsername: string) => void;
 }
 
 export const TabContentRenderer: React.FC<TabContentRendererProps> = ({
@@ -48,6 +51,8 @@ export const TabContentRenderer: React.FC<TabContentRendererProps> = ({
   promosState,
   lunasQrisData,
   showToast,
+  currentUsername,
+  onUsernameUpdated,
 }) => {
   // 1. INFO PROFIL (Paling Atas)
   if (selectedTab === 'Info Profil' || selectedTab === 'Store Info') {
@@ -374,6 +379,23 @@ export const TabContentRenderer: React.FC<TabContentRendererProps> = ({
     return (
       <TabTransaksi
         transactionsState={transactionsState}
+        showToast={showToast}
+      />
+    );
+  }
+
+  // 11. KEAMANAN & KREDENSIAL AKUN
+  if (
+    selectedTab === 'Keamanan Akun' ||
+    selectedTab === 'Akun' ||
+    selectedTab === 'Keamanan' ||
+    selectedTab === 'Kredensial' ||
+    selectedTab === 'Ubah Password'
+  ) {
+    return (
+      <TabAccountSecurity
+        currentUsername={currentUsername}
+        onUsernameUpdated={onUsernameUpdated}
         showToast={showToast}
       />
     );

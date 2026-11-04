@@ -516,6 +516,44 @@ Rencana:
 Hasil yang Diharapkan:
 Admin dapat membuat akun unit toko baru dalam 1-klik tanpa repot memikirkan username, password, dan nama toko. Penyewa melengkapi profil toko secara mandiri saat login. Modal suspend dapat ditutup sementara jika admin ingin berpindah ke dashboard master.
 
+---
+
+[14.0] - IMPLEMENTASI HALAMAN KUSTOMISASI USERNAME & PASSWORD TENANT DARI FOTO PROFIL SIDEBAR
+
+- Tanggal: 2026-11-03 20:39
+- Status: Planned
+
+Tujuan:
+Menyediakan fitur mandiri bagi tenant untuk mengubah username dan password toko mereka sendiri dari dalam dashboard, dengan titik masuk (entry point) berupa klik pada foto/kartu profil di bagian bawah sidebar.
+
+Rencana:
+1. Merancang Endpoint Backend Baru di `/backend/routes/authRoutes.ts` & `/backend/services/authManager.ts`:
+   - Endpoint `POST /api/auth/profile/update-username`:
+     * Memvalidasi format username baru (minimal 3 karakter, alfanumerik/underscore).
+     * Memeriksa apakah username sudah dipakai oleh tenant lain (harus unik).
+     * Mengupdate username di `database/master.db` (tabel `tenants`) dan database tenant aktif (`bot.db`).
+     * Memperbarui username di objek sesi aktif (`activeSessions`).
+   - Endpoint `POST /api/auth/profile/update-password`:
+     * Menerima 3 input: `currentPassword`, `newPassword`, dan `confirmPassword`.
+     * Memvalidasi kesamaan `newPassword` dan `confirmPassword`.
+     * Memverifikasi kebenaran `currentPassword` terhadap hash password yang aktif saat ini. Jika salah, kirim respon error 400 "Password saat ini tidak valid!".
+     * Jika valid, hash `newPassword` baru dan simpan ke `master.db` serta database tenant aktif.
+2. Penyesuaian Antarmuka Frontend:
+   - Menambahkan tab baru `'Akun'` atau `'Keamanan Akun'` pada `TabContentRenderer.tsx` dan `dashboard.types.ts`.
+   - Mengubah area foto profil dan teks admin di footer `DesktopSidebar.tsx` menjadi elemen interaktif (tombol klik dengan hover state, efek tactile, dan tooltip petunjuk "Klik untuk ubah kredensial akun").
+   - Ketika diklik, state `selectedTab` berpindah ke tab `'Akun'`.
+   - Membuat komponen halaman `TabAccountSecurity.tsx`:
+     * Kartu 1: Form Ubah Username dengan preview username aktif dan tombol "Simpan Username".
+     * Kartu 2: Form Ubah Password dengan 3 form input (Password Saat Ini, Password Baru, Konfirmasi Password Baru) disertai toggle intip password (ikon mata) dan tombol "Ubah Password".
+3. Validasi & Pengujian:
+   - Tes verifikasi jika password saat ini salah.
+   - Tes verifikasi jika konfirmasi password baru tidak cocok.
+   - Tes perubahan username ke username unik dan penolakan jika duplikat.
+   - Pengujian kompilasi (`compile_applet`, `lint_applet`).
+
+Hasil yang Diharapkan:
+Tenant dapat dengan mudah dan aman mengkustomisasi username dan password toko mereka sendiri langsung melalui klik foto profil di sidebar bawah.
+
 
 
 

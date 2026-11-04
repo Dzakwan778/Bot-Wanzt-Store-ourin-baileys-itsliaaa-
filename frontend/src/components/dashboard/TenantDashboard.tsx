@@ -32,6 +32,7 @@ interface TenantDashboardProps {
     user: UserSession | null;
     isAuthenticated: boolean | null;
     logout: () => Promise<void>;
+    updateUsernameState?: (newUsername: string) => void;
   };
 }
 
@@ -185,6 +186,12 @@ export function TenantDashboard({ auth }: TenantDashboardProps) {
               promosState={promosState}
               lunasQrisData={lunasQrisData}
               showToast={showToast}
+              currentUsername={auth.user?.username}
+              onUsernameUpdated={(newUsername) => {
+                if (auth.updateUsernameState) {
+                  auth.updateUsernameState(newUsername);
+                }
+              }}
             />
           </div>
         </main>
