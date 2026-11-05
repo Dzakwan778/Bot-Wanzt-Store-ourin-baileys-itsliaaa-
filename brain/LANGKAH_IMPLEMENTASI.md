@@ -1331,5 +1331,218 @@ Rencana Pengujian:
 Hasil yang Diharapkan:
 Kolom Toko, Owner, dan No. WhatsApp pada tabel Dashboard Master Admin terisi otomatis dan selalu akurat mengikuti data yang diisikan oleh tenant.
 
+---
+
+[35.0] - RESTRUKTURISASI RESPONSIVITAS HORIZONTAL SCROLL SUB-TAB RESPON BOT & FILTER TRANSAKSI (FASE 1)
+
+- Tanggal: 2026-11-04 16:22
+- Status: Completed
+Referensi SCHEDULE: 15.0
+
+Tujuan Implementasi:
+1. Memperbaiki tampilan sub-tab "Respon Bot" pada `frontend/src/components/tabs/TabCommand.tsx` agar tidak lagi keluar/jebol dari batas kartu pembungkus (*container card*) pada layar mobile.
+2. Memperbaiki tombol filter status pada `frontend/src/components/tabs/TabTransaksi.tsx` agar teks label (*Semua, Paid, Pending, Cancel*) beserta badge angka pesanan tidak terpotong elipsis (*Sem..., P..., Pendi..., Can...*) di layar smartphone.
+3. Menambahkan sentuhan interaksi mikro (*tactile feedback* `active:scale-[0.97]` dan transisi warna) pada setiap tab dan pill switcher.
+
+Bagian yang Akan Diubah:
+- "frontend/src/components/tabs/TabCommand.tsx":
+  - Memperbarui kontainer switcher sub-tab (Menu, List, Carousel, Invoice, Konfirmasi) agar menggunakan `w-full md:w-auto overflow-x-auto scrollbar-none flex items-center gap-1.5 p-1` dengan batas `max-w-full`.
+  - Memastikan setiap tombol tab memiliki kelas `shrink-0 whitespace-nowrap`, padding ergonomis, dan efek klik aktif.
+- "frontend/src/components/tabs/TabTransaksi.tsx":
+  - Memperbarui kontainer filter status transaksi agar mengizinkan scroll horizontal alami (*native horizontal swipe*) dengan `overflow-x-auto scrollbar-none flex items-center gap-1.5 p-1`.
+  - Menghilangkan pembatasan `min-w-0` dan `truncate` pada label tab sehingga teks status selalu utuh (`Semua`, `Paid`, `Pending`, `Cancel`).
+  - Menyelaraskan ukuran badge angka status agar proporsional dan tidak saling bertumpukan.
+
+Alasan Perubahan:
+Layar perangkat mobile (~360px–390px) memiliki lebar yang terbatas. Memaksakan 4-5 tombol tab dalam satu baris kaku tanpa scroll samping menyebabkan elemen terpotong jelek atau menembus batas kartu putih kontainer.
+
+Strategi Implementasi:
+1. Di `TabCommand.tsx`, bungkus switcher tab dengan kontainer yang memiliki kemampuan horizontal scroll halus tanpa scrollbar jelek (`scrollbar-none`).
+2. Setiap tombol tab diberi atribut `shrink-0 whitespace-nowrap` agar bentuk tombol tidak menyusut paksa.
+3. Di `TabTransaksi.tsx`, ubah tombol-tombol filter status agar memiliki lebar dinamis berbasis konten (`shrink-0 whitespace-nowrap px-3 py-1.5`), sehingga teks lengkap dan angka badge tetap terlihat jelas.
+4. Uji tampilan pada berbagai breakpoint (terutama mobile `< 640px`).
+5. Jalankan `compile_applet` dan `lint_applet`.
+
+Urutan Pengerjaan:
+1. Edit `frontend/src/components/tabs/TabCommand.tsx`.
+2. Edit `frontend/src/components/tabs/TabTransaksi.tsx`.
+3. Jalankan `compile_applet` dan `lint_applet`.
+4. Catat penyelesaian di `brain/PROGRESS.md` dan update status [35.0] menjadi Completed.
+
+Dampak Perubahan:
+Navigasi sub-tab Respon Bot dan Filter Transaksi akan tampil sangat rapi, mudah di-swipe dengan jempol tangan di ponsel, tidak memotong teks, dan memberikan pengalaman pengguna yang jauh lebih nyaman.
+
+Rencana Pengujian:
+1. Verifikasi visual tampilan sub-tab Respon Bot di ukuran mobile.
+2. Verifikasi visual filter status transaksi di ukuran mobile memastikan teks Semua, Paid, Pending, Cancel terbaca 100% tanpa elipsis.
+3. Verifikasi `compile_applet` dan `lint_applet` sukses tanpa error.
+
+Hasil yang Diharapkan:
+Masalah kartu jebol di screenshot 1 dan teks terpotong di screenshot 2 teratasi sepenuhnya dengan interaksi mobile yang mulus.
 
 
+
+
+---
+
+[36.0] - OPTIMASI TAMPILAN DAN KETERBACAAN LIVE TERMINAL PADA LAYAR MOBILE (FASE 2)
+
+- Tanggal: 2026-11-04 16:30
+- Status: Completed
+Referensi SCHEDULE: 16.0
+
+Tujuan Implementasi:
+1. Menyelesaikan masalah tampilan LiveTerminal pada screenshot 3 di mana teks header bertumpuk dua baris (Live / Socket Stream dan Port: 3000 / WebSocket Active) akibat sempitnya lebar layar mobile.
+2. Memperbaiki instruksi panduan empty state ("Masukkan nomor target di sebelah kiri...") yang membingungkan pengguna mobile karena pada tampilan ponsel form input berada di atas, bukan di sebelah kiri.
+3. Menyesuaikan tinggi kontainer terminal dari yang sebelumnya h-[520px] statis menjadi proporsional h-[340px] sm:h-[400px] md:h-[480px] agar tidak memakan layar mobile secara berlebihan.
+4. Meningkatkan tipografi dan keterbacaan baris log dengan mengganti break-all menjadi break-words, memperjelas styling badge kode pairing, dan menambahkan auto-scroll ke log terbaru.
+5. Menambahkan tombol aksi salin log ("Salin Log") dan sinkronisasi status bot real-time pada footer terminal.
+
+Bagian yang Akan Diubah:
+- "frontend/src/components/terminal/LiveTerminal.tsx":
+  - Memperbarui header terminal dengan layout flex yang tahan wrap di mobile (menggunakan chip ringkas status WebSocket).
+  - Mengubah instruksi empty state menjadi universal.
+  - Menyesuaikan tinggi kontainer agar adaptif dan nyaman di scroll.
+  - Menambahkan auto-scroll ref dan perbaikan pemenggalan kata log (break-words).
+  - Menambahkan tombol salin isi log pada footer.
+- "frontend/src/components/tabs/TabConnectionDedicated.tsx":
+  - Meneruskan prop status bot ke LiveTerminal (status={botData.status}).
+
+Alasan Perubahan:
+Pengguna melaporkan pada screenshot 3 bahwa terminal log di mobile sangat sempit, bertumpuk, dan susah dibaca. Teks panduan yang menyebut "sebelah kiri" tidak sesuai dengan susunan vertikal mobile.
+
+Strategi Implementasi:
+1. Di LiveTerminal.tsx, tambahkan prop opsional status?: string.
+2. Pasang useRef dan useEffect untuk scroll otomatis saat array logs bertambah.
+3. Rancang header terminal:
+   - Kiri: 3 dot macOS + ikon Terminal + teks "Live Socket Stream".
+   - Kanan: chip indikator koneksi yang adaptif (di mobile tampil ringkas dengan dot hijau berkedip, di desktop tampil lengkap "Port: 3000 • WebSocket Active").
+4. Pada area body log:
+   - Gunakan h-[340px] sm:h-[400px] md:h-[480px] dengan overflow-y-auto.
+   - Ganti kalimat empty state menjadi: "Masukkan nomor target pada form pairing lalu klik 'Minta Kode Pairing'."
+   - Render timestamp dengan font mono kompak dan teks pesan dengan break-words.
+5. Pada footer terminal:
+   - Sediakan tombol "Salin Log" dengan ikon Copy / Check dan feedback salin.
+   - Tampilkan status soket terkini (misal: "Connected", "Waiting Code", "Ready to link").
+6. Hubungkan status={botData.status} dari TabConnectionDedicated.tsx.
+7. Jalankan kompilasi dan linting (compile_applet, lint_applet).
+
+Urutan Pengerjaan:
+1. Update frontend/src/components/terminal/LiveTerminal.tsx.
+2. Update frontend/src/components/tabs/TabConnectionDedicated.tsx.
+3. Verifikasi dengan compile_applet dan lint_applet.
+4. Perbarui status entri [36.0] menjadi Completed di brain/LANGKAH_IMPLEMENTASI.md.
+5. Catat hasil di brain/PROGRESS.md entri [36.0].
+6. Perbarui status di brain/SCHEDULE.md.
+
+Dampak Perubahan:
+Pengguna dapat membaca log koneksi WhatsApp Baileys dengan sangat jelas, nyaman, dan intuitif di layar smartphone maupun komputer desktop.
+
+Rencana Pengujian:
+1. Uji visual header dan body terminal di viewport mobile (< 400px).
+2. Verifikasi tombol Salin Log berfungsi dengan benar.
+3. Verifikasi pesan empty state informatif dan akurat.
+4. Pastikan compile_applet dan lint_applet sukses 100%.
+
+Hasil yang Diharapkan:
+LiveTerminal tampil modern, tidak berantakan di layar mobile, teks tidak saling bertumpukan, dan mudah digunakan.
+---
+
+[37.0] - OPTIMASI UKURAN TOMBOL, PADDING ERGONOMIS, DAN ANIMASI MIKRO DASHBOARD BOT (FASE 3)
+
+- Tanggal: 2026-11-04 16:38
+- Status: Completed
+Referensi SCHEDULE: 17.0
+
+Tujuan Implementasi:
+1. Menyelaraskan ukuran tombol-tombol yang dirasa pengguna terlalu besar pada layar mobile, sehingga tampilan terasa lebih lega dan tidak sempit.
+2. Menyesuaikan padding kartu pembungkus dan workspace utama di layar smartphone agar tidak membuang ruang horizontal dan vertikal secara berlebihan.
+3. Memberikan animasi mikro sentuhan (tactile click feedback active:scale-[0.98] dan active:scale-95) serta transisi halus pada seluruh tombol aksi di dashboard bot agar antarmuka tidak membosankan dan interaktif saat disentuh.
+
+Bagian yang Akan Diubah:
+- "frontend/src/components/dashboard/TenantDashboard.tsx":
+  - Menyesuaikan padding kontainer utama <main> menjadi p-3 sm:p-5 md:p-8 dan kartu pembungkus menjadi p-3.5 sm:p-6 agar layout di mobile lebih ramping dan lega.
+- "frontend/src/components/tabs/TabConnectionDedicated.tsx":
+  - Mengoptimalkan ukuran tombol "Minta Kode Pairing" agar proporsional di mobile (py-2 px-3.5 sm:py-2.5 sm:px-4 text-xs font-bold active:scale-[0.98]).
+  - Menyesuaikan tombol aksi header "Reset Sesi" dan "Putuskan" dengan wrapping yang rapi di mobile serta efek tactile active:scale-95.
+  - Memberikan efek tactile active:scale-95 pada tombol "Salin Kode Pairing".
+  - Menyesuaikan padding kartu input pairing di mobile dari p-5 sm:p-6 menjadi p-4 sm:p-5 md:p-6.
+- "frontend/src/components/tabs/TabCommand.tsx":
+  - Menambahkan animasi sentuhan active:scale-[0.98] transition-all pada seluruh tombol simpan konfigurasi respon bot (Simpan Menu, Simpan List, Simpan Carousel, Simpan Invoice, Simpan Konfirmasi).
+  - Memberikan efek interaktif active:scale-95 pada tombol upload foto dan tombol hapus foto di MediaGalleryPicker.
+
+Alasan Perubahan:
+Pengguna menyampaikan keluhan bahwa di layar mobile ukuran tombol masih terlalu besar sehingga layar terasa sesak dan sempit, serta minimnya animasi sentuh membuat pengguna merasa bosan berlama-lama di dashboard.
+
+Strategi Implementasi:
+1. Di TenantDashboard.tsx, atur kelas padding kontainer utama agar fleksibel terhadap layar mobile.
+2. Di TabConnectionDedicated.tsx:
+   - Perkecil padding berlebih pada kartu koneksi dan checklist kode pairing.
+   - Tambahkan tactile micro-physics (active:scale-[0.98] dan active:scale-95) pada tombol utama dan tombol salin.
+   - Tata letak tombol aksi status header dibuat fleksibel dengan flex-wrap justify-end gap-2.
+3. Di TabCommand.tsx:
+   - Tambahkan animasi tekan active:scale-[0.98] dan transition-all duration-150 pada tombol-tombol simpan di masing-masing tab respon.
+   - Sempurnakan padding kartu agar senada dengan ukuran layar ponsel.
+4. Jalankan compile_applet dan lint_applet untuk memastikan zero-error.
+
+Urutan Pengerjaan:
+1. Update frontend/src/components/dashboard/TenantDashboard.tsx.
+2. Update frontend/src/components/tabs/TabConnectionDedicated.tsx.
+3. Update frontend/src/components/tabs/TabCommand.tsx.
+4. Jalankan compile_applet dan lint_applet.
+5. Update status entri [37.0] menjadi Completed di brain/LANGKAH_IMPLEMENTASI.md.
+6. Catat penyelesaian di brain/PROGRESS.md entri [37.0].
+7. Perbarui status di brain/SCHEDULE.md.
+
+Dampak Perubahan:
+Tampilan antarmuka dashboard bot pada ponsel pintar menjadi jauh lebih proporsional, lapang, nyaman digunakan dengan satu tangan, dan memiliki respon animasi sentuh yang memuaskan.
+
+Rencana Pengujian:
+1. Uji visual ukuran tombol dan padding di viewport mobile (360px - 400px).
+2. Verifikasi efek animasi klik pada seluruh tombol aksi.
+3. Pastikan tidak ada layout shift atau teks yang rusak.
+4. Verifikasi compile_applet dan lint_applet sukses 100%.
+
+Hasil yang Diharapkan:
+Dashboard bot terasa modern, responsif, dinamis, dan tidak membosankan saat diakses melalui smartphone.
+---
+
+[38.0] - PENONAKTIFAN AUTO SCROLL PADA LIVE TERMINAL HALAMAN CONNECTION
+
+- Tanggal: 2026-11-04 16:43
+- Status: Completed
+
+Tujuan Implementasi:
+Menonaktifkan mekanisme auto-scroll otomatis (scrollIntoView) pada komponen LiveTerminal.tsx agar halaman Connection tidak melompat (jump/scroll) ke bawah secara tiba-tiba saat memuat log soket baru atau saat halaman pertama kali dibuka, sehingga pengguna tetap leluasa membaca dan mengisi formulir pairing di bagian atas.
+
+Bagian yang Akan Diubah:
+- "frontend/src/components/terminal/LiveTerminal.tsx":
+  - Menghapus hook useEffect yang memanggil endRef.current?.scrollIntoView().
+  - Menghapus elemen <div ref={endRef} /> dan import hook yang tidak terpakai.
+
+Alasan Perubahan:
+Pengguna meminta secara eksplisit: "Sepertinya kamu mengaktifkan auto scroll ke log terminal di halaman Connection, nonaktifkan auto scroll". Pemanggilan scrollIntoView menyebabkan seluruh viewport halaman browser tertarik ke bagian paling bawah (LiveTerminal), yang mengganggu kenyamanan pengguna saat melihat form input di atas.
+
+Strategi Implementasi:
+1. Buka frontend/src/components/terminal/LiveTerminal.tsx.
+2. Hapus const endRef = useRef<HTMLDivElement>(null);.
+3. Hapus blok useEffect auto-scroll.
+4. Hapus <div ref={endRef} /> dari JSX.
+5. Bersihkan import useRef dan useEffect yang tidak lagi diperlukan.
+6. Jalankan compile_applet dan lint_applet untuk memastikan tidak ada kesalahan kompilasi.
+
+Urutan Pengerjaan:
+1. Update frontend/src/components/terminal/LiveTerminal.tsx.
+2. Verifikasi dengan compile_applet dan lint_applet.
+3. Update status entri [38.0] menjadi Completed di brain/LANGKAH_IMPLEMENTASI.md.
+4. Catat hasil penyelesaian di brain/PROGRESS.md entri [38.0].
+
+Dampak Perubahan:
+Halaman Connection akan tetap stabil di posisi scroll pengguna saat ini tanpa ada lompatan layar paksa ke terminal. Pengguna dapat membaca log terminal secara mandiri dengan menggulir manual di dalam kotak terminal.
+
+Rencana Pengujian:
+1. Verifikasi posisi scroll halaman Connection saat log diperbarui atau bertambah.
+2. Pastikan compile_applet dan lint_applet sukses 100%.
+
+Hasil yang Diharapkan:
+Auto scroll dinonaktifkan sepenuhnya. Halaman Connection tetap tenang di posisi scroll pengguna.

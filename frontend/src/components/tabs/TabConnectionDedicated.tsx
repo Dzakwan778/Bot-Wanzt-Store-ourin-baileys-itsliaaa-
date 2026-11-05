@@ -125,9 +125,9 @@ export const TabConnectionDedicated: React.FC<TabConnectionDedicatedProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-end sm:self-auto">
+          <div className="flex flex-wrap items-center gap-2 justify-end sm:self-auto">
             {botData.phoneNumber && (
-              <span className="text-xs font-mono font-bold px-3 py-1.5 rounded-lg bg-white border border-current/20">
+              <span className="text-xs font-mono font-bold px-2.5 sm:px-3 py-1.5 rounded-lg bg-white border border-current/20 shadow-2xs">
                 +{botData.phoneNumber}
               </span>
             )}
@@ -135,7 +135,7 @@ export const TabConnectionDedicated: React.FC<TabConnectionDedicatedProps> = ({
               type="button"
               onClick={onReset}
               disabled={loading}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              className="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Reset Sesi</span>
@@ -145,7 +145,7 @@ export const TabConnectionDedicated: React.FC<TabConnectionDedicatedProps> = ({
                 type="button"
                 onClick={onStop}
                 disabled={loading}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                className="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
               >
                 <Square className="w-3.5 h-3.5 fill-current" />
                 <span>Putuskan</span>
@@ -158,7 +158,7 @@ export const TabConnectionDedicated: React.FC<TabConnectionDedicatedProps> = ({
       {/* 2. FORM NOMOR WHATSAPP & PAIRING CODE */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Kolom Kiri: Form Input Nomor & Pairing Code (Col 7) */}
-        <div className="lg:col-span-7 bg-white border border-slate-200/90 rounded-2xl p-5 sm:p-6 shadow-xs space-y-5">
+        <div className="lg:col-span-7 bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-6 shadow-xs space-y-4 sm:space-y-5">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div className="flex items-center gap-2">
               <Smartphone className="w-4 h-4 text-[#0084D1]" />
@@ -367,14 +367,14 @@ export const TabConnectionDedicated: React.FC<TabConnectionDedicatedProps> = ({
                 botData.status === 'connected' ||
                 !isValidCode
               }
-              className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs transition flex items-center justify-center gap-2 cursor-pointer ${
+              className={`w-full py-2.5 px-3 sm:px-4 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer ${
                 botData.status === 'connected'
                   ? 'bg-emerald-600 text-white cursor-default opacity-90 shadow-xs'
                   : loading || botData.status === 'connecting'
                   ? 'bg-[#0084D1] text-white opacity-70 cursor-wait shadow-xs'
                   : !isValidCode
                   ? 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed select-none shadow-none'
-                  : 'bg-[#0084D1] hover:bg-[#0073B7] text-white cursor-pointer active:scale-[0.99] shadow-xs'
+                  : 'bg-[#0084D1] hover:bg-[#0073B7] text-white cursor-pointer active:scale-[0.98] shadow-xs'
               }`}
             >
               {loading || botData.status === 'connecting' ? (
@@ -406,7 +406,7 @@ export const TabConnectionDedicated: React.FC<TabConnectionDedicatedProps> = ({
         {/* Kolom Kanan: Tampilan Pairing Code & Panduan HP (Col 5) */}
         <div className="lg:col-span-5 space-y-5">
           {/* Card Pairing Code Display */}
-          <div className="bg-white border-2 border-sky-200 rounded-2xl p-5 shadow-sm space-y-4">
+          <div className="bg-white border-2 border-sky-200 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3.5 sm:space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <KeyRound className="w-4 h-4 text-[#0084D1]" />
@@ -419,7 +419,7 @@ export const TabConnectionDedicated: React.FC<TabConnectionDedicatedProps> = ({
               </span>
             </div>
 
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 text-center space-y-3">
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 sm:p-5 text-center space-y-2.5 sm:space-y-3">
               <span className="text-[11px] font-medium text-slate-500 block">
                 Ketik kode ini di aplikasi WhatsApp ponsel Anda:
               </span>
@@ -430,7 +430,7 @@ export const TabConnectionDedicated: React.FC<TabConnectionDedicatedProps> = ({
                 type="button"
                 onClick={onCopyCode}
                 disabled={!botData.pairingCode && !customCode}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0084D1] hover:bg-[#0073B7] active:scale-[0.99] text-white text-xs font-semibold transition shadow-xs cursor-pointer disabled:opacity-40"
+                className="inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl bg-[#0084D1] hover:bg-[#0073B7] active:scale-95 text-white text-xs font-semibold transition-all shadow-xs cursor-pointer disabled:opacity-40"
               >
                 {copied ? <Check className="w-4 h-4 stroke-[3]" /> : <Copy className="w-4 h-4" />}
                 <span>{copied ? 'Tersalin ke Clipboard!' : 'Salin Kode Pairing'}</span>
@@ -476,7 +476,7 @@ export const TabConnectionDedicated: React.FC<TabConnectionDedicatedProps> = ({
             Real-time Baileys Event Stream
           </span>
         </div>
-        <LiveTerminal logs={botData.logs} />
+        <LiveTerminal logs={botData.logs} status={botData.status} />
       </div>
     </div>
   );

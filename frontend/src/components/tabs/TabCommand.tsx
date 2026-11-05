@@ -153,7 +153,7 @@ const MediaGalleryPicker: React.FC<MediaGalleryPickerProps> = ({
           <button
             type="button"
             onClick={handleRefresh}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium text-slate-600 hover:text-[#0084D1] bg-white rounded-lg border border-slate-200 hover:border-sky-300 transition cursor-pointer shadow-2xs"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium text-slate-600 hover:text-[#0084D1] bg-white rounded-lg border border-slate-200 hover:border-sky-300 transition-all cursor-pointer shadow-2xs active:scale-95"
           >
             <RefreshCw className="w-3 h-3" />
             <span>Refresh</span>
@@ -163,7 +163,7 @@ const MediaGalleryPicker: React.FC<MediaGalleryPickerProps> = ({
             type="button"
             disabled={isUploading}
             onClick={() => fileInputRef.current?.click()}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-white bg-[#0084D1] hover:bg-[#0073b7] rounded-lg transition cursor-pointer shadow-xs disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-white bg-[#0084D1] hover:bg-[#0073b7] rounded-lg transition-all cursor-pointer shadow-xs disabled:opacity-50 active:scale-95"
           >
             {isUploading ? (
               <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -182,7 +182,7 @@ const MediaGalleryPicker: React.FC<MediaGalleryPickerProps> = ({
           type="button"
           disabled={isUploading}
           onClick={() => fileInputRef.current?.click()}
-          className="group flex flex-col items-center justify-center p-3 rounded-xl border-2 border-dashed border-slate-300 hover:border-[#0084D1] bg-white/70 hover:bg-sky-50/50 transition cursor-pointer min-h-[110px]"
+          className="group flex flex-col items-center justify-center p-3 rounded-xl border-2 border-dashed border-slate-300 hover:border-[#0084D1] bg-white/70 hover:bg-sky-50/50 transition-all cursor-pointer min-h-[110px] active:scale-[0.98]"
         >
           <div className="w-8 h-8 rounded-full bg-slate-100 group-hover:bg-sky-100 flex items-center justify-center text-slate-500 group-hover:text-[#0084D1] mb-1.5 transition">
             {isUploading ? (
@@ -448,8 +448,8 @@ export const TabCommand: React.FC<TabCommandProps> = ({
           <p className="text-xs text-slate-500 mt-0.5">Pilih format pesan otomatis yang ingin diedit.</p>
         </div>
 
-        {/* 4-Tab Segmented Switcher */}
-        <div className="inline-flex items-center p-1 bg-slate-100/90 rounded-xl border border-slate-200/80 self-start md:self-auto">
+        {/* Sub-Tab Segmented Switcher with mobile horizontal scroll */}
+        <div className="w-full md:w-auto max-w-full overflow-x-auto scrollbar-none flex items-center gap-1 p-1 bg-slate-100/90 rounded-xl border border-slate-200/80">
           {COMMAND_TABS.map((tab) => {
             const isActive = selectedCommand === tab.id;
             return (
@@ -457,7 +457,7 @@ export const TabCommand: React.FC<TabCommandProps> = ({
                 key={tab.id}
                 type="button"
                 onClick={() => setSelectedCommand(tab.id)}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+                className={`shrink-0 whitespace-nowrap px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer active:scale-[0.97] ${
                   isActive
                     ? 'bg-[#0084D1] text-white shadow-xs font-semibold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
@@ -646,7 +646,7 @@ export const TabCommand: React.FC<TabCommandProps> = ({
                 type="button"
                 disabled={isSavingConfig}
                 onClick={() => onSaveMenu()}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0084D1] hover:bg-[#0073b7] text-white text-xs font-medium shadow-xs transition disabled:opacity-50 cursor-pointer"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0084D1] hover:bg-[#0073b7] active:scale-[0.98] text-white text-xs font-semibold shadow-xs transition-all disabled:opacity-50 cursor-pointer"
               >
                 {isSavingConfig ? (
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -735,7 +735,7 @@ export const TabCommand: React.FC<TabCommandProps> = ({
                 type="button"
                 disabled={isSavingConfig}
                 onClick={() => onSaveList()}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0084D1] hover:bg-[#0073b7] text-white text-xs font-medium shadow-xs transition disabled:opacity-50 cursor-pointer"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0084D1] hover:bg-[#0073b7] active:scale-[0.98] text-white text-xs font-semibold shadow-xs transition-all disabled:opacity-50 cursor-pointer"
               >
                 {isSavingConfig ? (
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -852,7 +852,7 @@ export const TabCommand: React.FC<TabCommandProps> = ({
                 type="button"
                 disabled={isSavingConfig}
                 onClick={() => onSaveCarousel()}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0084D1] hover:bg-[#0073b7] text-white text-xs font-medium shadow-xs transition disabled:opacity-50 cursor-pointer"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0084D1] hover:bg-[#0073b7] active:scale-[0.98] text-white text-xs font-semibold shadow-xs transition-all disabled:opacity-50 cursor-pointer"
               >
                 {isSavingConfig ? (
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -972,7 +972,7 @@ export const TabCommand: React.FC<TabCommandProps> = ({
                 type="button"
                 disabled={isSavingConfig}
                 onClick={() => onSaveInvoice()}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0084D1] hover:bg-[#0073b7] text-white text-xs font-medium shadow-xs transition disabled:opacity-50 cursor-pointer"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0084D1] hover:bg-[#0073b7] active:scale-[0.98] text-white text-xs font-semibold shadow-xs transition-all disabled:opacity-50 cursor-pointer"
               >
                 {isSavingConfig ? (
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -1237,7 +1237,7 @@ export const TabCommand: React.FC<TabCommandProps> = ({
                 type="button"
                 disabled={isSavingConfig}
                 onClick={() => onSaveConfirmation()}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0084D1] hover:bg-[#0073b7] text-white text-xs font-medium shadow-xs transition disabled:opacity-50 cursor-pointer"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0084D1] hover:bg-[#0073b7] active:scale-[0.98] text-white text-xs font-semibold shadow-xs transition-all disabled:opacity-50 cursor-pointer"
               >
                 {isSavingConfig ? (
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />

@@ -171,8 +171,8 @@ export function TenantDashboard({ auth }: TenantDashboardProps) {
         />
 
         {/* Main Workspace */}
-        <main className="flex-1 p-4 sm:p-5 md:p-8 max-w-7xl w-full mx-auto space-y-4 sm:space-y-6">
-          <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-6 shadow-2xs">
+        <main className="flex-1 p-3 sm:p-5 md:p-8 max-w-7xl w-full mx-auto space-y-3.5 sm:space-y-6">
+          <div className="bg-white border border-slate-200/90 rounded-2xl p-3.5 sm:p-6 shadow-2xs">
             <TabContentRenderer
               selectedTab={selectedTab}
               setSelectedTab={setSelectedTab}

@@ -554,6 +554,205 @@ Rencana:
 Hasil yang Diharapkan:
 Tenant dapat dengan mudah dan aman mengkustomisasi username dan password toko mereka sendiri langsung melalui klik foto profil di sidebar bawah.
 
+---
+
+[15.0] - OPTIMASI MOBILE UX/UI DASHBOARD BOT (FASE 1: PERBAIKAN HORIZONTAL SCROLL SUB-TAB RESPON BOT & FILTER TRANSAKSI)
+
+- Tanggal: 2026-11-04 16:20
+- Status: Completed
+
+Tujuan:
+Merespons feedback dan keluhan pengguna mengenai antarmuka mobile dashboard bot yang berantakan, khususnya:
+1. Memperbaiki sub-tab "Respon Bot" pada `TabCommand.tsx` agar tidak lagi jebol menembus tepi kanan kartu kontainer di layar ponsel.
+2. Memperbaiki tombol filter status pada `TabTransaksi.tsx` agar teks judul (`Semua`, `Paid`, `Pending`, `Cancel`) tidak lagi terpotong elipsis (`Sem...`, `P...`, `Pendi...`, `Can...`) di ukuran mobile.
+
+Rencana:
+1. Perbaikan `frontend/src/components/tabs/TabCommand.tsx`:
+   - Mengubah kontainer segmented tab bar dari `inline-flex` statis menjadi kontainer responsif `w-full overflow-x-auto scrollbar-none flex items-center gap-1.5 p-1`.
+   - Mengatur setiap tombol tab dengan `shrink-0 whitespace-nowrap` dan padding ergonomis agar tidak pernah terpotong atau menembus batas kartu.
+   - Menambahkan efek visual feedback saat disentuh (`active:scale-[0.97] transition-all`).
+2. Perbaikan `frontend/src/components/tabs/TabTransaksi.tsx`:
+   - Mengubah kontainer filter pills dari yang sebelumnya memaksakan 4 tombol mengecil dalam 1 baris (`w-full` dengan `truncate`) menjadi horizontal scrollable pill bar (`overflow-x-auto scrollbar-none flex items-center gap-2`).
+   - Menghapus pemaksaan elipsis pada teks label dan memasang `shrink-0 whitespace-nowrap` agar teks dan angka badge selalu terbaca utuh (`Semua`, `Paid`, `Pending`, `Cancel`).
+   - Menambahkan feedback tactile pada pill tab saat ditekan.
+3. Menjalankan pengujian build frontend (`compile_applet` dan `lint_applet`).
+4. Mencatat hasil penyelesaian di `brain/PROGRESS.md`.
+
+Hasil yang Diharapkan:
+Seluruh tab navigasi dan filter pada dashboard bot tampil rapi, terbaca utuh tanpa elipsis yang membingungkan, dapat digeser horizontal dengan nyaman, dan tidak ada elemen yang keluar dari kartu kontainer.
 
 
 
+
+
+---
+
+[16.0] - OPTIMASI MOBILE UX/UI DASHBOARD BOT (FASE 2: REDESAIN DAN PENINGKATAN KETERBACAAN LIVE TERMINAL)
+
+- Tanggal: 2026-11-04 16:28
+- Status: Completed
+
+Tujuan:
+Merespons feedback dan masalah pada screenshot 3 di mana tampilan log terminal pada ukuran mobile terasa sangat sempit, teks header bertumpuk atau terpotong, instruksi empty state kurang sesuai dengan posisi mobile ("di sebelah kiri"), serta ukuran tinggi terminal yang terlalu kaku dan memakan ruang layar ponsel secara berlebihan.
+
+Rencana:
+1. Menata ulang header LiveTerminal agar responsif di layar mobile:
+   - Tombol mac-style dots tetap rapi dan tidak berhimpitan.
+   - Judul stream rapi dengan ikon Terminal.
+   - Indikator status socket WebSocket Active dibuat ringkas di mobile (misal badge "WS Active" dengan pulsing dot hijau/biru) dan tampil lengkap di desktop tanpa wrap teks yang berantakan.
+2. Menyesuaikan tinggi kontainer terminal agar proporsional di mobile:
+   - Mengubah h-[520px] kaku menjadi tinggi dinamis h-[340px] sm:h-[400px] md:h-[480px].
+3. Memperbaiki teks panduan empty state:
+   - Mengganti teks kaku "Masukkan nomor target di sebelah kiri" menjadi panduan yang akurat di semua ukuran layar: "Masukkan nomor target pada form pairing lalu klik 'Minta Kode Pairing'".
+4. Meningkatkan keterbacaan baris log:
+   - Mengganti break-all menjadi break-words agar pemenggalan kata tidak merusak makna kalimat log.
+   - Mengatur timestamp log menjadi lebih ramping text-[10px] di mobile.
+   - Menambahkan highlight kode pairing yang kontras dan mudah disalin jika ada event kode pairing di log.
+   - Menambahkan auto-scroll otomatis ke baris log terbaru.
+5. Menambahkan fitur salin log pada footer:
+   - Menyediakan tombol "Salin Log" yang menyalin seluruh teks log ke clipboard.
+   - Menyelaraskan status footer dengan status koneksi bot real-time.
+6. Menguji kompilasi dan linting (compile_applet, lint_applet).
+
+Hasil yang Diharapkan:
+Tampilan LiveTerminal pada layar mobile tampil sangat rapi, bersih, mudah dibaca, proporsional, dan informatif tanpa teks yang bertumpuk atau instruksi yang membingungkan.
+---
+
+[17.0] - OPTIMASI MOBILE UX/UI DASHBOARD BOT (FASE 3: PENYESUAIAN UKURAN TOMBOL, PADDING ERGONOMIS, DAN ANIMASI MIKRO)
+
+- Tanggal: 2026-11-04 16:35
+- Status: Completed
+
+Tujuan:
+Merespons feedback pengguna bahwa pada tampilan mobile ukuran beberapa tombol masih terlalu besar sehingga layar terasa sesak dan sempit, serta kurangnya animasi mikro sentuhan membuat antarmuka terasa kaku dan membosankan.
+
+Rencana:
+1. Mengoptimalkan kepadatan visual (density) dan padding pada layar mobile:
+   - Pada TenantDashboard: menyesuaikan padding kontainer utama dari p-4 menjadi p-3 sm:p-5 md:p-8 agar menghemat ruang horizontal ponsel.
+   - Pada TabConnectionDedicated: menyesuaikan padding kartu status, kartu form pairing, dan kartu instruksi dari p-5/p-6 menjadi p-4 sm:p-5 md:p-6.
+2. Menyelaraskan ukuran tombol-tombol utama agar ergonomis dan tidak terlalu besar di mobile:
+   - Tombol Minta Kode Pairing: menggunakan ukuran teks dan padding responsif yang pas di ponsel dengan animasi tekan tactile active:scale-[0.98].
+   - Tombol kontrol bot (Reset Sesi, Putuskan): dibuat responsif dan fleksibel dengan efek active:scale-95.
+   - Tombol Salin Kode Pairing: diberi animasi sentuhan active:scale-95 dengan visual feedback yang mulus.
+3. Menambahkan animasi mikro (micro-interactions) pada tombol Simpan dan interaksi formulir di TabCommand:
+   - Menambahkan efek active:scale-[0.98] transition-all pada seluruh tombol Simpan (Simpan Menu, Simpan List, Simpan Carousel, Simpan Invoice, Simpan Konfirmasi).
+   - Memastikan tombol Upload Foto dan thumbnail gallery picker memiliki feedback klik yang responsif.
+4. Memverifikasi seluruh perubahan dengan compile_applet dan lint_applet.
+
+Hasil yang Diharapkan:
+Antarmuka dashboard toko di layar ponsel terasa jauh lebih lega, luas, modern, tidak kaku, dengan respon animasi sentuh (tactile feedback) yang menyenangkan bagi pengguna.
+---
+
+[18.0] - FITUR PENGIRIMAN PESAN MASTER ADMIN KE OWNER TENANT (MESSAGE MASTER ADMIN TO TENANT OWNER)
+
+- Tanggal: 2026-11-04 18:45
+- Status: Planned
+
+Tujuan:
+Memungkinkan Super Admin mengirimkan pesan resmi secara langsung dari tabel dashboard Master Admin ke nomor WhatsApp pribadi pemilik toko (owner tenant), di mana pesan dikirimkan otomatis oleh bot WhatsApp milik tenant tersebut.
+
+Rencana:
+1. Menambahkan tombol aksi "Kirim Pesan" pada baris data tabel penyewa di admin-frontend (App.tsx).
+2. Membangun komponen modal dialog in-app untuk penulisan pesan:
+   - Menampilkan identitas penerima: Nama Toko, Nama Owner, dan Nomor WhatsApp target (+628...).
+   - Textarea input pesan pengumuman/informasi admin dengan counter karakter.
+   - Tombol "Batal" dan "Kirim Pesan" dengan animasi loading.
+3. Membangun endpoint backend POST /api/admin/tenants/:id/send-message di admin-backend/routes/adminRoutes.ts:
+   - Mengambil instance bot Baileys milik tenant terkait via getBotManager(tenantId).
+   - Memvalidasi status koneksi bot tenant (harus connected).
+   - Mengeksekusi pengiriman pesan WhatsApp ke nomor owner_phone tenant.
+   - Mengembalikan pesan respon sukses atau pesan peringatan jika bot sedang offline.
+4. Menambahkan log pencatatan pengiriman pesan pada sistem log aktivitas admin.
+5. Menguji fungsionalitas pengiriman pesan dan verifikasi kompilasi.
+
+Hasil yang Diharapkan:
+Super Admin dapat dengan mudah menghubungi owner toko langsung ke WhatsApp mereka dari dashboard master, menggunakan nomor bot toko masing-masing penyewa tanpa perlu membuka WhatsApp manual.
+
+---
+
+[19.0] - FITUR KATALOG TEMPLATE RESPON BOT SIAP PAKAI (TEMPLATE MESSAGE RESPON BOT)
+
+- Tanggal: 2026-11-04 18:45
+- Status: Planned
+
+Tujuan:
+Menyediakan pustaka template pesan siap pakai untuk masing-masing format respon bot (Menu, List, Carousel, Invoice, dan Konfirmasi) di dashboard toko, sehingga penyewa tidak kebingungan menyusun kata-kata dan mudah memahami cara penggunaan placeholder dinamis.
+
+Rencana:
+1. Merancang daftar template siap pakai untuk setiap kategori respon di TabCommand.tsx:
+   - Template Menu: Gaya Ringkas, Gaya Ramah/Formal, Gaya Toko Game & Topup, Gaya Toko Produk Digital.
+   - Template List: Gaya Daftar Menu Kategori, Gaya Promo Spesial.
+   - Template Carousel: Gaya Kartu Produk Unggulan.
+   - Template Invoice: Gaya Rincian Lengkap Biaya, Gaya Cepat Pembayaran QRIS.
+   - Template Konfirmasi: Gaya Pengingat Ramah, Gaya Formal dengan batas waktu bayar.
+2. Menambahkan tombol "Pilih Template" di header editor masing-masing sub-tab respon bot pada TabCommand.tsx.
+3. Membangun modal/drawer galeri template interaktif:
+   - Menampilkan kartu-kartu template dengan judul, deskripsi gaya bahasa, dan pratinjau teks.
+   - Menampilkan daftar variabel placeholder yang disertakan (seperti {storeName}, {buyerNumber}, {orderId}, {totalPrice}, {paymentMethod}).
+   - Tombol "Gunakan Template Ini" yang langsung mengisi textarea editor respon bot.
+4. Menambahkan konfirmasi ramah sebelum menimpa teks jika textarea sudah berisi teks custom penyewa.
+5. Menguji pratinjau template dan responsivitas di ukuran mobile dan desktop.
+
+Hasil yang Diharapkan:
+Penyewa toko dapat langsung memilih template yang sesuai dengan karakter bisnis mereka dalam 1-klik, memahami cara kerja placeholder secara praktis, dan dapat mengkustomisasinya dengan mudah.
+
+---
+
+[20.0] - FITUR PERINGATAN OTOMATIS MASA SEWA KEDALUWARSA DENGAN TOMBOL NATIVE CTA_URL (EXPIRED WARNING)
+
+- Tanggal: 2026-11-04 18:45
+- Status: Planned
+
+Tujuan:
+Membangun sistem peringatan dini otomatis yang memberitahu owner tenant bahwa masa sewa bot akan segera berakhir, dikirimkan secara bertahap langsung ke WhatsApp pribadi owner dengan pesan interaktif menggunakan tombol native bertipe cta_url untuk perpanjangan sewa ke Master Admin.
+
+Rencana:
+1. Menentukan 4 tahapan jadwal pengiriman peringatan sebelum kedaluwarsa:
+   - Tahap 1: 3 Hari sebelum masa sewa habis (H-3).
+   - Tahap 2: 1 Hari / 24 Jam sebelum masa sewa habis (H-1).
+   - Tahap 3: 5 Jam sebelum masa sewa habis (H-5 Jam).
+   - Tahap 4: 1 Jam sebelum masa sewa habis (H-1 Jam).
+2. Menambahkan kolom pelacak flag notifikasi pada skema master.db (tabel tenants):
+   - Kolom: warned_3d, warned_1d, warned_5h, warned_1h (integer/boolean default 0) untuk mencegah pengiriman pesan berulang (anti-spam).
+   - Reset flag otomatis jika masa sewa diperpanjang oleh admin.
+3. Membangun cron scheduler service di backend (backend/services/expiryWarningService.ts):
+   - Berjalan berkala setiap 5 menit memeriksa sisa waktu aktif tenant.
+   - Menghitung selisih waktu antara waktu saat ini dan expires_at.
+4. Mengonstruksi pesan peringatan interaktif Baileys WhatsApp:
+   - Memuat informasi: Nama Toko, ID Bot, Waktu tepat kedaluwarsa, dan pesan pengingat yang sopan namun jelas.
+   - Menggunakan tombol interaktif WhatsApp Native Flow bertipe cta_url (bukan link teks mentah) dengan label tombol seperti "Perpanjang Masa Sewa" atau "Hubungi Master Admin" yang membuka https://wa.me/6285712439395.
+5. Mengalirkan pesan melalui instance socket bot milik tenant tersebut ke nomor owner_phone.
+6. Menguji simulasi pengiriman pada berbagai interval waktu sewa.
+
+Hasil yang Diharapkan:
+Owner toko mendapatkan notifikasi tepat waktu sebelum bot mereka kedaluwarsa, pesan tampak sangat profesional dengan tombol interaktif cta_url, dan risiko bot terhenti tanpa sepengetahuan owner dapat dihindari.
+
+---
+
+[21.0] - FITUR NOTIFIKASI TRANSAKSI PENJUALAN REAL-TIME VIA TELEGRAM BOT (PURCHASE NOTICE)
+
+- Tanggal: 2026-11-04 18:45
+- Status: Planned
+
+Tujuan:
+Menyediakan integrasi notifikasi real-time ke akun atau grup Telegram milik owner toko setiap kali ada transaksi penjualan, sehingga owner dan tim dapat memantau pesanan masuk secara instan tanpa mengganggu obrolan di WhatsApp.
+
+Rencana:
+1. Menyiapkan konfigurasi Telegram pada database tenant dan endpoint profil toko:
+   - Kolom telegram_bot_token dan telegram_chat_id pada tabel config atau profil toko.
+   - Endpoint untuk menyimpan dan menguji token Telegram (POST /api/bot/test-telegram).
+2. Membangun antarmuka pengaturan Telegram di dashboard toko:
+   - Input Token Bot Telegram dan Chat ID Telegram (pribadi atau grup).
+   - Panduan ringkas cara membuat bot via @BotFather dan cara mengetahui Chat ID.
+   - Tombol "Tes Kirim Notifikasi" dengan indikator status koneksi Telegram.
+3. Membangun modul service Telegram di backend (backend/services/telegramNotifier.ts):
+   - Fungsi helper pengiriman pesan HTTP via Telegram Bot API (https://api.telegram.org/bot<token>/sendMessage).
+   - Format pesan rapi berbasis Markdown atau HTML dengan emoji status dan rincian transaksi.
+4. Menghubungkan trigger notifikasi pada siklus transaksi toko:
+   - Notifikasi Invoice Dibuat: Mengirimkan info pesanan baru yang sedang menunggu pembayaran QRIS.
+   - Notifikasi Pembayaran Berhasil (Paid): Mengirimkan info pesanan lunas berisi Nama Produk, Varian, Nominal, Order ID, Nomor Pembeli, dan estimasi laba margin toko.
+   - Notifikasi Pembatalan/Expired: Mengirimkan info jika pesanan tidak dibayar tepat waktu.
+5. Menguji pengiriman notifikasi transaksi ke akun dan grup Telegram.
+
+Hasil yang Diharapkan:
+Owner toko memiliki saluran notifikasi penjualan otomatis di Telegram yang cepat, stabil, gratis, dan dapat dibagikan ke tim toko dengan mudah.

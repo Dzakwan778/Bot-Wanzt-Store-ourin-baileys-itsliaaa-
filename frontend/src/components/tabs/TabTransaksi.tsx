@@ -199,7 +199,7 @@ export const TabTransaksi: React.FC<TabTransaksiProps> = ({
         </div>
 
         {/* Filter Pills - Responsive Scrollable Bar */}
-        <div className="w-full md:w-auto flex items-center p-1 bg-slate-100/90 rounded-xl border border-slate-200/80 gap-1 overflow-x-auto scrollbar-none">
+        <div className="w-full md:w-auto max-w-full flex items-center p-1 bg-slate-100/90 rounded-xl border border-slate-200/80 gap-1.5 overflow-x-auto scrollbar-none">
           {(
             [
               { id: 'all', label: 'Semua', count: summary.totalCount },
@@ -214,15 +214,15 @@ export const TabTransaksi: React.FC<TabTransaksiProps> = ({
                 key={tab.id}
                 type="button"
                 onClick={() => setStatusFilter(tab.id)}
-                className={`px-1.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer flex items-center justify-center gap-1 min-w-0 ${
+                className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer flex items-center justify-center gap-1.5 active:scale-[0.97] ${
                   isActive
                     ? 'bg-[#0084D1] text-white shadow-xs font-semibold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                 }`}
               >
-                <span className="truncate">{tab.label}</span>
+                <span>{tab.label}</span>
                 <span
-                  className={`text-[10px] px-1 sm:px-1.5 py-0.5 rounded-full font-mono shrink-0 leading-none ${
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono shrink-0 leading-none ${
                     isActive ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-600'
                   }`}
                 >
