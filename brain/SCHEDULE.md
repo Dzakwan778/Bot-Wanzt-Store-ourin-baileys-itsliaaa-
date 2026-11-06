@@ -645,8 +645,8 @@ Antarmuka dashboard toko di layar ponsel terasa jauh lebih lega, luas, modern, t
 
 [18.0] - FITUR PENGIRIMAN PESAN MASTER ADMIN KE OWNER TENANT (MESSAGE MASTER ADMIN TO TENANT OWNER)
 
-- Tanggal: 2026-11-04 18:45
-- Status: Planned
+- Tanggal: 2026-11-04 23:20
+- Status: Completed
 
 Tujuan:
 Memungkinkan Super Admin mengirimkan pesan resmi secara langsung dari tabel dashboard Master Admin ke nomor WhatsApp pribadi pemilik toko (owner tenant), di mana pesan dikirimkan otomatis oleh bot WhatsApp milik tenant tersebut.
@@ -756,3 +756,33 @@ Rencana:
 
 Hasil yang Diharapkan:
 Owner toko memiliki saluran notifikasi penjualan otomatis di Telegram yang cepat, stabil, gratis, dan dapat dibagikan ke tim toko dengan mudah.
+
+---
+
+[22.0] - PENEGAKAN SUSPENSI REAL-TIME TANPA REFRESH DAN BLOKIR TOTAL REQUEST PAIRING BOT
+
+- Tanggal: 2026-11-04 21:12
+- Status: Completed
+
+Tujuan:
+1. Memastikan popup banned (SuspendedAccountModal) langsung muncul secara otomatis di layar dashboard tenant saat Master Admin men-suspend akun, tanpa mengharuskan tenant me-refresh halaman web.
+2. Memastikan seluruh upaya penghubungan bot WhatsApp (baik melalui tombol UI maupun tembakan langsung ke API backend /api/bot/start dan /api/bot/reset) diblokir secara total dengan HTTP status 403 Forbidden ketika akun dalam keadaan ditangguhkan (suspended).
+
+Rencana:
+1. Backend Status Synchronization (/api/bot/status):
+   - Sertakan status akun tenant (accountStatus) dari master.db dalam respon /api/bot/status.
+2. Server-Side Hard Guard pada Endpoint Bot (/backend/routes/botRoutes.ts & /backend/botManager.ts):
+   - Pada POST /api/bot/start: Periksa status tenant di master.db. Jika !== 'active', tolak langsung dengan status 403 Forbidden.
+   - Pada POST /api/bot/reset: Tolak jika status akun bukan 'active'.
+   - Di botManager.start(): Tambahkan pengecekan lapis kedua agar socket Baileys tidak pernah diinisialisasi jika akun disuspend.
+   - Di TenantManager.setStatus('suspended'): Putuskan socket Baileys dan bersihkan file kredensial sesi aktif untuk mencegah reconnect di background.
+3. Frontend Real-Time Reaction:
+   - Di useBotConnection.ts: Tangkap accountStatus dari respon polling /api/bot/status. Teruskan atau sinkronkan ke TenantDashboard.
+   - Di TenantDashboard.tsx: Saat accountStatus berubah menjadi 'suspended', buka SuspendedAccountModal seketika (reset isSuspendModalDismissed jika baru saja dibanned).
+   - Di TabConnectionDedicated.tsx: Nonaktifkan form input nomor dan tombol Minta Kode Pairing jika akun suspended, dengan pesan peringatan yang tegas.
+4. Pengujian & Verifikasi:
+   - Tes perubahan status suspend di Master Admin: pastikan dashboard tenant langsung memunculkan popup banned dalam 1.5 detik tanpa refresh.
+   - Tes tembak API POST /api/bot/start dengan curl/fetch: pastikan mengembalikan 403 Forbidden dan tidak ada socket WhatsApp yang dibuat.
+
+Hasil yang Diharapkan:
+Sistem multi-tenant memiliki pertahanan anti-bypass 100%: popup banned muncul seketika secara real-time, dan tidak ada cara bagi tenant untuk menyambungkan bot WhatsApp selama akun berstatus suspended.

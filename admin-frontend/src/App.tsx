@@ -23,7 +23,11 @@ import {
   ArrowUpDown,
   Sparkles,
   Check,
-  Copy
+  Copy,
+  Send,
+  MessageSquare,
+  MessageCircle,
+  X
 } from 'lucide-react';
 
 interface Tenant {
@@ -95,6 +99,12 @@ export default function App() {
   // Form Extend
   const [extendDays, setExtendDays] = useState<number>(30);
   const [extendNote, setExtendNote] = useState<string>('');
+
+  // Form Send Message
+  const [isSendMessageModalOpen, setIsSendMessageModalOpen] = useState<boolean>(false);
+  const [selectedTenantForMessage, setSelectedTenantForMessage] = useState<Tenant | null>(null);
+  const [messageText, setMessageText] = useState<string>('');
+  const [isSendingMessage, setIsSendingMessage] = useState<boolean>(false);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -325,6 +335,58 @@ export default function App() {
       showToast('Error: ' + err.message);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleOpenSendMessageModal = (tenant: Tenant) => {
+    setSelectedTenantForMessage(tenant);
+    setMessageText('');
+    setIsSendMessageModalOpen(true);
+  };
+
+  const handleApplyMessageTemplate = (type: 'extend' | 'maintenance' | 'warning') => {
+    if (!selectedTenantForMessage) return;
+    const owner = selectedTenantForMessage.owner_name || 'Owner';
+    const store = selectedTenantForMessage.store_name || selectedTenantForMessage.tenant_id;
+
+    if (type === 'extend') {
+      setMessageText(
+        `Halo Kak ${owner} (${store}), ini adalah pesan resmi dari Master Admin Wanzt Apartemen.\n\nKami menginformasikan bahwa masa sewa unit bot WhatsApp Anda akan segera berakhir. Silakan lakukan perpanjangan masa sewa agar bot tetap aktif melayani transaksi toko Anda.\n\nTerima kasih!`
+      );
+    } else if (type === 'maintenance') {
+      setMessageText(
+        `Halo Kak ${owner} (${store}), ini adalah pemberitahuan resmi dari Master Admin.\n\nAkan dilakukan pemeliharaan server berkala (maintenance). Layanan bot WhatsApp Anda mungkin mengalami jeda sejenak selama proses berlangsung. Terima kasih atas kerja samanya.`
+      );
+    } else if (type === 'warning') {
+      setMessageText(
+        `Halo Kak ${owner} (${store}), ini adalah pemberitahuan dari Master Admin terkait akun bot WhatsApp Anda. Mohon segera periksa dashboard toko Anda atau konfirmasi ke kami jika ada kendala. Terima kasih.`
+      );
+    }
+  };
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTenantForMessage || !messageText.trim()) return;
+
+    setIsSendingMessage(true);
+    try {
+      const res = await fetch(`/api/admin/tenants/${selectedTenantForMessage.tenant_id}/send-message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: messageText.trim() }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(data.message || 'Pesan resmi berhasil dikirim via bot!');
+        setIsSendMessageModalOpen(false);
+        setMessageText('');
+      } else {
+        showToast(data.message || 'Gagal mengirim pesan');
+      }
+    } catch (err: any) {
+      showToast('Error: ' + err.message);
+    } finally {
+      setIsSendingMessage(false);
     }
   };
 
@@ -609,6 +671,7 @@ export default function App() {
                   <th className="py-3.5 px-3.5 whitespace-nowrap">Masa Sewa</th>
                   <th className="py-3.5 px-3.5 whitespace-nowrap">Expired</th>
                   <th className="py-3.5 px-3.5 whitespace-nowrap">Status Bot</th>
+                  <th className="py-3.5 px-3.5 whitespace-nowrap text-center">Pesan</th>
                   <th className="py-3.5 px-3.5 whitespace-nowrap text-center">Perpanjang</th>
                   <th className="py-3.5 px-3.5 whitespace-nowrap text-center">Suspend</th>
                   <th className="py-3.5 px-3.5 whitespace-nowrap text-center">Reset</th>
@@ -618,14 +681,14 @@ export default function App() {
               <tbody className="divide-y divide-slate-800/80 text-xs text-slate-300">
                 {loading ? (
                   <tr>
-                    <td colSpan={13} className="py-12 text-center text-slate-400">
+                    <td colSpan={14} className="py-12 text-center text-slate-400">
                       <RefreshCw className="w-6 h-6 animate-spin mx-auto text-indigo-400 mb-2" />
                       Memuat data apartemen...
                     </td>
                   </tr>
                 ) : filteredTenants.length === 0 ? (
                   <tr>
-                    <td colSpan={13} className="py-12 text-center text-slate-400">
+                    <td colSpan={14} className="py-12 text-center text-slate-400">
                       Tidak ada data unit apartemen yang cocok.
                     </td>
                   </tr>
@@ -767,7 +830,20 @@ export default function App() {
                           )}
                         </td>
 
-                        {/* 10. Perpanjang */}
+                        {/* 10. Pesan ke Owner */}
+                        <td className="py-3.5 px-3.5 whitespace-nowrap text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenSendMessageModal(tenant)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+                            title="Kirim Pesan WhatsApp Resmi ke Owner Toko"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            <span>Pesan</span>
+                          </button>
+                        </td>
+
+                        {/* 11. Perpanjang */}
                         <td className="py-3.5 px-3.5 whitespace-nowrap text-center">
                           <button
                             type="button"
@@ -1444,6 +1520,206 @@ export default function App() {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal 6: Kirim Pesan WhatsApp ke Owner Tenant */}
+      {isSendMessageModalOpen && selectedTenantForMessage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative space-y-4">
+            {/* Header Modal */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                  <Send className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white tracking-tight">Kirim Pesan ke Owner Toko</h3>
+                  <p className="text-[11px] text-slate-400">
+                    Pesan resmi Master Admin dikirim otomatis oleh bot WhatsApp unit penyewa
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSendMessageModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Tutup modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Target Info Card */}
+            {(() => {
+              const phoneInfo = formatIndonesianPhone(selectedTenantForMessage.owner_phone);
+              const isOnline = selectedTenantForMessage.bot_status === 'online';
+              const hasPhone = Boolean(selectedTenantForMessage.owner_phone && selectedTenantForMessage.owner_phone.trim());
+
+              return (
+                <div className="space-y-4 text-xs">
+                  <div className="p-3.5 bg-slate-800/60 rounded-xl border border-slate-700/80 grid grid-cols-2 gap-3">
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Unit Toko</span>
+                      <span className="font-semibold text-slate-200 truncate block">
+                        {selectedTenantForMessage.store_name || selectedTenantForMessage.tenant_id}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Nama Owner</span>
+                      <span className="font-semibold text-slate-200 truncate block">
+                        {selectedTenantForMessage.owner_name || '(Belum Diisi)'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase tracking-wider block">No. WhatsApp Tujuan</span>
+                      {hasPhone ? (
+                        <span className="font-mono text-emerald-400 font-medium">{phoneInfo.display}</span>
+                      ) : (
+                        <span className="text-rose-400 font-semibold italic text-[11px]">Nomor belum diisi</span>
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Status Bot Toko</span>
+                      {isOnline ? (
+                        <span className="inline-flex items-center gap-1.5 text-emerald-400 font-semibold">
+                          <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                          </span>
+                          Online (Socket Siap)
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 text-slate-400 font-medium">
+                          <span className="w-2 h-2 rounded-full bg-slate-500"></span>
+                          Offline
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {!hasPhone && (
+                    <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                      <span>
+                        Nomor WhatsApp pemilik belum diisi oleh tenant. Pesan tidak dapat dikirim sampai tenant melengkapi nomor telepon di dashboard toko.
+                      </span>
+                    </div>
+                  )}
+
+                  {!isOnline && hasPhone && (
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
+                      <div className="space-y-1.5">
+                        <p>
+                          Bot WhatsApp toko ini sedang <strong className="text-amber-200">Offline</strong>. Socket bot tidak dapat mengirim pesan otomatis saat ini.
+                        </p>
+                        <p className="text-[11px] text-amber-400/90">
+                          Anda dapat menggunakan tombol cadangan di bawah untuk mengirim pesan langsung via WhatsApp pribadi Anda.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Template Pesan Cepat */}
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] font-semibold text-slate-400">Pilih Template Pesan Cepat:</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleApplyMessageTemplate('extend')}
+                        className="px-2.5 py-1 text-[11px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 transition-colors cursor-pointer active:scale-95"
+                      >
+                        Perpanjangan Sewa
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleApplyMessageTemplate('maintenance')}
+                        className="px-2.5 py-1 text-[11px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 transition-colors cursor-pointer active:scale-95"
+                      >
+                        Maintenance Server
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleApplyMessageTemplate('warning')}
+                        className="px-2.5 py-1 text-[11px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 transition-colors cursor-pointer active:scale-95"
+                      >
+                        Peringatan Akun
+                      </button>
+                      {messageText && (
+                        <button
+                          type="button"
+                          onClick={() => setMessageText('')}
+                          className="px-2.5 py-1 text-[11px] font-medium bg-slate-800/40 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded-lg border border-slate-700/50 transition-colors cursor-pointer"
+                        >
+                          Kosongkan
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Form Input Pesan */}
+                  <form onSubmit={handleSendMessage} className="space-y-4">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-slate-300 font-medium">Isi Pesan Resmi</label>
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          {messageText.length} karakter
+                        </span>
+                      </div>
+                      <textarea
+                        required
+                        rows={5}
+                        value={messageText}
+                        onChange={(e) => setMessageText(e.target.value)}
+                        placeholder="Ketik pesan resmi Master Admin yang ingin disampaikan ke pemilik toko..."
+                        className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 text-xs leading-relaxed"
+                      />
+                    </div>
+
+                    {/* Tombol Aksi Bawah */}
+                    <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-2.5 pt-3 border-t border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => setIsSendMessageModalOpen(false)}
+                        className="w-full sm:w-auto px-4 py-2 font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
+                      >
+                        Tutup
+                      </button>
+
+                      <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                        {/* Fallback WhatsApp Web langsung saat bot offline */}
+                        {!isOnline && hasPhone && (
+                          <a
+                            href={`https://wa.me/${phoneInfo.cleanDigits}?text=${encodeURIComponent(messageText)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition-all shadow-md shadow-emerald-600/20 active:scale-95 cursor-pointer"
+                            title="Kirim pesan langsung melalui WhatsApp Web/App pribadi Anda"
+                          >
+                            <Phone className="w-3.5 h-3.5" />
+                            <span>Buka Chat WhatsApp (wa.me)</span>
+                          </a>
+                        )}
+
+                        {/* Tombol Kirim via Bot Toko jika Bot Online */}
+                        {isOnline && (
+                          <button
+                            type="submit"
+                            disabled={isSendingMessage || !messageText.trim() || !hasPhone}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition-all shadow-md shadow-emerald-600/20 disabled:opacity-50 cursor-pointer active:scale-95"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            <span>{isSendingMessage ? 'Mengirim Pesan...' : 'Kirim via Bot Toko'}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </form>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

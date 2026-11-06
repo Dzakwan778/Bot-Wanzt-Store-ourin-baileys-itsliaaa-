@@ -1,12 +1,23 @@
 import { Router, Request, Response } from 'express';
 import { botManager } from '../botManager.ts';
 import { loadStoreInfo } from '../config/configManager.ts';
+import { getActiveTenantId } from '../database/tenantContext.ts';
+import { TenantManager } from '../../admin-backend/services/tenantManager.ts';
 
 export const botRouter = Router();
 
-// Status bot saat ini
+// Status bot saat ini (dilengkapi accountStatus real-time dari master.db)
 botRouter.get('/status', (_req: Request, res: Response) => {
-  return res.json(botManager.getStatus());
+  const tenantId = getActiveTenantId();
+  const tenant = TenantManager.getTenant(tenantId);
+  const accountStatus = tenant?.status || 'active';
+  const botStatus = botManager.getStatus();
+
+  return res.json({
+    ...botStatus,
+    accountStatus,
+    expiresAt: tenant?.expires_at,
+  });
 });
 
 // Daftar grup WhatsApp tempat bot bergabung
@@ -19,9 +30,26 @@ botRouter.get('/groups', async (_req: Request, res: Response) => {
   }
 });
 
-// Start bot (dengan Server-Side Enforcement Store Info)
+// Start bot (dengan Server-Side Hard Guard Status Akun & Store Info)
 botRouter.post('/start', async (req: Request, res: Response) => {
   try {
+    const tenantId = getActiveTenantId();
+    const tenant = TenantManager.getTenant(tenantId);
+
+    // 1. HARD GUARD: Blokir total jika akun sedang suspended atau expired
+    if (tenant && tenant.status !== 'active') {
+      const isSuspended = tenant.status === 'suspended';
+      return res.status(403).json({
+        success: false,
+        suspended: isSuspended,
+        expired: tenant.status === 'expired',
+        error: isSuspended
+          ? 'Akses Ditolak: Akun toko Anda sedang ditangguhkan (Suspended) oleh Master Admin. Seluruh permintaan koneksi WhatsApp dinonaktifkan.'
+          : 'Akses Ditolak: Masa sewa bot Anda telah kedaluwarsa (Expired). Silakan hubungi Master Admin untuk memperpanjang masa sewa.',
+      });
+    }
+
+    // 2. Server-Side Enforcement Store Info
     const currentStore = botManager.config?.storeInfo || loadStoreInfo();
     const hasStoreName = Boolean(currentStore?.storeName && currentStore.storeName.trim());
     const hasOwnerName = Boolean(currentStore?.ownerName && currentStore.ownerName.trim());
@@ -57,6 +85,16 @@ botRouter.post('/stop', async (_req: Request, res: Response) => {
 // Reset koneksi bot
 botRouter.post('/reset', async (_req: Request, res: Response) => {
   try {
+    const tenantId = getActiveTenantId();
+    const tenant = TenantManager.getTenant(tenantId);
+    if (tenant && tenant.status !== 'active') {
+      return res.status(403).json({
+        success: false,
+        suspended: tenant.status === 'suspended',
+        error: 'Akses Ditolak: Akun toko Anda sedang ditangguhkan (Suspended).',
+      });
+    }
+
     await botManager.reset();
     return res.json({ success: true, status: botManager.getStatus() });
   } catch (err: any) {
@@ -67,6 +105,16 @@ botRouter.post('/reset', async (_req: Request, res: Response) => {
 // Simpan konfigurasi bot
 botRouter.post('/save-config', (req: Request, res: Response) => {
   try {
+    const tenantId = getActiveTenantId();
+    const tenant = TenantManager.getTenant(tenantId);
+    if (tenant && tenant.status !== 'active') {
+      return res.status(403).json({
+        success: false,
+        suspended: tenant.status === 'suspended',
+        error: 'Akses Ditolak: Akun toko Anda sedang ditangguhkan (Suspended).',
+      });
+    }
+
     botManager.saveConfig(req.body);
     return res.json({ success: true, config: botManager.config });
   } catch (err: any) {
