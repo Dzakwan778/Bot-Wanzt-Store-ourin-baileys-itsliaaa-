@@ -101,9 +101,25 @@ export const TabConnectionDedicated: React.FC<TabConnectionDedicatedProps> = ({
   };
 
   const statusInfo = getStatusBadge();
+  const isSuspended = botData.accountStatus === 'suspended';
 
   return (
     <div className="space-y-6">
+      {/* Peringatan Akun Ditangguhkan (Suspended) */}
+      {isSuspended && (
+        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-300 text-rose-800 shadow-xs flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-rose-900">
+              Akses Bot WhatsApp Diblokir
+            </h4>
+            <p className="text-xs text-rose-700 leading-relaxed">
+              Akun Anda saat ini sedang ditangguhkan (suspended) oleh Master Admin. Seluruh koneksi bot WhatsApp telah diputus dan pembuatan request pairing code baru diblokir.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* 1. STATUS KONEKSI WHATSAPP (Header Status Card) */}
       <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${statusInfo.color} shadow-2xs`}>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -134,8 +150,12 @@ export const TabConnectionDedicated: React.FC<TabConnectionDedicatedProps> = ({
             <button
               type="button"
               onClick={onReset}
-              disabled={loading}
-              className="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
+              disabled={loading || isSuspended}
+              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all flex items-center gap-1.5 shadow-2xs ${
+                isSuspended
+                  ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed select-none'
+                  : 'bg-white hover:bg-slate-50 border-slate-300 text-slate-700 cursor-pointer active:scale-95'
+              }`}
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Reset Sesi</span>
@@ -365,10 +385,13 @@ export const TabConnectionDedicated: React.FC<TabConnectionDedicatedProps> = ({
                 loading ||
                 botData.status === 'connecting' ||
                 botData.status === 'connected' ||
-                !isValidCode
+                !isValidCode ||
+                isSuspended
               }
-              className={`w-full py-2.5 px-3 sm:px-4 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                botData.status === 'connected'
+              className={`w-full py-2.5 px-3 sm:px-4 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 ${
+                isSuspended
+                  ? 'bg-rose-100 text-rose-700 border border-rose-300 cursor-not-allowed select-none shadow-none'
+                  : botData.status === 'connected'
                   ? 'bg-emerald-600 text-white cursor-default opacity-90 shadow-xs'
                   : loading || botData.status === 'connecting'
                   ? 'bg-[#0084D1] text-white opacity-70 cursor-wait shadow-xs'
@@ -382,12 +405,18 @@ export const TabConnectionDedicated: React.FC<TabConnectionDedicatedProps> = ({
               ) : (
                 <Play
                   className={`w-4 h-4 fill-current ${
-                    !isValidCode && botData.status !== 'connected' ? 'text-slate-400' : 'text-white'
+                    isSuspended
+                      ? 'text-rose-600'
+                      : !isValidCode && botData.status !== 'connected'
+                      ? 'text-slate-400'
+                      : 'text-white'
                   }`}
                 />
               )}
               <span>
-                {botData.status === 'connected'
+                {isSuspended
+                  ? 'Akun Ditangguhkan (Koneksi Diblokir)'
+                  : botData.status === 'connected'
                   ? 'WhatsApp Bot Telah Terhubung'
                   : loading || botData.status === 'connecting'
                   ? 'Menghubungkan...'

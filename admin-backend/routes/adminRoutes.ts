@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { TenantManager } from '../services/tenantManager.ts';
 import { getMasterDb, hashPassword } from '../database/masterSqlite.ts';
+import { getBotManager } from '../../backend/botManager.ts';
 import crypto from 'crypto';
 
 export const adminRouter = Router();
@@ -181,3 +182,46 @@ adminRouter.post('/tenants/:id/impersonate', (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: err.message });
   }
 });
+
+// 10. Kirim Pesan WhatsApp dari Master Admin ke Owner Tenant
+adminRouter.post('/tenants/:id/send-message', async (req: Request, res: Response) => {
+  try {
+    const tenantId = String(req.params.id);
+    const { message } = req.body;
+
+    if (!message || typeof message !== 'string' || !message.trim()) {
+      return res.status(400).json({ success: false, message: 'Isi pesan tidak boleh kosong' });
+    }
+
+    const tenant = TenantManager.getTenant(tenantId);
+    if (!tenant) {
+      return res.status(404).json({ success: false, message: 'Unit tenant tidak ditemukan' });
+    }
+
+    if (!tenant.owner_phone || !tenant.owner_phone.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Nomor WhatsApp pemilik (owner) pada unit ini belum diisi oleh tenant',
+      });
+    }
+
+    const bot = getBotManager(tenantId);
+    if (bot.status !== 'connected' || !bot.sock) {
+      return res.status(400).json({
+        success: false,
+        botOffline: true,
+        message: `Bot WhatsApp toko ${tenant.store_name || tenantId} sedang Offline. Tidak dapat mengirim pesan otomatis via bot.`,
+      });
+    }
+
+    await bot.sendTextMessage(tenant.owner_phone, message.trim());
+
+    res.json({
+      success: true,
+      message: `Pesan resmi Master Admin berhasil dikirim ke nomor WhatsApp owner (${tenant.owner_phone}) via bot toko`,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err?.message || 'Gagal mengirim pesan' });
+  }
+});
+

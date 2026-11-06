@@ -4,7 +4,8 @@ import { BotStatusResponse } from '../types/dashboard.types';
 export function useBotConnection(
   showToast: (msg: string) => void,
   onInitialConfigLoaded?: (config: any) => void,
-  onInitialXavieraLoaded?: (key: string, url: string) => void
+  onInitialXavieraLoaded?: (key: string, url: string) => void,
+  onAccountStatusChanged?: (status: 'active' | 'suspended' | 'expired') => void
 ) {
   const [phone, setPhone] = useState('81234567890');
   const [customCode, setCustomCode] = useState('');
@@ -20,6 +21,7 @@ export function useBotConnection(
     logs: [],
     hasSession: false,
     isRegistered: false,
+    accountStatus: 'active',
   });
 
   // Polling status secara real-time
@@ -31,6 +33,12 @@ export function useBotConnection(
         if (res.ok) {
           const data: any = await res.json();
           setBotData(data);
+
+          // Real-time synchronization: jika status akun berubah (misal disuspend oleh admin)
+          if (data.accountStatus && onAccountStatusChanged) {
+            onAccountStatusChanged(data.accountStatus);
+          }
+
           if (data.customCode && !customCode) {
             setCustomCode(data.customCode);
           }
@@ -53,7 +61,7 @@ export function useBotConnection(
     fetchStatus();
     const interval = setInterval(fetchStatus, 1500);
     return () => clearInterval(interval);
-  }, [customCode]);
+  }, [customCode, onAccountStatusChanged]);
 
   const handleStartPairing = async (e: FormEvent) => {
     e.preventDefault();
@@ -99,6 +107,9 @@ export function useBotConnection(
       if (res.ok) {
         showToast('Memulai permintaan pairing code...');
       } else {
+        if (data.suspended && onAccountStatusChanged) {
+          onAccountStatusChanged('suspended');
+        }
         showToast(data.error || 'Gagal memulai penautan');
       }
     } catch (err: any) {
@@ -121,8 +132,16 @@ export function useBotConnection(
   const handleReset = async () => {
     setLoading(true);
     try {
-      await fetch('/api/bot/reset', { method: 'POST' });
-      showToast('Sesi lama berhasil dibersihkan.');
+      const res = await fetch('/api/bot/reset', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        showToast('Sesi lama berhasil dibersihkan.');
+      } else {
+        if (data.suspended && onAccountStatusChanged) {
+          onAccountStatusChanged('suspended');
+        }
+        showToast(data.error || 'Gagal mereset bot.');
+      }
     } finally {
       setLoading(false);
     }

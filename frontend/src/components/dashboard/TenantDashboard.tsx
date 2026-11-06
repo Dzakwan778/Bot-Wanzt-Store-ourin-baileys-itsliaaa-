@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Check } from 'lucide-react';
 
 // Custom Hooks
@@ -52,6 +52,26 @@ export function TenantDashboard({ auth }: TenantDashboardProps) {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  const [accountStatus, setAccountStatus] = useState<'active' | 'suspended' | 'expired'>(() => {
+    return auth.user?.accountStatus || 'active';
+  });
+  const [isSuspendModalDismissed, setIsSuspendModalDismissed] = useState<boolean>(false);
+
+  // Callback sinkronisasi status akun secara real-time dari polling status bot
+  const handleAccountStatusChange = useCallback((newStatus: 'active' | 'suspended' | 'expired') => {
+    setAccountStatus((prev) => {
+      if (prev !== newStatus) {
+        if (newStatus === 'suspended') {
+          // Begitu Master Admin mengubah status menjadi suspended, langsung reset dismiss
+          // sehingga popup banned seketika muncul di layar tanpa refresh!
+          setIsSuspendModalDismissed(false);
+        }
+        return newStatus;
+      }
+      return prev;
+    });
+  }, []);
+
   // 1. Data Integrasi Xaviera API
   const xaviera = useXavieraData(showToast);
 
@@ -61,20 +81,16 @@ export function TenantDashboard({ auth }: TenantDashboardProps) {
   // 3. Data & Saldo Payment Gateway LunasQRIS API
   const lunasQrisData = useLunasQrisData(storeConfig.lunasQrisApiKey, storeConfig.lunasQrisBaseUrl, showToast);
 
-  // 4. Koneksi & Polling Socket WhatsApp Bot
+  // 4. Koneksi & Polling Socket WhatsApp Bot (dengan sinkronisasi status akun real-time)
   const botConn = useBotConnection(
     showToast,
     storeConfig.loadInitialConfig,
     (apiKey, baseUrl) => {
       if (apiKey) xaviera.setXavieraApiKey(apiKey);
       if (baseUrl) xaviera.setXavieraBaseUrl(baseUrl);
-    }
+    },
+    handleAccountStatusChange
   );
-
-  const [accountStatus, setAccountStatus] = useState<'active' | 'suspended' | 'expired'>(() => {
-    return auth.user?.accountStatus || 'active';
-  });
-  const [isSuspendModalDismissed, setIsSuspendModalDismissed] = useState<boolean>(false);
 
 
   // Ambil store info awal tenant secara langsung saat mount

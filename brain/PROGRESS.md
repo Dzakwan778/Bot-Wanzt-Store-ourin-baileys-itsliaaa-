@@ -1411,3 +1411,101 @@ Hasil:
 
 Kendala:
 Tidak ada.
+---
+
+[39.0] - IMPLEMENTASI DETEKSI REAL-TIME POPUP BANNED DAN BLOKIR TOTAL API PAIRING KONEKSI BOT
+
+- Tanggal: 2026-11-04 21:16
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 39.0
+
+Pekerjaan yang Dilakukan:
+1. Sinkronisasi Real-Time Status Akun Tenant pada Polling Bot Status:
+   - Memperbarui endpoint GET /api/bot/status di backend/routes/botRoutes.ts agar menyertakan data status akun terkini (accountStatus: 'active' | 'suspended' | 'expired') langsung dari database master.db.
+   - Menambahkan tipe TypeScript accountStatus?: 'active' | 'suspended' | 'expired' pada interface BotStatusResponse di frontend/src/types/dashboard.types.ts.
+2. Penegakan Reaksi Instan Popup Banned di Dashboard Tenant:
+   - Menambahkan callback onAccountStatusChanged pada hook frontend/src/hooks/useBotConnection.ts untuk mendeteksi perubahan status akun secara real-time setiap siklus polling (1.5 detik).
+   - Menghubungkan callback tersebut di frontend/src/components/dashboard/TenantDashboard.tsx: jika status akun berubah menjadi 'suspended', state isSuspendModalDismissed langsung di-reset menjadi false dan popup SuspendedAccountModal seketika muncul di layar tenant tanpa perlu merefresh browser.
+3. Hard Guard Pemblokiran Total Request Penautan Bot (Anti-Bypass API):
+   - Menambahkan filter validasi status akun di backend/routes/botRoutes.ts pada endpoint POST /api/bot/start, POST /api/bot/reset, dan POST /api/bot/save-config. Jika status tenant bukan 'active', request langsung ditolak dengan HTTP 403 Forbidden dan respon pesan error tegas.
+   - Menambahkan proteksi lapis kedua pada backend/botManager.ts di method start() agar socket koneksi Baileys tidak akan pernah diinisialisasi jika akun berstatus suspended.
+   - Memperbarui TenantManager.setStatus('suspended') dan forceDisconnect() di backend/botManager.ts untuk membersihkan/menghapus file kredensial sesi Baileys agar koneksi WhatsApp terputus tuntas tanpa ada auto-reconnect di latar belakang.
+4. Penguncian dan Indikator Visual Antarmuka Form Pairing:
+   - Pada frontend/src/components/tabs/TabConnectionDedicated.tsx, menambahkan banner peringatan bernuansa rose-red jika akun berstatus suspended yang menginformasikan bahwa akses bot diblokir oleh Master Admin.
+   - Menonaktifkan tombol "Minta Kode Pairing" dan tombol "Reset Sesi" dengan teks status 'Akun Ditangguhkan (Koneksi Diblokir)'.
+5. Menjalankan pengujian kompilasi (compile_applet) dan validasi typechecking TypeScript (lint_applet) dengan hasil 100% sukses tanpa error.
+
+File yang Diubah:
+- "backend/routes/botRoutes.ts" - Menambahkan accountStatus pada polling status dan memblokir request /api/bot/start, /api/bot/reset, /api/bot/save-config dengan HTTP 403 Forbidden saat akun disuspend.
+- "backend/botManager.ts" - Menambahkan proteksi pembatalan socket di start() dan pembersihan kredensial sesi pada forceDisconnect().
+- "frontend/src/types/dashboard.types.ts" - Menambahkan field accountStatus dan expiresAt pada BotStatusResponse.
+- "frontend/src/hooks/useBotConnection.ts" - Menambahkan callback onAccountStatusChanged dan penanganan respon 403 pada pairing.
+- "frontend/src/components/dashboard/TenantDashboard.tsx" - Menghubungkan deteksi real-time status akun untuk langsung membuka popup banned seketika tanpa refresh.
+- "frontend/src/components/tabs/TabConnectionDedicated.tsx" - Menambahkan banner peringatan akun ditangguhkan dan menonaktifkan tombol pairing serta reset.
+- "brain/SCHEDULE.md" - Pembaruan status entri [22.0] menjadi Completed.
+- "brain/LANGKAH_IMPLEMENTASI.md" - Pembaruan status entri [39.0] menjadi Completed.
+- "brain/PROGRESS.md" - Pencatatan hasil penyelesaian entri [39.0].
+
+Alasan Perubahan:
+Menjawab masalah yang ditemukan oleh pengguna di mana tenant yang sedang aktif membuka dashboard tidak langsung mendapatkan popup banned ketika akunnya disuspend oleh admin, serta menutup celah keamanan di mana tenant sebelumnya masih dapat memicu request pairing koneksi bot WhatsApp ke server.
+
+Hasil:
+1. Popup banned kini langsung muncul secara instan di layar dashboard tenant dalam hitungan detik tanpa perlu refresh halaman saat Master Admin men-suspend akun.
+2. Seluruh endpoint penautan bot (POST /api/bot/start dan POST /api/bot/reset) terkunci rapat dengan HTTP 403 Forbidden sehingga tidak dapat ditembak atau dibypass dengan skrip atau API client eksternal.
+3. Socket WhatsApp terputus total dan sesi kredensial dibersihkan sehingga bot tidak dapat berfungsi sama sekali selama masa penangguhan akun.
+4. Kompilasi dan linting TypeScript lulus 100% bebas error.
+
+Kendala:
+Tidak ada.
+---
+
+[40.0] - IMPLEMENTASI FITUR PENGIRIMAN PESAN MASTER ADMIN KE OWNER TENANT
+
+- Tanggal: 2026-11-04 23:23
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 40.0
+
+Pekerjaan yang Dilakukan:
+1. Pembuatan Method Helper Pengiriman Pesan WhatsApp pada BotManager:
+   - Menambahkan method sendTextMessage(toPhone: string, text: string): Promise<boolean> di backend/botManager.ts.
+   - Memvalidasi socket Baileys aktif dan status bot terhubung ('connected').
+   - Menormalisasi nomor WhatsApp penerima menjadi JID WhatsApp resmi (<cleanDigits>@s.whatsapp.net).
+   - Mengirim pesan teks melalui socket Baileys asli (sock.sendMessage) dan mencatat log aktivitas bot.
+2. Pembuatan Endpoint Backend Pengiriman Pesan Resmi Master Admin:
+   - Menambahkan route POST /api/admin/tenants/:id/send-message di admin-backend/routes/adminRoutes.ts.
+   - Memvalidasi data unit tenant dan kelengkapan nomor WhatsApp pemilik (owner_phone).
+   - Memeriksa status bot Baileys toko; jika sedang offline, memberikan respon error ramah botOffline: true.
+   - Mengeksekusi pengiriman pesan resmi via bot WhatsApp unit terkait dan mengembalikan respon sukses JSON.
+3. Pengembangan Antarmuka Tabel dan Modal Dialog di Dashboard Master Admin:
+   - Menambahkan kolom ke-10 "Pesan" pada tabel daftar penyewa di admin-frontend/src/App.tsx dengan tombol aksi bertema hijau emerald "Pesan" berikon MessageSquare.
+   - Mengembangkan modal dialog in-app SendMessageModal dengan tampilan premium dan terstruktur:
+     * Header rapi berikon Send dan tombol close X.
+     * Kartu informasi target: Nama Unit Toko, Nama Owner, Nomor WhatsApp tujuan (+628...), dan Status Bot (Online dengan animasi ping atau Offline).
+     * Template pesan cepat siap pakai (Perpanjangan Sewa, Maintenance Server, dan Peringatan Akun) dengan 1 kali klik.
+     * Area pengetikan pesan textarea dengan counter karakter real-time.
+     * Fitur cadangan cerdas (fallback): jika bot toko sedang offline, disediakan banner peringatan dan tombol langsung "Buka Chat WhatsApp (wa.me)" dengan teks pesan yang sudah terisi otomatis (URL encoded).
+     * Tombol aksi "Kirim via Bot Toko" beranimasi loading saat bot online.
+4. Menjalankan pengujian build kompilasi (compile_applet) dan validasi type checking TypeScript (lint_applet) dengan hasil 100% sukses tanpa error.
+
+File yang Diubah:
+- "backend/botManager.ts" - Menambahkan method sendTextMessage pada kelas BotManager.
+- "admin-backend/routes/adminRoutes.ts" - Menambahkan route POST /tenants/:id/send-message dengan verifikasi tenant, status bot, dan logging.
+- "admin-frontend/src/App.tsx" - Menambahkan kolom Pesan pada tabel, state modal, tombol aksi, dan modal dialog SendMessageModal dengan fitur template dan fallback wa.me.
+- "brain/SCHEDULE.md" - Pembaruan status entri [18.0] menjadi Completed.
+- "brain/LANGKAH_IMPLEMENTASI.md" - Pembaruan status entri [40.0] menjadi Completed.
+- "brain/PROGRESS.md" - Pencatatan hasil penyelesaian entri [40.0].
+
+Alasan Perubahan:
+Memenuhi instruksi pengguna untuk mengimplementasikan fitur pengiriman pesan dari Master Admin langsung ke nomor WhatsApp pemilik toko (owner) melalui bot WhatsApp masing-masing unit tanpa perlu membuka WhatsApp manual.
+
+Hasil:
+1. Master Admin kini dapat mengirim pesan resmi kepada pemilik toko langsung dari tabel unit di Dashboard Master Admin.
+2. Pesan dikirimkan secara otomatis oleh bot WhatsApp milik toko penyewa, sehingga pesan tampak resmi dan terpercaya.
+3. Tersedia template cepat untuk pengingat sewa, pemeliharaan server, dan informasi akun.
+4. Jika bot toko sedang offline, admin tetap dapat menghubungi owner melalui tombol fallback direct wa.me yang sudah memuat draf pesan.
+5. Seluruh kode lolos kompilasi dan linting TypeScript dengan sempurna.
+
+Kendala:
+Tidak ada.
+
+

@@ -156,6 +156,29 @@ export class BotManager {
     return sendAdminContactMessage(this.sock, this.config, remoteJid, quotedMsg, (t, m) => this.addLog(t, m));
   }
 
+  async sendTextMessage(toPhone: string, text: string): Promise<boolean> {
+    if (!this.sock || this.status !== 'connected') {
+      throw new Error('Bot WhatsApp sedang offline atau tidak terhubung');
+    }
+    if (!text || !text.trim()) {
+      throw new Error('Isi pesan teks tidak boleh kosong');
+    }
+
+    let clean = toPhone.replace(/\D/g, '');
+    if (clean.startsWith('0')) {
+      clean = '62' + clean.slice(1);
+    } else if (clean.startsWith('8')) {
+      clean = '62' + clean;
+    }
+    if (!clean.includes('@s.whatsapp.net')) {
+      clean = `${clean}@s.whatsapp.net`;
+    }
+
+    await this.sock.sendMessage(clean, { text: text.trim() });
+    this.addLog('info', `Pesan resmi Master Admin berhasil dikirim ke nomor owner: ${toPhone}`);
+    return true;
+  }
+
   // --- Socket Lifecycle ---
   async start(rawPhoneNumber: string, customCode: string = DEFAULT_CUSTOM_CODE, isReconnect: boolean = false) {
     if (!rawPhoneNumber) {
@@ -175,6 +198,21 @@ export class BotManager {
     }
     if (codeToUse.length !== 8) {
       throw new Error(`Custom pairing code tidak sesuai: wajib tepat 8 karakter (saat ini ${codeToUse.length} karakter).`);
+    }
+
+    // Validasi mutlak: tolak koneksi bot jika akun tenant berstatus suspended atau expired
+    try {
+      const { TenantManager } = await import('../admin-backend/services/tenantManager.ts');
+      const tenant = TenantManager.getTenant(this.tenantId);
+      if (tenant && tenant.status !== 'active') {
+        this.status = 'closed';
+        this.addLog('error', `⛔ Permintaan koneksi ditolak: Akun tenant "${this.tenantId}" sedang berstatus ${tenant.status}.`);
+        throw new Error(`Akun toko sedang ditangguhkan (${tenant.status}). Seluruh koneksi bot WhatsApp diblokir.`);
+      }
+    } catch (checkErr: any) {
+      if (checkErr.message?.includes('ditangguhkan')) {
+        throw checkErr;
+      }
     }
 
     this.phoneNumber = cleanPhone;
@@ -393,9 +431,19 @@ export class BotManager {
       } catch {}
       this.sock = null;
     }
+
+    // Bersihkan folder sesi kredensial agar WhatsApp terlepas total dan tidak dapat reconnect di background
+    try {
+      if (fs.existsSync(this.sessionDir)) {
+        fs.rmSync(this.sessionDir, { recursive: true, force: true });
+      }
+    } catch (cleanErr) {
+      console.error(`Gagal membersihkan folder sesi tenant ${this.tenantId}:`, cleanErr);
+    }
+
     this.status = 'closed';
     this.pairingCode = '';
-    this.addLog('warning', '⛔ Koneksi WhatsApp bot diputus paksa karena akun toko telah ditangguhkan (suspended) oleh Master Admin.');
+    this.addLog('warning', '⛔ Koneksi WhatsApp bot diputus paksa dan sesi dibersihkan karena akun toko telah ditangguhkan (suspended) oleh Master Admin.');
   }
 
   async reset() {

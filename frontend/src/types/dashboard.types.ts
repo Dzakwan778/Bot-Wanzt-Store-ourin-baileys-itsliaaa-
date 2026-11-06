@@ -14,6 +14,8 @@ export interface BotStatusResponse {
   logs: LogEntry[];
   hasSession: boolean;
   isRegistered?: boolean;
+  accountStatus?: 'active' | 'suspended' | 'expired';
+  expiresAt?: string;
 }
 
 export type WhatsAppButtonType =
