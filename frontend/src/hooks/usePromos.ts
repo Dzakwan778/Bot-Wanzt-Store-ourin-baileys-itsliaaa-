@@ -242,12 +242,14 @@ export function usePromos(showToast: (msg: string) => void) {
     }
   };
 
-  // Generator Kode Acak
+  // Generator Kode Acak (CSPRNG)
   const generateRandomCode = (prefix: string = 'WANZT') => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const randomValues = new Uint32Array(4);
+    globalThis.crypto.getRandomValues(randomValues);
     let code = prefix;
     for (let i = 0; i < 4; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
+      code += chars.charAt(randomValues[i] % chars.length);
     }
     setFormCode(code);
   };

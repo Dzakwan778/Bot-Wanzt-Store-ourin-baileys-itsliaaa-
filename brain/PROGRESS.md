@@ -2901,3 +2901,63 @@ Hasil:
 
 Kendala:
 Tidak ada.
+
+---
+
+[48.0] - IMPLEMENTASI FITUR BROADCAST MASTER ADMIN (WHATSAPP & TELEGRAM PARALEL, JADWAL SEKALI & BERULANG, PLACEHOLDER, DAN LOG 2 TINGKAT)
+
+- Tanggal: 2026-11-14
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 67.0
+Referensi SCHEDULE: 38.0
+
+Pekerjaan yang Dilakukan:
+1. Skema Database Pusat & Utilitas Logika ("admin-backend/database/masterSqlite.ts", "admin-backend/services/broadcastUtils.ts", "admin-backend/services/broadcastUtils.test.ts", "admin-frontend/src/utils/broadcastFormat.ts", "admin-frontend/src/utils/broadcastFormat.test.ts"):
+   - Menambahkan tabel `broadcast_campaigns` dan `broadcast_logs` beserta index relasional pada `database/master.db`.
+   - Mengimplementasikan fungsi murni `resolveBroadcastPlaceholders` (`{storeName}`, `{ownerName}`, `{tenantId}`, `{ownerPhone}`, `{expiryDate}`, `{daysRemaining}`, `{remainingTime}`), `parseWibDateTimeToUtcIso`, `computeNextRecurringRunUtc` (harian, mingguan, bulanan berbasis WIB `Asia/Jakarta` termasuk penyesuaian akhir bulan), `evaluateCampaignRunStatus`, dan `deriveCampaignTitle`.
+   - Menambahkan 7 unit test backend (`broadcastUtils.test.ts`) dan 3 unit test frontend (`broadcastFormat.test.ts`), seluruh 10 test lulus.
+2. Layanan Pengiriman Paralel WA & Telegram Serta Scheduler ("backend/services/telegramService.ts", "admin-backend/services/broadcastService.ts", "admin-backend/routes/broadcastRoutes.ts", "admin-backend/routes/adminRoutes.ts", "server.ts"):
+   - Memperluas `sendTelegramMessage` agar mendukung `parseMode: 'None'` dan membuat `sendAdminBroadcastToTelegram` sesuai kesepakatan Opsi A (pesan murni apa adanya tanpa header/footer tambahan) serta Opsi B (`isConfigured && !adminDisabled`, mengabaikan saklar `notif_enabled` tenant).
+   - Membangun `BroadcastService` yang secara otomatis menyaring hanya tenant dengan status efektif `active` (melewati tenant `expired` dan `suspended` tanpa pemilihan manual), lalu mengirimkan pesan secara paralel (`Promise.all`) melalui bot WhatsApp masing-masing tenant ke `owner_phone` dan/atau Bot Telegram tenant.
+   - Mencatat hasil sukses serta alasan gagal spesifik per tenant dan per kanal ke `broadcast_logs`, mendukung pengiriman ulang log gagal (`retryFailedLogs`), edit jadwal/pesan (`updateBroadcast`), eksekusi mendadak (`executeCampaign` dengan tombol Kirim Sekarang), pembatalan jadwal (`cancelCampaign`), serta penghapusan riwayat (`deleteCampaign`).
+   - Memasang `startBroadcastScheduler()` di `server.ts` (interval polling 20 detik) untuk mengeksekusi jadwal sekali kirim maupun jadwal berulang otomatis tepat waktu.
+3. Antarmuka Dashboard Master Admin & Modal Interaktif ("admin-frontend/src/components/dashboard/tabs/TabBroadcast.tsx", "admin-frontend/src/components/modals/BroadcastLogModal.tsx", "admin-frontend/src/components/modals/EditBroadcastModal.tsx", "admin-frontend/src/components/modals/ConfirmBroadcastActionModal.tsx", "admin-frontend/src/components/layout/AdminSidebar.tsx", "admin-frontend/src/App.tsx"):
+   - Mengganti placeholder tab `broadcast` dan menghapus lencana "Segera" di sidebar dengan halaman penuh **Pesan Siaran**.
+   - Menyediakan 4 kartu kesiapan target tenant aktif (Total Active, Bot WhatsApp Siap, Bot Telegram Siap, Jadwal Menunggu), form composer lengkap dengan pemilih kanal (`WA & Telegram`, `WhatsApp Saja`, `Telegram Saja`), mode waktu WIB (`Kirim Sekarang`, `Jadwal Sekali`, `Jadwal Berulang` harian/mingguan/bulanan), 7 chip placeholder klik-sisip, serta kotak **Pratinjau Output** menggunakan data sample tenant aktif.
+   - Membangun riwayat 2 tingkat: Tabel Riwayat & Jadwal Kampanye (filter status, pencarian, ringkasan WA & TG sukses/gagal, aksi Edit/Kirim/Batalkan/Hapus/Log) dan `BroadcastLogModal` untuk audit rincian per-tenant per-kanal, pemilih nomor eksekusi pada kampanye berulang, filter kanal/status, dan tombol **Kirim Ulang yang Gagal**.
+   - Menghilangkan `backdrop-blur-xs` pada modal overlay menjadi `bg-slate-900/55` agar rendering modal bersih tanpa hambatan kompositor.
+4. Verifikasi & Pengujian:
+   - Unit test `npx --yes tsx --test admin-backend/services/broadcastUtils.test.ts admin-frontend/src/utils/broadcastFormat.test.ts` (10 pass, 0 fail).
+   - Verifikasi `compile_applet` dan `lint_applet` (`tsc --noEmit`) lulus tanpa error.
+   - Pengujian API `/api/admin/broadcasts` via curl dan pengujian interaktif browser Playwright pada Desktop (`1440x900`) serta Mobile (`390x844` tanpa horizontal overflow, `scrollWidth === innerWidth === 390`): pembuatan jadwal berulang mingguan, pratinjau placeholder, edit jadwal, Kirim Sekarang via modal konfirmasi, inspeksi log 2 tingkat per-tenant & alasan error, Kirim Ulang yang Gagal, Batalkan jadwal, hingga Hapus riwayat uji agar database tetap bersih.
+
+File yang Diubah/Dibuat:
+- "admin-backend/database/masterSqlite.ts"
+- "admin-backend/types/admin.types.ts"
+- "admin-backend/services/broadcastUtils.ts" (Baru)
+- "admin-backend/services/broadcastUtils.test.ts" (Baru)
+- "admin-backend/services/broadcastService.ts" (Baru)
+- "admin-backend/routes/broadcastRoutes.ts" (Baru)
+- "admin-backend/routes/adminRoutes.ts"
+- "backend/services/telegramService.ts"
+- "server.ts"
+- "admin-frontend/src/types/admin.types.ts"
+- "admin-frontend/src/utils/broadcastFormat.ts" (Baru)
+- "admin-frontend/src/utils/broadcastFormat.test.ts" (Baru)
+- "admin-frontend/src/components/modals/BroadcastLogModal.tsx" (Baru)
+- "admin-frontend/src/components/modals/EditBroadcastModal.tsx" (Baru)
+- "admin-frontend/src/components/modals/ConfirmBroadcastActionModal.tsx" (Baru)
+- "admin-frontend/src/components/dashboard/tabs/TabBroadcast.tsx" (Baru)
+- "admin-frontend/src/components/layout/AdminSidebar.tsx"
+- "admin-frontend/src/App.tsx"
+- "brain/SCHEDULE.md", "brain/LANGKAH_IMPLEMENTASI.md", "brain/PROGRESS.md"
+
+Alasan Perubahan:
+Memenuhi permintaan Master Admin untuk mengirimkan pesan broadcast paralel melalui bot WhatsApp dan Telegram tiap tenant aktif ke nomor/chat owner masing-masing, dilengkapi penjadwalan sekali kirim maupun berulang otomatis dan sistem audit log 2 tingkat.
+
+Hasil:
+Fitur Pesan Siaran (Broadcast) Master Admin beroperasi penuh, stabil, responsif di Desktop maupun Mobile, dan lolos seluruh pengujian unit, kompilasi, serta interaksi browser.
+
+Kendala:
+Tidak ada.
+

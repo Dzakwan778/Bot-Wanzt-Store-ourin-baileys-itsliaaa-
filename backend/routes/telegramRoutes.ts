@@ -6,6 +6,7 @@ import {
   testTelegramConnection,
 } from '../services/telegramService.ts';
 import { loadStoreInfo } from '../config/configManager.ts';
+import { isMaskedSecret, sanitizeTelegramConfigResponse } from '../middleware/tenantAuth.ts';
 
 export const telegramRouter = Router();
 
@@ -16,7 +17,7 @@ telegramRouter.get('/config', (req: Request, res: Response) => {
     const config = getTelegramConfig(tenantId);
     return res.json({
       success: true,
-      config,
+      config: sanitizeTelegramConfigResponse(config),
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err?.message || 'Server error' });
@@ -38,7 +39,7 @@ telegramRouter.post('/config', (req: Request, res: Response) => {
     return res.json({
       success: true,
       message: 'Pengaturan notifikasi Telegram berhasil disimpan!',
-      config: updated,
+      config: sanitizeTelegramConfigResponse(updated),
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err?.message || 'Server error' });
@@ -52,7 +53,10 @@ telegramRouter.post('/test', async (req: Request, res: Response) => {
     const { botToken, chatId } = req.body || {};
 
     const currentConfig = getTelegramConfig(tenantId);
-    const targetToken = (botToken !== undefined ? String(botToken).trim() : currentConfig.botToken);
+    const targetToken =
+      botToken !== undefined && !isMaskedSecret(botToken)
+        ? String(botToken).trim()
+        : currentConfig.botToken;
     const targetChatId = (chatId !== undefined ? String(chatId).trim() : currentConfig.chatId);
 
     if (!targetToken || !targetChatId) {

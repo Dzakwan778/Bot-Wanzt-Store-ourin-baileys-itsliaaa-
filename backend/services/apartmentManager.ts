@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { db } from '../database/sqlite.ts';
+import { hashScryptPassword, verifyLocalSaltedPassword } from '../../admin-backend/utils/passwordCrypto.ts';
 import {
   TenantRecord,
   TenantDTO,
@@ -22,64 +23,80 @@ const masterSessions = new Map<string, MasterSessionData>();
 const MASTER_SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 Jam
 
 /**
- * Hash password menggunakan PBKDF2 (SHA-512 dengan 100.000 iterasi)
+ * Hash password kuat menggunakan crypto.scrypt
  */
-export function hashApartmentPassword(password: string, salt: string): string {
-  return crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+export function hashApartmentPassword(password: string, _salt?: string): string {
+  return hashScryptPassword(password);
 }
 
 /**
- * Inisialisasi kredensial Master Admin
+ * Membaca kredensial Master Admin legacy (hanya bootstrap bila env explicit tersedia)
  */
-export function initMasterAdmin(): MasterAdminAuthConfig {
+export function initMasterAdmin(): MasterAdminAuthConfig | null {
   const row = db.prepare(`
-    SELECT username, password_hash as hash, salt, updated_at as updatedAt
+    SELECT username, password_hash as hash, salt, iterations, updated_at as updatedAt
     FROM master_admin
     WHERE id = 1
-  `).get() as MasterAdminAuthConfig | undefined;
+  `).get() as (MasterAdminAuthConfig & { iterations?: number }) | undefined;
 
-  if (row && row.username && row.hash && row.salt) {
+  if (row && row.username && row.hash) {
     return row;
   }
 
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = hashApartmentPassword('masterwanzt888', salt);
-  const now = new Date().toISOString();
+  const bootUser = process.env.APARTMENT_ADMIN_BOOTSTRAP_USERNAME?.trim();
+  const bootPass = process.env.APARTMENT_ADMIN_BOOTSTRAP_PASSWORD?.trim();
+  if (bootUser && bootPass) {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = hashScryptPassword(bootPass);
+    const now = new Date().toISOString();
 
-  db.prepare(`
-    INSERT OR REPLACE INTO master_admin (id, username, password_hash, salt, iterations, updated_at)
-    VALUES (1, 'superadmin', ?, ?, 100000, ?)
-  `).run(hash, salt, now);
+    db.prepare(`
+      INSERT OR REPLACE INTO master_admin (id, username, password_hash, salt, iterations, updated_at)
+      VALUES (1, ?, ?, ?, 16384, ?)
+    `).run(bootUser, hash, salt, now);
 
-  return {
-    username: 'superadmin',
-    salt,
-    hash,
-    updatedAt: now,
-  };
+    return {
+      username: bootUser,
+      salt,
+      hash,
+      updatedAt: now,
+    };
+  }
+
+  return null;
 }
 
 /**
- * Verifikasi login Master Admin
+ * Verifikasi login Master Admin legacy
  */
 export function verifyMasterAdminLogin(usernameInput: string, passwordInput: string): boolean {
   try {
-    const admin = initMasterAdmin();
-    if (!usernameInput || !passwordInput) return false;
+    const admin = initMasterAdmin() as (MasterAdminAuthConfig & { iterations?: number }) | null;
+    if (!admin || !usernameInput || !passwordInput) return false;
 
     if (usernameInput.trim().toLowerCase() !== admin.username.toLowerCase()) {
       return false;
     }
 
-    const inputHash = hashApartmentPassword(passwordInput, admin.salt);
-    const hashBuffer = Buffer.from(admin.hash, 'hex');
-    const inputBuffer = Buffer.from(inputHash, 'hex');
-
-    if (hashBuffer.length !== inputBuffer.length) {
-      return false;
+    const check = verifyLocalSaltedPassword(
+      passwordInput,
+      admin.hash,
+      admin.salt,
+      admin.iterations || 100000
+    );
+    if (check.valid && check.needsRehash) {
+      try {
+        const nextSalt = crypto.randomBytes(16).toString('hex');
+        const nextHash = hashScryptPassword(passwordInput);
+        db.prepare('UPDATE master_admin SET password_hash = ?, salt = ?, updated_at = ? WHERE id = 1').run(
+          nextHash,
+          nextSalt,
+          new Date().toISOString()
+        );
+      } catch {}
     }
 
-    return crypto.timingSafeEqual(hashBuffer, inputBuffer);
+    return check.valid;
   } catch (err) {
     console.error('Error saat verifikasi login Master Admin:', err);
     return false;
@@ -240,7 +257,7 @@ export function createTenant(input: CreateTenantInput): TenantDTO {
     unitNumber = `Unit ${101 + totalCount}`;
   }
 
-  const tenantId = `unit-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+  const tenantId = `unit-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
   const salt = crypto.randomBytes(16).toString('hex');
   const passwordHash = hashApartmentPassword(input.password, salt);
 

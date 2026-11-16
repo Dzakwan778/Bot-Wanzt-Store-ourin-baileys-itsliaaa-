@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { ALLOWED_PREFIXES, CommandsConfig, SESSION_DIR } from '../types/bot.types.ts';
@@ -10,6 +11,7 @@ import { resolvePlaceholders, normalizeIndonesianPhone } from '../services/place
 import { loadGroupsConfig, loadGroupOnlySetting } from '../services/groupService.ts';
 import { createLunasQrisTransaction, startLunasQrisPolling } from '../services/lunasQrisService.ts';
 import { recordTransaction, updateTransactionStatus } from '../services/transactionManager.ts';
+import { resolveAuthoritativeOrderItem } from './orderPricingUtils.ts';
 import {
   DEFAULT_INVOICE_TEMPLATE,
   DEFAULT_CONFIRM_SUMMARY_TEMPLATE,
@@ -111,7 +113,7 @@ export async function executeLunasQrisInvoice(params: ExecuteInvoiceParams): Pro
   } = params;
 
   const effectiveAmount = finalPrice !== undefined && finalPrice > 0 ? finalPrice : price;
-  const orderId = 'ORD-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+  const orderId = 'ORD-' + Date.now().toString(36).toUpperCase() + '-' + crypto.randomBytes(3).toString('hex').toUpperCase();
 
   const lunasKey = (config.lunasQrisApiKey || '').trim();
   const lunasBase = (config.lunasQrisBaseUrl || 'https://lunasqris.com').trim();
@@ -566,28 +568,9 @@ export async function dispatchIncomingMessages(
       continue;
     }
 
-    // B. Tombol Order Varian -> Membuka Sesi Konfirmasi di DM
+    // B. Tombol Order Varian -> Membuka Sesi Konfirmasi di DM (Harga & Produk Otoritatif Server)
     if (cleanBtn.startsWith('order_')) {
       if (isGroupOnlyMode && !isGroup) continue;
-      let productName = 'Produk Pilihan';
-      let variantName = 'Varian Pilihan';
-      let price = 5000;
-
-      if (cleanBtn.startsWith('order_var:')) {
-        const raw = cleanBtn.replace(/^order_var:/, '');
-        const [pEnc, vEnc, pPrice] = raw.split('|');
-        try {
-          if (pEnc) productName = decodeURIComponent(pEnc);
-          if (vEnc) variantName = decodeURIComponent(vEnc);
-        } catch {}
-        if (pPrice && !isNaN(Number(pPrice))) {
-          price = Number(pPrice);
-        }
-      } else {
-        variantName = cleanBtn.replace(/^order_/, '').trim() || 'Varian Pilihan';
-      }
-
-      deps.addLog('info', `🛒 Pelanggan ${senderName} menekan tombol ORDER: "${productName} - ${variantName}" (Rp ${price.toLocaleString('id-ID')})`);
 
       // Dapatkan JID pemicu/pengirim secara presisi untuk pengiriman DM
       let senderJid = m.key?.participant || remoteJid;
@@ -597,17 +580,57 @@ export async function dispatchIncomingMessages(
       senderJid = deps.resolveTargetJid(senderJid);
       const senderCleanNumber = (senderJid.split('@')[0] || '').replace(/[^0-9]/g, '');
 
-      // 1. Pre-check Saldo Utama di Akun Xaviera (Hitung harga modal berdasarkan markup aktif)
-      const currentPricing = config.pricingConfig || getPricingConfig();
-      let costPrice = price;
-      if (currentPricing.mode === 'rp') {
-        costPrice = Math.max(0, price - (currentPricing.value || 0));
-      } else {
-        const pct = (currentPricing.value || 0) / 100;
-        costPrice = pct > 0 ? Math.round(price / (1 + pct)) : price;
-      }
-      const initialMargin = Math.max(0, price - costPrice);
+      const resolvedOrder = await resolveAuthoritativeOrderItem(cleanBtn, config);
+      if (!resolvedOrder.ok) {
+        if (resolvedOrder.reason === 'out_of_stock') {
+          const stockTpl = config.stockEmptyText || DEFAULT_STOCK_EMPTY_TEMPLATE;
+          const outOfStockMsg = resolvePlaceholders(stockTpl, config, {
+            name: resolvedOrder.productName || 'Produk',
+            variant: resolvedOrder.variantName || '',
+            customerName: senderName,
+            customerNumber: senderCleanNumber,
+          });
+          try {
+            const resp = await sock.sendMessage(
+              remoteJid,
+              { text: outOfStockMsg, mentions: [senderJid] },
+              { quoted: m }
+            );
+            markMessageAsBotSent(resp?.key?.id);
+          } catch {}
+          continue;
+        }
 
+        deps.addLog(
+          'warning',
+          `⚠️ Order ditolak (${resolvedOrder.reason}) dari ${senderName} untuk payload tombol "${cleanBtn}"`
+        );
+        try {
+          const rejectRes = await sock.sendMessage(
+            remoteJid,
+            {
+              text: '⚠️ Maaf kak, produk atau varian yang dipilih tidak ditemukan atau harga belum tersedia di katalog resmi. Silakan pilih ulang varian dari menu katalog.',
+              mentions: [senderJid],
+            },
+            { quoted: m }
+          );
+          markMessageAsBotSent(rejectRes?.key?.id);
+        } catch {}
+        continue;
+      }
+
+      const {
+        productName,
+        variantName,
+        variantId,
+        costPrice,
+        sellingPrice: price,
+        initialMargin,
+      } = resolvedOrder;
+
+      deps.addLog('info', `🛒 Pelanggan ${senderName} menekan tombol ORDER: "${productName} - ${variantName}" (Rp ${price.toLocaleString('id-ID')})`);
+
+      // 1. Pre-check Saldo Utama di Akun Xaviera menggunakan harga modal resmi server
       try {
         const xavieraBal = await checkXavieraBalance(costPrice, config);
         if (!xavieraBal.sufficient) {
@@ -643,7 +666,7 @@ export async function dispatchIncomingMessages(
         price,
         costPrice,
         initialMargin,
-        variantId: `${productName}|${variantName}`,
+        variantId,
         createdAt: Date.now(),
         expiresAt: Date.now() + CHECKOUT_SESSION_TIMEOUT_MS,
         waitingForPromo: false,

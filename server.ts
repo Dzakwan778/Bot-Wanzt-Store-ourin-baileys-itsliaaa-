@@ -44,11 +44,13 @@ async function initializeFullApp(isProduction: boolean): Promise<Express> {
     { default: express },
     { serverApp },
     { startExpiryWarningScheduler },
+    { startBroadcastScheduler },
     viteModule,
   ] = await Promise.all([
     import('express'),
     import('./backend/app.ts'),
     import('./backend/services/expiryWarningService.ts'),
+    import('./admin-backend/services/broadcastService.ts'),
     !isProduction ? import('vite') : Promise.resolve(null),
   ]);
 
@@ -139,6 +141,12 @@ async function initializeFullApp(isProduction: boolean): Promise<Express> {
     startExpiryWarningScheduler();
   } catch (schedErr) {
     console.error('[Wanzt Store] Gagal memulai scheduler masa sewa:', schedErr);
+  }
+
+  try {
+    startBroadcastScheduler();
+  } catch (broadcastSchedErr) {
+    console.error('[Wanzt Store] Gagal memulai scheduler broadcast:', broadcastSchedErr);
   }
 
   return serverApp;

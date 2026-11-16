@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Send, X, AlertTriangle, Phone } from 'lucide-react';
 import { Tenant } from '../../types/admin.types.ts';
 import { formatIndonesianPhone } from '../../utils/phoneHelper.ts';
+import { adminFetch } from '../../utils/adminAuth.ts';
 
 interface SendMessageModalProps {
   isOpen: boolean;
@@ -50,7 +51,7 @@ export const SendMessageModal: React.FC<SendMessageModalProps> = ({
 
     setIsSendingMessage(true);
     try {
-      const res = await fetch(`/api/admin/tenants/${tenant.tenant_id}/send-message`, {
+      const res = await adminFetch(`/api/admin/tenants/${tenant.tenant_id}/send-message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: messageText.trim() }),

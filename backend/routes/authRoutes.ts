@@ -16,6 +16,11 @@ import { botManager } from '../botManager.ts';
 import { toOfficialIndonesianPhone } from '../services/placeholderHelper.ts';
 import { MasterAdminContactService } from '../../admin-backend/services/masterAdminContactService.ts';
 import { TenantStatusService } from '../../admin-backend/services/tenantStatusService.ts';
+import {
+  requireTenantAuth,
+  resolveAuthenticatedTenant,
+  extractTenantTokenFromReq,
+} from '../middleware/tenantAuth.ts';
 
 export const authRouter = Router();
 
@@ -51,29 +56,15 @@ authRouter.post('/login', async (req: Request, res: Response) => {
 
 // 2. Cek Validitas Sesi (GET /api/auth/session)
 authRouter.get('/session', async (req: Request, res: Response) => {
-  const authHeader = req.headers['authorization'] || '';
-  const token = authHeader.replace(/^Bearer\s+/i, '') || (req.query.token as string) || '';
-
-  // A. Cek sesi impersonasi dari Master Admin ("Buka Toko")
-  if (token && impersonationTokens.has(token)) {
-    const imp = impersonationTokens.get(token);
-    if (imp && Date.now() < imp.expiresAt) {
-      const tenant = TenantManager.getTenant(imp.tenantId);
-      const username = tenant?.username || `Tenant-${imp.tenantId}`;
-      const accountStatus = await TenantStatusService.enforceRealtimeTenantExpiry(imp.tenantId);
-      res.cookie('tenant_id', imp.tenantId, { path: '/', httpOnly: false, maxAge: 7 * 24 * 3600 * 1000 });
-      return res.json({ authenticated: true, user: { username, tenantId: imp.tenantId, accountStatus } });
-    } else if (imp) {
-      impersonationTokens.delete(token);
-    }
-  }
-
-  // B. Cek sesi reguler pengguna / tenant
-  const session = getSession(token);
+  const session = resolveAuthenticatedTenant(req);
   if (session) {
     const accountStatus = await TenantStatusService.enforceRealtimeTenantExpiry(session.tenantId);
     res.cookie('tenant_id', session.tenantId, { path: '/', httpOnly: false, maxAge: 7 * 24 * 3600 * 1000 });
-    return res.json({ authenticated: true, user: { username: session.username, tenantId: session.tenantId, accountStatus } });
+    res.cookie('auth_token', session.token, { path: '/', httpOnly: false, maxAge: 7 * 24 * 3600 * 1000 });
+    return res.json({
+      authenticated: true,
+      user: { username: session.username, tenantId: session.tenantId, accountStatus },
+    });
   }
 
   return res.json({ authenticated: false, user: null });
@@ -81,8 +72,7 @@ authRouter.get('/session', async (req: Request, res: Response) => {
 
 // 3. Logout Sesi (POST /api/auth/logout)
 authRouter.post('/logout', (req: Request, res: Response) => {
-  const authHeader = req.headers['authorization'] || '';
-  const token = authHeader.replace(/^Bearer\s+/i, '');
+  const token = extractTenantTokenFromReq(req);
   revokeSession(token);
   res.clearCookie('tenant_id', { path: '/' });
   res.clearCookie('auth_token', { path: '/' });
@@ -90,7 +80,7 @@ authRouter.post('/logout', (req: Request, res: Response) => {
 });
 
 // 4. Cek Kelengkapan Data Store Info Wajib (GET /api/auth/store-status)
-authRouter.get('/store-status', async (req: Request, res: Response) => {
+authRouter.get('/store-status', requireTenantAuth, async (req: Request, res: Response) => {
   const currentInfo = loadStoreInfo();
   const isComplete = Boolean(
     currentInfo.storeName && currentInfo.storeName.trim() &&
@@ -98,16 +88,15 @@ authRouter.get('/store-status', async (req: Request, res: Response) => {
     currentInfo.ownerNumber && currentInfo.ownerNumber.trim()
   );
 
-  // Ambil juga status akun tenant aktif dari master.db secara real-time
-  const tenantId = (req as any).tenantId || req.cookies?.tenant_id || 't_wanzt';
+  // Ambil status akun tenant aktif secara ketat dari sesi terautentikasi
+  const tenantId = (req as any).authSession.tenantId;
   const accountStatus = await TenantStatusService.enforceRealtimeTenantExpiry(tenantId);
 
   return res.json({ complete: isComplete, storeInfo: currentInfo, accountStatus, tenantId });
 });
 
-
 // 5. Setup Wajib Data Store Info (POST /api/auth/store-setup)
-authRouter.post('/store-setup', (req: Request, res: Response) => {
+authRouter.post('/store-setup', requireTenantAuth, (req: Request, res: Response) => {
   try {
     const { storeName, ownerName, ownerNumber } = req.body || {};
     if (!storeName?.trim() || !ownerName?.trim() || !ownerNumber?.trim()) {
@@ -117,6 +106,7 @@ authRouter.post('/store-setup', (req: Request, res: Response) => {
       });
     }
 
+    const tenantId = (req as any).authSession.tenantId;
     const officialOwnerNumber = toOfficialIndonesianPhone(ownerNumber);
     const updated = saveStoreInfo({
       storeName: storeName.trim(),
@@ -125,8 +115,6 @@ authRouter.post('/store-setup', (req: Request, res: Response) => {
     });
 
     // Sinkronkan ke master.db milik Master Admin
-    const session = getAuthSessionFromReq(req);
-    const tenantId = session?.tenantId || (req as any).tenantId || req.cookies?.tenant_id || req.headers['x-tenant-id'] || 't_wanzt';
     TenantManager.updateStoreInfo(
       tenantId,
       storeName.trim(),
@@ -145,38 +133,15 @@ authRouter.post('/store-setup', (req: Request, res: Response) => {
   }
 });
 
-// Helper untuk mengekstrak identitas tenant & username yang terotentikasi
+// Helper untuk mengekstrak identitas tenant & username yang terotentikasi (strict, tanpa fallback)
 function getAuthSessionFromReq(req: Request): { username: string; tenantId: string } | null {
-  const authHeader = req.headers['authorization'] || '';
-  const token = authHeader.replace(/^Bearer\s+/i, '') || (req.query.token as string) || req.cookies?.auth_token || '';
-
-  // 1. Sesi Impersonasi Master Admin
-  if (token && impersonationTokens.has(token)) {
-    const imp = impersonationTokens.get(token);
-    if (imp && Date.now() < imp.expiresAt) {
-      const tenant = TenantManager.getTenant(imp.tenantId);
-      return { username: tenant?.username || `Tenant-${imp.tenantId}`, tenantId: imp.tenantId };
-    }
-  }
-
-  // 2. Sesi login reguler
-  const session = getSession(token);
-  if (session) {
-    return { username: session.username, tenantId: session.tenantId };
-  }
-
-  // 3. Fallback tenant context
-  const tenantId = (req as any).tenantId || req.cookies?.tenant_id || req.headers['x-tenant-id'];
-  if (tenantId) {
-    const tenant = TenantManager.getTenant(String(tenantId));
-    return { username: tenant?.username || 'admin', tenantId: String(tenantId) };
-  }
-
-  return null;
+  const session = resolveAuthenticatedTenant(req);
+  if (!session) return null;
+  return { username: session.username, tenantId: session.tenantId };
 }
 
 // 6. Ubah Username Tenant Mandiri (POST /api/auth/profile/update-username)
-authRouter.post('/profile/update-username', (req: Request, res: Response) => {
+authRouter.post('/profile/update-username', requireTenantAuth, (req: Request, res: Response) => {
   try {
     const session = getAuthSessionFromReq(req);
     if (!session) {
@@ -200,7 +165,7 @@ authRouter.post('/profile/update-username', (req: Request, res: Response) => {
 });
 
 // 7. Ubah Password Tenant Mandiri (POST /api/auth/profile/update-password)
-authRouter.post('/profile/update-password', (req: Request, res: Response) => {
+authRouter.post('/profile/update-password', requireTenantAuth, (req: Request, res: Response) => {
   try {
     const session = getAuthSessionFromReq(req);
     if (!session) {

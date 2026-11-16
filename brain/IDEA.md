@@ -1468,3 +1468,54 @@ Potensi Penerapan:
 2. Menambahkan handler command `hidetag`, `h`, `ht` di `backend/handlers/messageDispatcher.ts` (mendukung teks langsung maupun pesan/media yang di-reply, khusus grup, khusus admin grup).
 3. Opsional untuk didiskusikan dengan pengguna: apakah perlu tombol toggle/pengaturan fitur Hide Tag di Dashboard Bot serta teks balasan jika bukan admin atau pesan kosong.
 
+---
+
+[24.0] - ANALISIS DOKUMENTASI API TOKO XAVIERA ({urlweb}/api/toko/v1) UNTUK SINKRONISASI HARGA OTOMATIS TENANT
+
+- Tanggal: 2026-11-14
+- Sumber:
+  * Dokumentasi API Toko: `https://wanztstore.web.id/api-toko`
+  * Masukan pengguna terkait struktur Base URL dinamis `{urlweb}/api/toko/v1` dan rencana dukungan 2 metode koneksi Xaviera
+
+Informasi yang Dipelajari:
+1. Konsep Dasar API Toko (`/api/toko/v1`):
+   - Penyedia Xaviera merilis API khusus per website toko milik tenant agar harga jual yang diambil oleh API otomatis sama dengan harga jual di website masing-masing tenant ("Harga = harga toko").
+   - Tenant tidak perlu lagi mengatur margin keuntungan manual di bot (harga modal + markup Rp/%) karena harga jual dari API sudah berupa harga final toko tenant.
+   - Pembayaran order melalui API ini tetap memotong saldo akun API milik pengguna/tenant pada website toko tersebut.
+2. Base URL Dinamis:
+   - Base URL tidak bersifat statis, melainkan mengikuti domain website masing-masing tenant dengan pola `{urlweb}/api/toko/v1` (contoh untuk `wanztstore.web.id`: `https://wanztstore.web.id/api/toko/v1`).
+3. Autentikasi & Batasan Rate Limit:
+   - Menggunakan kunci API (`xvs_...`) yang dibuat dari menu Akun -> API Developer di website toko tenant.
+   - Dikirim melalui HTTP header: `Authorization: Bearer xvs_kunci_api_kamu`.
+   - Rate limit: daftar produk maksimal 60x/menit dan pembelian maksimal 20x/menit per kunci.
+   - Error dikembalikan dalam format `{"error": "..."}` dengan status HTTP 4xx.
+4. Daftar Endpoint Tersedia pada `/api/toko/v1`:
+   - `GET /me`: Mengambil informasi akun & saldo.
+   - `GET /products`: Mengambil daftar produk Akun Premium (harga toko & stok).
+   - `POST /products/order`: Eksekusi pembelian produk Akun Premium dengan body `{"productId", "variantId"?, "qty"?, "couponCode"?}`.
+   - `GET /own-products`: Mengambil daftar produk khusus milik toko tenant sendiri.
+   - `POST /own-products/order`: Eksekusi pembelian produk khusus toko dengan body `{"productId", "variantId"?, "qty"?, "couponCode"?}`.
+   - `GET /orders/:id`: Mengambil detail pesanan termasuk data akun yang dibeli.
+5. Perbandingan dengan Metode Lama (`xavierastore.com/api/v1`):
+   - Endpoint SMM (`/smm/services`) dan Game Topup (`/games`) tidak tercantum di dokumentasi `/api/toko/v1`.
+   - API Toko menambahkan kategori baru `/own-products` (produk khusus toko) dan endpoint cek detail order `/orders/:id`.
+6. Analisis Parameter Opsional `couponCode?`:
+   - Field `couponCode` bersifat opsional (`?`) dan hanya tersedia pada endpoint eksekusi pembelian (`POST /products/order` dan `POST /own-products/order`), yang langsung membuat pesanan dan memotong saldo akun.
+   - Dokumentasi `/api/toko/v1` belum menyediakan endpoint validasi/cek kupon (seperti `/coupons/validate`) untuk memeriksa validitas kupon dan nominal diskon sebelum order dijalankan.
+   - Akibatnya, kode kupon website tenant belum dapat otomatis memotong nominal tagihan QRIS LunasQRIS di bot sebelum pembeli membayar (karena alur bot membutuhkan total harga akhir sebelum menerbitkan QRIS). Untuk saat ini, kupon yang memotong tagihan QRIS pembeli di bot tetap mengandalkan tabel lokal `promo_codes` di dashboard bot, kecuali pihak penyedia API nantinya menambahkan endpoint validasi kupon.
+
+Pemahaman:
+- Sistem perlu mendukung 2 metode koneksi ke Xaviera secara berdampingan tanpa merusak metode lama yang sudah berjalan:
+  1. Metode 1 (Xaviera Pusat / Harga Modal + Margin Lokal): Menggunakan `https://xavierastore.com/api/v1` dan kalkulasi margin `pricing_config`, `category_pricing`, `variant_pricing`.
+  2. Metode 2 (API Toko / Sinkronisasi Harga Website Tenant): Menggunakan `{urlweb}/api/toko/v1` dengan harga jual langsung dari API tanpa markup margin tambahan, serta mendukung `/products` dan `/own-products`.
+- Pengaturan kupon promo di bot tetap terisolasi pada `promo_codes` selama endpoint validasi kupon belum tersedia dari pihak API Toko.
+
+Potensi Penerapan:
+1. Menambahkan pemilihan metode koneksi Xaviera (Metode 1 vs Metode 2) dan input domain toko (`urlweb`) pada Tab Koneksi Layanan dan `api_config`.
+2. Melewati perhitungan markup margin di `calculateSellingPriceForVariant` saat Metode 2 aktif, serta menyesuaikan UI Tab Produk agar menampilkan status sinkronisasi harga otomatis.
+3. Menambahkan adapter parser untuk `/products`, `/own-products`, dan `/orders/:id` pada `xavieraService.ts` dan `xavieraRoutes.ts`.
+
+Catatan Tambahan:
+- Pastikan penulisan di seluruh dokumen dan kode mematuhi larangan em-dash dan en-dash.
+
+

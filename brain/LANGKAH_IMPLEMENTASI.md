@@ -3242,3 +3242,41 @@ Rencana Pengujian:
 
 Hasil yang Diharapkan:
 Tenant yang masa sewanya habis langsung terputus botnya secara real-time tanpa menghapus sesi QR, terkunci oleh popup expired dengan form token perpanjangan hingga aktif kembali secara otomatis.
+
+---
+
+[67.0] - IMPLEMENTASI FITUR BROADCAST MASTER ADMIN (WHATSAPP & TELEGRAM, JADWAL SEKALI & BERULANG, DAN LOG 2 TINGKAT)
+
+- Tanggal: 2026-11-14
+- Status: Completed
+Referensi SCHEDULE: 38.0
+
+Tujuan Implementasi:
+1. Menyediakan skema SQLite pusat (`broadcast_campaigns` dan `broadcast_logs`) di `database/master.db` untuk menyimpan kampanye langsung, terjadwal, berulang otomatis, dan catatan pengiriman per-tenant per-kanal.
+2. Membuat modul utilitas murni `broadcastUtils.ts` dan `broadcastFormat.ts` (+ unit test `node:test`) untuk substitusi placeholder, kalkulasi jadwal berikutnya berbasis WIB (`once`, `daily`, `weekly`, `monthly`), dan evaluasi status kampanye.
+3. Mengimplementasikan `sendAdminBroadcastToTelegram()` di `telegramService.ts` dengan mode plain-text murni tanpa header tambahan (Opsi A) dan kebijakan pengiriman Opsi B (`isConfigured && !adminDisabled`).
+4. Membangun `BroadcastService` dan `broadcastRoutes.ts` untuk eksekusi paralel ke seluruh tenant `active`, retry log gagal, edit jadwal, batalkan jadwal, kirim sekarang, hapus riwayat, dan background scheduler tiap 20 detik di `server.ts`.
+5. Menggantikan placeholder tab `broadcast` di `admin-frontend` dengan antarmuka lengkap: `TabBroadcast.tsx`, `BroadcastLogModal.tsx`, `EditBroadcastModal.tsx`, dan `ConfirmBroadcastActionModal.tsx`.
+
+Bagian yang Diubah/Dibuat:
+1. `admin-backend/database/masterSqlite.ts`: Menambahkan tabel `broadcast_campaigns` dan `broadcast_logs`.
+2. `admin-backend/types/admin.types.ts` & `admin-frontend/src/types/admin.types.ts`: Menambahkan tipe data broadcast dan log.
+3. `admin-backend/services/broadcastUtils.ts` & `admin-backend/services/broadcastUtils.test.ts`: Utilitas murni dan 7 unit test.
+4. `backend/services/telegramService.ts`: Mendukung `parseMode: 'None'` dan fungsi `sendAdminBroadcastToTelegram`.
+5. `admin-backend/services/broadcastService.ts`: Orkestrator pengiriman paralel WA & Telegram, scheduler, retry, dan CRUD kampanye.
+6. `admin-backend/routes/broadcastRoutes.ts` & `admin-backend/routes/adminRoutes.ts`: Endpoint REST API `/api/admin/broadcasts/*`.
+7. `server.ts`: Menjalankan `startBroadcastScheduler()` bersama `startExpiryWarningScheduler()`.
+8. `admin-frontend/src/utils/broadcastFormat.ts` & `admin-frontend/src/utils/broadcastFormat.test.ts`: Utilitas pemformatan WIB & jadwal serta 3 unit test.
+9. `admin-frontend/src/components/layout/AdminSidebar.tsx`, `TabBroadcast.tsx`, `BroadcastLogModal.tsx`, `EditBroadcastModal.tsx`, `ConfirmBroadcastActionModal.tsx`, dan `admin-frontend/src/App.tsx`.
+
+Urutan Pengerjaan:
+1. Update `masterSqlite.ts` dan tipe data backend/frontend.
+2. Buat `broadcastUtils.ts` dan jalankan unit test `broadcastUtils.test.ts`.
+3. Update `telegramService.ts`, buat `broadcastService.ts` dan `broadcastRoutes.ts`, lalu pasang ke `adminRoutes.ts` dan `server.ts`.
+4. Bangun utilitas `broadcastFormat.ts` serta komponen frontend `TabBroadcast.tsx`, `BroadcastLogModal.tsx`, `EditBroadcastModal.tsx`, `ConfirmBroadcastActionModal.tsx`, dan hubungkan ke `App.tsx` serta `AdminSidebar.tsx`.
+5. Verifikasi unit test, `compile_applet`, `lint_applet`, uji API + browser Playwright Desktop & Mobile.
+6. Perbarui dokumentasi `brain/`.
+
+Hasil yang Diharapkan:
+Seluruh fitur broadcast langsung, terjadwal, berulang otomatis, placeholder, dan log 2 tingkat beroperasi akurat tanpa error.
+

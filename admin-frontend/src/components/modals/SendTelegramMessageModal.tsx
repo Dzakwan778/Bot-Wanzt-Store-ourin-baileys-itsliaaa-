@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Send, X, AlertCircle, RefreshCw, MessageSquare } from 'lucide-react';
+import { adminFetch } from '../../utils/adminAuth.ts';
 
 interface SendTelegramMessageModalProps {
   isOpen: boolean;
@@ -34,7 +35,7 @@ export const SendTelegramMessageModal: React.FC<SendTelegramMessageModalProps> =
     setError(null);
 
     try {
-      const res = await fetch(`/api/admin/telegram/tenants/${tenant.tenantId}/send-message`, {
+      const res = await adminFetch(`/api/admin/telegram/tenants/${tenant.tenantId}/send-message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: message.trim() }),

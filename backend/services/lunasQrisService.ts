@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { safeExternalFetch, UrlSecurityError } from '../utils/urlSecurity.ts';
 
 /**
  * Service untuk integrasi Payment Gateway LunasQRIS (lunasqris.com)
@@ -70,7 +71,7 @@ export async function getLunasQrisBalance(
   const url = `${cleanBase}/api/v1/balance`;
 
   try {
-    const res = await fetch(url, {
+    const res = await safeExternalFetch(url, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
@@ -99,6 +100,9 @@ export async function getLunasQrisBalance(
       balanceHold: balHold,
     };
   } catch (err: any) {
+    if (err instanceof UrlSecurityError) {
+      throw err;
+    }
     return {
       success: false,
       balance: 0,
@@ -144,7 +148,7 @@ export async function createLunasQrisTransaction(
     ...(params.metadata && { metadata: params.metadata }),
   };
 
-  const res = await fetch(url, {
+  const res = await safeExternalFetch(url, {
     method: 'POST',
     headers: {
       'Accept': 'application/json',
@@ -207,7 +211,7 @@ export async function checkLunasQrisStatus(
     throw new Error('Harap berikan orderId atau trxId untuk cek status.');
   }
 
-  const res = await fetch(url, {
+  const res = await safeExternalFetch(url, {
     method: 'GET',
     headers: {
       'Accept': 'application/json',
@@ -261,7 +265,7 @@ export async function cancelLunasQrisTransaction(
   const url = `${cleanBase}/api/v1/transaction/cancel`;
 
   try {
-    const res = await fetch(url, {
+    const res = await safeExternalFetch(url, {
       method: 'POST',
       headers: {
         'Accept': 'application/json',
@@ -280,21 +284,56 @@ export async function cancelLunasQrisTransaction(
   }
 }
 
+export const LUNASQRIS_WEBHOOK_MAX_AGE_SECONDS = 300;
+
+export function parseWebhookTimestampMs(timestamp: string): number | null {
+  const clean = (timestamp || '').trim();
+  if (!clean) return null;
+
+  if (/^\d+(\.\d+)?$/.test(clean)) {
+    const num = Number(clean);
+    if (!Number.isFinite(num) || num <= 0) return null;
+    // Angka >= 1e12 diperlakukan sebagai epoch milidetik, selainnya sebagai epoch detik
+    return num >= 1e12 ? num : num * 1000;
+  }
+
+  const parsed = Date.parse(clean);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 /**
  * Verifikasi signature Webhook LunasQRIS menggunakan HMAC-SHA256
+ * disertai validasi batas usia timestamp (default maks 300 detik) untuk anti-replay.
  */
 export function verifyLunasQrisSignature(
   rawBody: string,
   timestamp: string,
   signature: string,
-  secretKey: string
+  secretKey: string,
+  options?: { maxAgeSeconds?: number; nowMs?: number }
 ): boolean {
-  if (!signature || !secretKey || !timestamp || !rawBody) return false;
+  const cleanSecret = (secretKey || '').trim();
+  const cleanTs = (timestamp || '').trim();
+  const cleanSig = (signature || '').trim().replace(/^sha256=/i, '').toLowerCase();
+
+  if (!cleanSig || !cleanSecret || !cleanTs || !rawBody) return false;
+
+  const tsMs = parseWebhookTimestampMs(cleanTs);
+  if (tsMs === null) return false;
+
+  const maxAgeSeconds = options?.maxAgeSeconds ?? LUNASQRIS_WEBHOOK_MAX_AGE_SECONDS;
+  const nowMs = options?.nowMs ?? Date.now();
+  if (Math.abs(nowMs - tsMs) > maxAgeSeconds * 1000) {
+    return false;
+  }
 
   try {
-    const payload = `${timestamp}.${rawBody}`;
-    const expected = crypto.createHmac('sha256', secretKey.trim()).update(payload).digest('hex');
-    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+    const payload = `${cleanTs}.${rawBody}`;
+    const expected = crypto.createHmac('sha256', cleanSecret).update(payload).digest('hex');
+    if (cleanSig.length !== expected.length || !/^[0-9a-f]+$/.test(cleanSig)) {
+      return false;
+    }
+    return crypto.timingSafeEqual(Buffer.from(cleanSig, 'utf8'), Buffer.from(expected, 'utf8'));
   } catch {
     return false;
   }

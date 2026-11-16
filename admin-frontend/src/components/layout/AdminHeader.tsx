@@ -1,5 +1,5 @@
 import React from 'react';
-import { Menu, Store, ExternalLink, RefreshCw, Building2, BarChart3, Radio, ShieldCheck, LayoutTemplate, Send, Ticket, KeyRound } from 'lucide-react';
+import { Menu, Store, ExternalLink, RefreshCw, Building2, BarChart3, Radio, ShieldCheck, LayoutTemplate, Send, Ticket, KeyRound, LogOut } from 'lucide-react';
 import { AdminNavTab } from './AdminSidebar.tsx';
 
 interface AdminHeaderProps {
@@ -7,6 +7,7 @@ interface AdminHeaderProps {
   loading: boolean;
   onRefresh: () => void;
   onOpenMobileMenu: () => void;
+  onLogout?: () => void;
 }
 
 export const AdminHeader: React.FC<AdminHeaderProps> = ({
@@ -14,6 +15,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   loading,
   onRefresh,
   onOpenMobileMenu,
+  onLogout,
 }) => {
   const getTabInfo = () => {
     switch (selectedTab) {
@@ -135,6 +137,20 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-[#0084D1]' : ''}`} />
           </button>
+
+          {/* Tombol Keluar Sesi Master Admin */}
+          {onLogout && (
+            <button
+              type="button"
+              onClick={onLogout}
+              data-testid="admin-header-logout-btn"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50/70 hover:bg-rose-100 border border-rose-200/80 rounded-xl transition-all active:scale-95 cursor-pointer shadow-2xs"
+              title="Keluar dari Dashboard Master Admin"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Keluar</span>
+            </button>
+          )}
         </div>
       </div>
     </header>

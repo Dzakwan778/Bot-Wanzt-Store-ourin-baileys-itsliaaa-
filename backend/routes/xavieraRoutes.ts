@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { botManager } from '../botManager.ts';
+import { safeExternalFetch, UrlSecurityError } from '../utils/urlSecurity.ts';
 
 export const xavieraRouter = Router();
 
@@ -17,7 +18,7 @@ xavieraRouter.get('/profile', async (_req: Request, res: Response) => {
   }
 
   try {
-    const response = await fetch(`${baseUrl}/me`, {
+    const response = await safeExternalFetch(`${baseUrl}/me`, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -37,6 +38,9 @@ xavieraRouter.get('/profile', async (_req: Request, res: Response) => {
 
     return res.json({ configured: true, success: true, data });
   } catch (err: any) {
+    if (err instanceof UrlSecurityError) {
+      return res.status(400).json({ configured: true, success: false, error: err.message });
+    }
     return res.json({
       configured: true,
       success: false,
@@ -53,7 +57,7 @@ xavieraRouter.get('/products', async (_req: Request, res: Response) => {
   }
 
   try {
-    const response = await fetch(`${baseUrl}/products`, {
+    const response = await safeExternalFetch(`${baseUrl}/products`, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -73,6 +77,9 @@ xavieraRouter.get('/products', async (_req: Request, res: Response) => {
 
     return res.json({ configured: true, success: true, data });
   } catch (err: any) {
+    if (err instanceof UrlSecurityError) {
+      return res.status(400).json({ configured: true, success: false, error: err.message });
+    }
     return res.json({
       configured: true,
       success: false,
@@ -89,7 +96,7 @@ xavieraRouter.get('/smm', async (_req: Request, res: Response) => {
   }
 
   try {
-    const response = await fetch(`${baseUrl}/smm/services`, {
+    const response = await safeExternalFetch(`${baseUrl}/smm/services`, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -109,6 +116,9 @@ xavieraRouter.get('/smm', async (_req: Request, res: Response) => {
 
     return res.json({ configured: true, success: true, data });
   } catch (err: any) {
+    if (err instanceof UrlSecurityError) {
+      return res.status(400).json({ configured: true, success: false, error: err.message });
+    }
     return res.json({
       configured: true,
       success: false,
@@ -125,7 +135,7 @@ xavieraRouter.get('/games', async (_req: Request, res: Response) => {
   }
 
   try {
-    const response = await fetch(`${baseUrl}/games`, {
+    const response = await safeExternalFetch(`${baseUrl}/games`, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -145,6 +155,9 @@ xavieraRouter.get('/games', async (_req: Request, res: Response) => {
 
     return res.json({ configured: true, success: true, data });
   } catch (err: any) {
+    if (err instanceof UrlSecurityError) {
+      return res.status(400).json({ configured: true, success: false, error: err.message });
+    }
     return res.json({
       configured: true,
       success: false,

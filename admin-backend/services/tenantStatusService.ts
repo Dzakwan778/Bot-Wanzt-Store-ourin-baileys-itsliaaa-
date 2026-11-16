@@ -82,7 +82,7 @@ export class TenantStatusService {
       .get(tenantId) as { tenant_id: string; status: string; expires_at: string } | undefined;
 
     if (!row) {
-      return 'active';
+      return 'expired';
     }
 
     const effectiveStatus = resolveEffectiveTenantStatus(row.status, row.expires_at);

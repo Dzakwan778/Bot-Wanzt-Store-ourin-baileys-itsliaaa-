@@ -15,6 +15,7 @@ import {
 import { getActiveTenantId } from '../database/tenantContext.ts';
 import { TenantManager } from '../../admin-backend/services/tenantManager.ts';
 import { toOfficialIndonesianPhone } from '../services/placeholderHelper.ts';
+import { validateExternalHttpsUrlSyntax } from '../utils/urlSecurity.ts';
 
 function resolveDbDir(): string {
   const localDb = path.join(process.cwd(), 'database');
@@ -549,7 +550,28 @@ export function loadApiConfig(): ApiConfig {
 
 export function saveApiConfig(update: Partial<ApiConfig>): ApiConfig {
   const current = loadApiConfig();
-  const merged = { ...current, ...update };
+  const safeUpdate: Partial<ApiConfig> = { ...update };
+  if (typeof safeUpdate.lunasQrisApiKey === 'string' && safeUpdate.lunasQrisApiKey.includes('••••')) {
+    safeUpdate.lunasQrisApiKey = current.lunasQrisApiKey;
+  }
+  if (typeof safeUpdate.lunasQrisSecretKey === 'string' && safeUpdate.lunasQrisSecretKey.includes('••••')) {
+    safeUpdate.lunasQrisSecretKey = current.lunasQrisSecretKey;
+  }
+  if (typeof safeUpdate.xavieraApiKey === 'string' && safeUpdate.xavieraApiKey.includes('••••')) {
+    safeUpdate.xavieraApiKey = current.xavieraApiKey;
+  }
+  const merged = { ...current, ...safeUpdate };
+  const nextLunasBase =
+    (merged.lunasQrisBaseUrl || '').trim() || DEFAULT_API_CONFIG.lunasQrisBaseUrl || 'https://lunasqris.com';
+  const nextXavieraBase =
+    (merged.xavieraBaseUrl || '').trim() || DEFAULT_API_CONFIG.xavieraBaseUrl || 'https://xavierastore.com/api/v1';
+
+  // Wajibkan skema HTTPS dan blokir literal localhost/IP privat sebelum menyimpan ke SQLite
+  validateExternalHttpsUrlSyntax(nextLunasBase);
+  validateExternalHttpsUrlSyntax(nextXavieraBase);
+  merged.lunasQrisBaseUrl = nextLunasBase;
+  merged.xavieraBaseUrl = nextXavieraBase;
+
   const now = new Date().toISOString();
 
   try {
@@ -561,9 +583,9 @@ export function saveApiConfig(update: Partial<ApiConfig>): ApiConfig {
     `).run(
       merged.lunasQrisApiKey || '',
       merged.lunasQrisSecretKey || '',
-      merged.lunasQrisBaseUrl || DEFAULT_API_CONFIG.lunasQrisBaseUrl,
+      merged.lunasQrisBaseUrl,
       merged.xavieraApiKey || '',
-      merged.xavieraBaseUrl || DEFAULT_API_CONFIG.xavieraBaseUrl,
+      merged.xavieraBaseUrl,
       now
     );
   } catch (err) {

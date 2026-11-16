@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { PauseCircle, PlayCircle } from 'lucide-react';
 import { Tenant } from '../../types/admin.types.ts';
+import { adminFetch } from '../../utils/adminAuth.ts';
 
 interface ToggleSuspendModalProps {
   isOpen: boolean;
@@ -27,7 +28,7 @@ export const ToggleSuspendModal: React.FC<ToggleSuspendModalProps> = ({
   const handleConfirmToggle = async () => {
     setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/admin/tenants/${tenant.tenant_id}/status`, {
+      const res = await adminFetch(`/api/admin/tenants/${tenant.tenant_id}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nextStatus }),

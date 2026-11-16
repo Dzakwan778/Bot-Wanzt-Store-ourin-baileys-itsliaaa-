@@ -15,6 +15,7 @@ import {
   Send,
   Ticket,
   KeyRound,
+  LogOut,
 } from 'lucide-react';
 
 export type AdminNavTab = 'units' | 'templates' | 'telegram' | 'tokens' | 'partners' | 'stats' | 'broadcast' | 'settings';
@@ -30,6 +31,8 @@ interface AdminSidebarProps {
   onRefresh: () => void;
   isMobileOpen: boolean;
   onCloseMobile: () => void;
+  adminUsername?: string;
+  onLogout?: () => void;
 }
 
 interface NavItem {
@@ -52,6 +55,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   onRefresh,
   isMobileOpen,
   onCloseMobile,
+  adminUsername,
+  onLogout,
 }) => {
   const navItems: NavItem[] = [
     {
@@ -96,7 +101,6 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       id: 'broadcast',
       label: 'Pesan Siaran',
       icon: Radio,
-      badge: 'Segera',
       description: 'Siaran massal ke tenant',
     },
     {
@@ -315,10 +319,21 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
               <div
                 className="w-9 h-9 rounded-xl bg-sky-100 text-[#0084D1] font-bold flex items-center justify-center text-xs border border-sky-200"
-                title="Super Admin - Akses Penuh"
+                title={adminUsername ? `${adminUsername} - Super Admin` : 'Super Admin - Akses Penuh'}
               >
                 SA
               </div>
+
+              {onLogout && (
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  title="Keluar Sesi Master Admin"
+                  className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 flex items-center justify-center transition cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              )}
             </div>
           ) : (
             <div className="space-y-2">
@@ -330,7 +345,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <p className="text-xs font-bold text-slate-900 truncate">
-                      Super Admin
+                      {adminUsername || 'Super Admin'}
                     </p>
                     <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-700">
                       Master
@@ -354,6 +369,19 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                 </div>
                 <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#0084D1] transition-colors" />
               </a>
+
+              {/* Tombol Keluar */}
+              {onLogout && (
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  data-testid="admin-sidebar-logout-btn"
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold text-rose-600 bg-rose-50/70 hover:bg-rose-100 border border-rose-200/80 rounded-xl transition-all cursor-pointer active:scale-[0.99]"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Keluar dari Master Admin</span>
+                </button>
+              )}
             </div>
           )}
         </div>

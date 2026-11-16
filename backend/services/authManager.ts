@@ -1,10 +1,17 @@
 import crypto from 'crypto';
 import { db } from '../database/sqlite.ts';
+import {
+  hashScryptPassword,
+  verifyLocalSaltedPassword,
+  verifyMasterPassword,
+} from '../../admin-backend/utils/passwordCrypto.ts';
+import { getMasterDb, hashPassword as hashMasterPassword } from '../../admin-backend/database/masterSqlite.ts';
 
 export interface AuthConfig {
   username: string;
   salt: string;
   hash: string;
+  iterations?: number;
   updatedAt: string;
 }
 
@@ -22,56 +29,56 @@ const activeSessions = new Map<string, SessionData>();
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
- * Hash password menggunakan PBKDF2 (SHA-512 dengan 100.000 iterasi)
+ * Hash password kuat menggunakan crypto.scrypt (16-byte random salt per hash)
  */
-export function hashPassword(password: string, salt: string): string {
-  return crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+export function hashPassword(password: string, _salt?: string): string {
+  return hashScryptPassword(password);
 }
 
 /**
- * Inisialisasi kredensial awal di SQLite jika belum ada
- * Akun default awal: username: "admin", password: "admin123"
+ * Membaca kredensial lokal dari tabel auth di SQLite.
+ * Tidak lagi membuat akun default hardcoded ("admin123").
+ * Hanya melakukan bootstrap jika env LOCAL_AUTH_BOOTSTRAP_USERNAME & LOCAL_AUTH_BOOTSTRAP_PASSWORD diset.
  */
-export function initAuth(): AuthConfig {
+export function initAuth(): AuthConfig | null {
   try {
     const row = db.prepare(`
-      SELECT username, password_hash as hash, salt, updated_at as updatedAt
+      SELECT username, password_hash as hash, salt, iterations, updated_at as updatedAt
       FROM auth
       WHERE id = 1
     `).get() as AuthConfig | undefined;
 
-    if (row && row.username && row.hash && row.salt) {
+    if (row && row.username && row.hash) {
       return row;
     }
 
-    const defaultSalt = crypto.randomBytes(16).toString('hex');
-    const defaultHash = hashPassword('admin123', defaultSalt);
-    const now = new Date().toISOString();
+    const bootUser = process.env.LOCAL_AUTH_BOOTSTRAP_USERNAME?.trim();
+    const bootPass = process.env.LOCAL_AUTH_BOOTSTRAP_PASSWORD?.trim();
+    if (bootUser && bootPass) {
+      const salt = crypto.randomBytes(16).toString('hex');
+      const scryptHash = hashScryptPassword(bootPass);
+      const now = new Date().toISOString();
 
-    db.prepare(`
-      INSERT OR REPLACE INTO auth (id, username, password_hash, salt, iterations, updated_at)
-      VALUES (1, ?, ?, ?, 100000, ?)
-    `).run('admin', defaultHash, defaultSalt, now);
+      db.prepare(`
+        INSERT OR REPLACE INTO auth (id, username, password_hash, salt, iterations, updated_at)
+        VALUES (1, ?, ?, ?, 16384, ?)
+      `).run(bootUser, scryptHash, salt, now);
 
-    return {
-      username: 'admin',
-      salt: defaultSalt,
-      hash: defaultHash,
-      updatedAt: now,
-    };
+      return {
+        username: bootUser,
+        salt,
+        hash: scryptHash,
+        iterations: 16384,
+        updatedAt: now,
+      };
+    }
+
+    return null;
   } catch (err) {
     console.error('Gagal membaca kredensial auth dari SQLite:', err);
-    const fallbackSalt = crypto.randomBytes(16).toString('hex');
-    return {
-      username: 'admin',
-      salt: fallbackSalt,
-      hash: hashPassword('admin123', fallbackSalt),
-      updatedAt: new Date().toISOString(),
-    };
+    return null;
   }
 }
-
-import { getMasterDb, hashPassword as hashMasterPassword } from '../../admin-backend/database/masterSqlite.ts';
 
 export interface AuthVerificationResult {
   success: boolean;
@@ -80,25 +87,31 @@ export interface AuthVerificationResult {
   accountStatus?: 'active' | 'suspended' | 'expired';
 }
 
-
 /**
- * Verifikasi login dengan perbandingan waktu konstan (constant-time comparison)
- * Mencegah timing attacks.
- * Mendukung kredensial Admin Utama dan Akun Tenant Apartemen.
+ * Verifikasi login dengan perbandingan waktu konstan (constant-time comparison).
+ * Mendukung akun Tenant di master.db serta tabel lokal auth/tenants + auto-upgrade hash lama ke scrypt.
  */
 export function verifyLogin(usernameInput: string, passwordInput: string): AuthVerificationResult | false {
   try {
     if (!usernameInput || !passwordInput) return false;
     const trimmedInputUser = usernameInput.trim();
 
-    // 1. Verifikasi Admin Utama (Tabel auth di SQLite)
+    // 1. Verifikasi Admin Lokal (Tabel auth di SQLite jika ada)
     const auth = initAuth();
-    if (trimmedInputUser.toLowerCase() === auth.username.toLowerCase()) {
-      const inputHash = hashPassword(passwordInput, auth.salt);
-      const hashBuffer = Buffer.from(auth.hash, 'hex');
-      const inputBuffer = Buffer.from(inputHash, 'hex');
-
-      if (hashBuffer.length === inputBuffer.length && crypto.timingSafeEqual(hashBuffer, inputBuffer)) {
+    if (auth && trimmedInputUser.toLowerCase() === auth.username.toLowerCase()) {
+      const localCheck = verifyLocalSaltedPassword(passwordInput, auth.hash, auth.salt, auth.iterations || 100000);
+      if (localCheck.valid) {
+        if (localCheck.needsRehash) {
+          try {
+            const newSalt = crypto.randomBytes(16).toString('hex');
+            const newHash = hashScryptPassword(passwordInput);
+            db.prepare('UPDATE auth SET password_hash = ?, salt = ?, updated_at = ? WHERE id = 1').run(
+              newHash,
+              newSalt,
+              new Date().toISOString()
+            );
+          } catch {}
+        }
         return { success: true, username: auth.username, tenantId: 't_wanzt' };
       }
     }
@@ -113,8 +126,16 @@ export function verifyLogin(usernameInput: string, passwordInput: string): AuthV
       `).get(trimmedInputUser) as any;
 
       if (masterTenant && masterTenant.password_hash) {
-        const masterHash = hashMasterPassword(passwordInput);
-        if (masterHash === masterTenant.password_hash) {
+        const masterCheck = verifyMasterPassword(passwordInput, masterTenant.password_hash);
+        if (masterCheck.valid) {
+          if (masterCheck.needsRehash) {
+            try {
+              masterDb.prepare('UPDATE tenants SET password_hash = ? WHERE tenant_id = ?').run(
+                hashMasterPassword(passwordInput),
+                masterTenant.tenant_id
+              );
+            } catch {}
+          }
           return {
             success: true,
             username: masterTenant.username,
@@ -125,7 +146,6 @@ export function verifyLogin(usernameInput: string, passwordInput: string): AuthV
       }
     } catch {}
 
-
     // 3. Verifikasi Tenant di database lokal (jika ada unit terdaftar di tabel tenants bot.db)
     try {
       const localTenant = db.prepare(`
@@ -134,12 +154,20 @@ export function verifyLogin(usernameInput: string, passwordInput: string): AuthV
         WHERE LOWER(username) = LOWER(?)
       `).get(trimmedInputUser) as any;
 
-      if (localTenant && localTenant.password_hash && localTenant.salt) {
-        const tenantHash = crypto.pbkdf2Sync(passwordInput, localTenant.salt, 100000, 64, 'sha512').toString('hex');
-        const hashBuffer = Buffer.from(localTenant.password_hash, 'hex');
-        const inputBuffer = Buffer.from(tenantHash, 'hex');
-
-        if (hashBuffer.length === inputBuffer.length && crypto.timingSafeEqual(hashBuffer, inputBuffer)) {
+      if (localTenant && localTenant.password_hash) {
+        const tenantCheck = verifyLocalSaltedPassword(passwordInput, localTenant.password_hash, localTenant.salt, 100000);
+        if (tenantCheck.valid) {
+          if (tenantCheck.needsRehash) {
+            try {
+              const newSalt = crypto.randomBytes(16).toString('hex');
+              const newHash = hashScryptPassword(passwordInput);
+              db.prepare('UPDATE tenants SET password_hash = ?, salt = ? WHERE id = ?').run(
+                newHash,
+                newSalt,
+                localTenant.id
+              );
+            } catch {}
+          }
           return {
             success: true,
             username: localTenant.username,
@@ -149,7 +177,6 @@ export function verifyLogin(usernameInput: string, passwordInput: string): AuthV
         }
       }
     } catch {}
-
 
     return false;
   } catch (err) {
@@ -342,8 +369,7 @@ export function updateTenantPassword(
     `).get(tenantId) as any;
 
     if (masterTenant && masterTenant.password_hash) {
-      const inputMasterHash = hashMasterPassword(currentPassword);
-      if (inputMasterHash === masterTenant.password_hash) {
+      if (verifyMasterPassword(currentPassword, masterTenant.password_hash).valid) {
         isCurrentValid = true;
       }
     }
@@ -352,13 +378,17 @@ export function updateTenantPassword(
     if (!isCurrentValid) {
       try {
         const localAuth = db.prepare(`
-          SELECT username, password_hash as hash, salt FROM auth WHERE id = 1
+          SELECT username, password_hash as hash, salt, iterations FROM auth WHERE id = 1
         `).get() as any;
-        if (localAuth && localAuth.hash && localAuth.salt) {
-          const inputHash = hashPassword(currentPassword, localAuth.salt);
-          const hashBuffer = Buffer.from(localAuth.hash, 'hex');
-          const inputBuffer = Buffer.from(inputHash, 'hex');
-          if (hashBuffer.length === inputBuffer.length && crypto.timingSafeEqual(hashBuffer, inputBuffer)) {
+        if (localAuth && localAuth.hash) {
+          if (
+            verifyLocalSaltedPassword(
+              currentPassword,
+              localAuth.hash,
+              localAuth.salt,
+              localAuth.iterations || 100000
+            ).valid
+          ) {
             isCurrentValid = true;
           }
         }
@@ -370,7 +400,7 @@ export function updateTenantPassword(
       return { success: false, message: 'Password saat ini tidak valid! Periksa kembali password Anda.' };
     }
 
-    // 2. Hash Password Baru dan Simpan ke masterDb
+    // 2. Hash Password Baru (scrypt) dan Simpan ke masterDb
     const newMasterHash = hashMasterPassword(newPassword);
     masterDb.prepare(`
       UPDATE tenants SET password_hash = ? WHERE tenant_id = ?
@@ -379,7 +409,7 @@ export function updateTenantPassword(
     // Update di database tenant lokal (tabel auth)
     try {
       const newSalt = crypto.randomBytes(16).toString('hex');
-      const newLocalHash = hashPassword(newPassword, newSalt);
+      const newLocalHash = hashScryptPassword(newPassword);
       db.prepare(`
         UPDATE auth SET password_hash = ?, salt = ?, updated_at = ? WHERE id = 1
       `).run(newLocalHash, newSalt, new Date().toISOString());
@@ -388,7 +418,7 @@ export function updateTenantPassword(
     // Update di tabel tenants lokal (jika ada)
     try {
       const newSalt = crypto.randomBytes(16).toString('hex');
-      const newLocalHash = hashPassword(newPassword, newSalt);
+      const newLocalHash = hashScryptPassword(newPassword);
       db.prepare(`
         UPDATE tenants SET password_hash = ?, salt = ? WHERE id = ?
       `).run(newLocalHash, newSalt, tenantId);

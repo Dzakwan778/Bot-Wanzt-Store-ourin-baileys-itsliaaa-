@@ -4,6 +4,8 @@ import { loadStoreInfo } from '../config/configManager.ts';
 import { getActiveTenantId } from '../database/tenantContext.ts';
 import { TenantManager } from '../../admin-backend/services/tenantManager.ts';
 import { TenantStatusService } from '../../admin-backend/services/tenantStatusService.ts';
+import { sanitizeBotStatusResponse } from '../middleware/tenantAuth.ts';
+import { assertSafeExternalHttpsUrl, UrlSecurityError } from '../utils/urlSecurity.ts';
 
 export const botRouter = Router();
 
@@ -18,8 +20,10 @@ botRouter.get('/status', async (_req: Request, res: Response) => {
   const rawTotalDays = tenant?.duration_days ?? 30;
   const totalDays = Math.max(rawTotalDays, daysRemaining, 1);
 
+  const maskedBotStatus = sanitizeBotStatusResponse(botStatus);
+
   return res.json({
-    ...botStatus,
+    ...maskedBotStatus,
     accountStatus,
     expiresAt: tenant?.expires_at,
     createdAt: tenant?.created_at,
@@ -131,9 +135,21 @@ botRouter.post('/save-config', async (req: Request, res: Response) => {
       });
     }
 
-    botManager.saveConfig(req.body);
-    return res.json({ success: true, config: botManager.config });
+    const body = req.body || {};
+    if (typeof body.xavieraBaseUrl === 'string' && body.xavieraBaseUrl.trim()) {
+      await assertSafeExternalHttpsUrl(body.xavieraBaseUrl.trim());
+    }
+    if (typeof body.lunasQrisBaseUrl === 'string' && body.lunasQrisBaseUrl.trim()) {
+      await assertSafeExternalHttpsUrl(body.lunasQrisBaseUrl.trim());
+    }
+
+    botManager.saveConfig(body);
+    const sanitized = sanitizeBotStatusResponse({ config: botManager.config });
+    return res.json({ success: true, config: sanitized.config });
   } catch (err: any) {
+    if (err instanceof UrlSecurityError) {
+      return res.status(400).json({ success: false, error: err.message });
+    }
     console.error('Error saat menyimpan konfigurasi bot:', err);
     return res.status(500).json({ error: err?.message || 'Gagal menyimpan konfigurasi' });
   }

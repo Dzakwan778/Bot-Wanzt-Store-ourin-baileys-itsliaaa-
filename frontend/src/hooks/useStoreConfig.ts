@@ -278,13 +278,20 @@ export function useStoreConfig(
         if (newLunasQrisBaseUrl !== undefined) payload.lunasQrisBaseUrl = newLunasQrisBaseUrl;
       }
 
-      await fetch('/api/bot/save-config', {
+      const res = await fetch('/api/bot/save-config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        showToast(errData?.error || 'Gagal menyimpan konfigurasi ke server');
+        return false;
+      }
+      return true;
     } catch (e) {
       console.error('Gagal menyimpan config ke server', e);
+      return false;
     } finally {
       setIsSavingConfig(false);
     }

@@ -6,6 +6,8 @@ import makeWASocket, {
 } from '@itsliaaa/baileys';
 import NodeCache from '@cacheable/node-cache';
 import pino from 'pino';
+import { incrementMessageStat } from './database/tenantDbManager.ts';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
@@ -92,7 +94,7 @@ export class BotManager {
 
   addLog(type: 'info' | 'success' | 'warning' | 'error' | 'code', message: string) {
     const entry: LogEntry = {
-      id: Date.now() + Math.random().toString(36).substring(2, 6),
+      id: Date.now() + '_' + crypto.randomBytes(3).toString('hex'),
       time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       type,
       message,
@@ -308,12 +310,14 @@ export class BotManager {
       // Lacak ID pesan yang dikirim bot secara otomatis agar tidak memicu respon berulang (loop)
       const originalSendMessage = this.sock.sendMessage.bind(this.sock);
       this.sock.sendMessage = async (...args: any[]) => {
+        const jid = args[0];
         const result = await originalSendMessage(...args);
         if (result?.key?.id) {
           markMessageAsBotSent(result.key.id);
           if (result.message) {
             messageCache.set(result.key.id, result.message);
           }
+          incrementMessageStat(this.tenantId, 'whatsapp');
         }
         return result;
       };

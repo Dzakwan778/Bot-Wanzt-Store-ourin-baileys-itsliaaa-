@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { getMasterDb, hashPassword } from '../database/masterSqlite.ts';
-import { initTenantDb, deleteTenantDb } from '../../backend/database/tenantDbManager.ts';
+import { initTenantDb, deleteTenantDb, getTenantDb } from '../../backend/database/tenantDbManager.ts';
 import { getBotManager } from '../../backend/botManager.ts';
 import { TenantRecord, CreateTenantInput, CreateTenantResult, GlobalStats } from '../types/admin.types.ts';
 import { normalizeIndonesianPhone } from '../utils/phoneUtils.ts';
@@ -259,11 +259,46 @@ export class TenantService {
     const expiredTenants = tenants.filter((t) => t.status === 'expired').length;
     const suspendedTenants = tenants.filter((t) => t.status === 'suspended').length;
 
+    let whatsappMessagesTotal = 0;
+    let telegramMessagesTotal = 0;
+    const tenantMessageStats: any[] = [];
+
+    for (const t of tenants) {
+      let waMsgs = 0;
+      let tgMsgs = 0;
+      try {
+        const tDb = getTenantDb(t.tenant_id);
+        const row = tDb.prepare('SELECT whatsapp_messages, telegram_messages FROM message_stats WHERE id = 1').get() as any;
+        if (row) {
+          waMsgs = row.whatsapp_messages || 0;
+          tgMsgs = row.telegram_messages || 0;
+        }
+      } catch {}
+
+      whatsappMessagesTotal += waMsgs;
+      telegramMessagesTotal += tgMsgs;
+
+      tenantMessageStats.push({
+        tenant_id: t.tenant_id,
+        store_name: t.store_name || t.tenant_id,
+        owner_name: t.owner_name || '-',
+        whatsapp_messages: waMsgs,
+        telegram_messages: tgMsgs,
+        total_messages: waMsgs + tgMsgs,
+      });
+    }
+
+    const totalMessages = whatsappMessagesTotal + telegramMessagesTotal;
+
     return {
       totalTenants,
       activeTenants,
       expiredTenants,
       suspendedTenants,
+      totalMessages,
+      whatsappMessagesTotal,
+      telegramMessagesTotal,
+      tenantMessageStats,
       serverTime: new Date().toISOString(),
     };
   }

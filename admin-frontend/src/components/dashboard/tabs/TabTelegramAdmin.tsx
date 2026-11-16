@@ -11,6 +11,7 @@ import {
   Info,
 } from 'lucide-react';
 import { SendTelegramMessageModal } from '../../modals/SendTelegramMessageModal';
+import { adminFetch } from '../../../utils/adminAuth.ts';
 
 export interface TenantTelegramItem {
   tenantId: string;
@@ -43,7 +44,7 @@ export const TabTelegramAdmin: React.FC<TabTelegramAdminProps> = ({ showToast })
   const fetchTelegramData = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/telegram/tenants');
+      const res = await adminFetch('/api/admin/telegram/tenants');
       const data = await res.json();
       if (data.success && Array.isArray(data.data)) {
         setItems(data.data);
@@ -64,7 +65,7 @@ export const TabTelegramAdmin: React.FC<TabTelegramAdminProps> = ({ showToast })
   const handleToggleBot = async (item: TenantTelegramItem) => {
     setTogglingId(item.tenantId);
     try {
-      const res = await fetch(`/api/admin/telegram/tenants/${item.tenantId}/toggle`, {
+      const res = await adminFetch(`/api/admin/telegram/tenants/${item.tenantId}/toggle`, {
         method: 'POST',
       });
       const data = await res.json();

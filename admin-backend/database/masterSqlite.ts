@@ -2,15 +2,15 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import { hashScryptPassword, generateBootstrapSecretPassword } from '../utils/passwordCrypto.ts';
 
 const MASTER_DB_PATH = path.resolve(process.cwd(), 'database', 'master.db');
 
 let masterDb: Database.Database | null = null;
 
-// Helper hashing PBKDF2
+// Hash password kuat dengan crypto.scrypt + random 16-byte salt per akun
 export function hashPassword(password: string): string {
-  const salt = 'master_salt_wanzt_2026';
-  return crypto.pbkdf2Sync(password, salt, 1000, 32, 'sha256').toString('hex');
+  return hashScryptPassword(password);
 }
 
 export function initMasterDatabase(): Database.Database {
@@ -39,6 +39,29 @@ export function initMasterDatabase(): Database.Database {
       password_hash TEXT NOT NULL,
       name TEXT NOT NULL,
       created_at TEXT NOT NULL
+    );
+  `);
+
+  // Tabel Sesi Login Master Admin (Persisten 7 Hari)
+  masterDb.exec(`
+    CREATE TABLE IF NOT EXISTS admin_sessions (
+      token TEXT PRIMARY KEY,
+      admin_id INTEGER NOT NULL,
+      username TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON admin_sessions (expires_at);
+    CREATE INDEX IF NOT EXISTS idx_admin_sessions_admin ON admin_sessions (admin_id);
+  `);
+
+  // Tabel Pelacakan Percobaan Login Gagal (Brute-Force Protection)
+  masterDb.exec(`
+    CREATE TABLE IF NOT EXISTS admin_login_attempts (
+      ip TEXT PRIMARY KEY,
+      failed_count INTEGER NOT NULL DEFAULT 0,
+      locked_until TEXT,
+      last_attempt_at TEXT NOT NULL
     );
   `);
 
@@ -154,6 +177,52 @@ export function initMasterDatabase(): Database.Database {
     );
   `);
 
+  // Tabel Kampanye Broadcast Master Admin (Langsung, Sekali Terjadwal, & Berulang Otomatis)
+  masterDb.exec(`
+    CREATE TABLE IF NOT EXISTS broadcast_campaigns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      channel TEXT NOT NULL DEFAULT 'both',
+      schedule_type TEXT NOT NULL DEFAULT 'immediate',
+      scheduled_at TEXT,
+      recurrence_time TEXT,
+      recurrence_day_of_week INTEGER,
+      recurrence_day_of_month INTEGER,
+      next_run_at TEXT,
+      status TEXT NOT NULL DEFAULT 'scheduled',
+      total_targets INTEGER NOT NULL DEFAULT 0,
+      wa_success INTEGER NOT NULL DEFAULT 0,
+      wa_failed INTEGER NOT NULL DEFAULT 0,
+      tg_success INTEGER NOT NULL DEFAULT 0,
+      tg_failed INTEGER NOT NULL DEFAULT 0,
+      run_count INTEGER NOT NULL DEFAULT 0,
+      last_run_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_broadcast_campaigns_status_next ON broadcast_campaigns (status, next_run_at);
+  `);
+
+  // Tabel Log Detail Pengiriman Broadcast Per-Tenant & Per-Kanal
+  masterDb.exec(`
+    CREATE TABLE IF NOT EXISTS broadcast_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      campaign_id INTEGER NOT NULL,
+      run_number INTEGER NOT NULL DEFAULT 1,
+      tenant_id TEXT NOT NULL,
+      store_name TEXT NOT NULL,
+      owner_name TEXT NOT NULL,
+      channel TEXT NOT NULL,
+      target TEXT NOT NULL,
+      status TEXT NOT NULL,
+      error_message TEXT,
+      rendered_message TEXT,
+      sent_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_broadcast_logs_campaign_run ON broadcast_logs (campaign_id, run_number);
+  `);
+
   const masterAdminCount = (masterDb.prepare('SELECT COUNT(*) as count FROM master_admins').get() as { count: number }).count;
   if (masterAdminCount === 0) {
     const nowIso = new Date().toISOString();
@@ -163,21 +232,40 @@ export function initMasterDatabase(): Database.Database {
     `).run('Master Admin Utama', '+6285712439395', 100, 0, nowIso, nowIso);
   }
 
-  // Seed default super admin jika kosong
-  const adminCount = (masterDb.prepare('SELECT COUNT(*) as count FROM super_admins').get() as { count: number }).count;
-  if (adminCount === 0) {
-    const defaultHash = hashPassword('adminwanzt888');
-    masterDb.prepare(`
-      INSERT INTO super_admins (username, password_hash, name, created_at)
-      VALUES (?, ?, ?, ?)
-    `).run('adminutama', defaultHash, 'Master Super Admin', new Date().toISOString());
-    console.log('[Master DB] Akun super admin default "adminutama" berhasil dibuat.');
+  // Hapus akun super admin lama "adminutama"
+  const deletedOldAdmin = masterDb.prepare("DELETE FROM super_admins WHERE username = 'adminutama'").run();
+  if (deletedOldAdmin.changes > 0) {
+    masterDb.prepare('DELETE FROM admin_sessions WHERE admin_id NOT IN (SELECT id FROM super_admins)').run();
+    console.log('[Master DB] Akun super admin lama "adminutama" telah dihapus.');
   }
 
-  // Seed default tenant (Wanzt Store / t_wanzt) jika kosong
+  // Bootstrap akun super admin awal hanya jika tabel super_admins masih kosong
+  const superAdminCount = (masterDb.prepare('SELECT COUNT(*) as count FROM super_admins').get() as { count: number }).count;
+  if (superAdminCount === 0) {
+    const bootUsername = process.env.ADMIN_BOOTSTRAP_USERNAME?.trim() || 'master_admin';
+    const envPass = process.env.ADMIN_BOOTSTRAP_PASSWORD?.trim();
+    const bootPassword = envPass || generateBootstrapSecretPassword(12);
+    const defaultHash = hashPassword(bootPassword);
+    masterDb
+      .prepare(`
+        INSERT INTO super_admins (username, password_hash, name, created_at)
+        VALUES (?, ?, ?, ?)
+      `)
+      .run(bootUsername, defaultHash, 'Master Super Admin', new Date().toISOString());
+    if (envPass) {
+      console.log(`[Master DB] Akun super admin "${bootUsername}" diinisialisasi dari ADMIN_BOOTSTRAP_PASSWORD.`);
+    } else {
+      console.log(`[Master DB] Akun super admin bootstrap dibuat (username: "${bootUsername}", one-time password: "${bootPassword}") - segera ganti setelah login.`);
+    }
+  }
+
+  // Seed tenant struktural default (Wanzt Store / t_wanzt) jika tabel tenants kosong (tanpa password hardcoded)
   const tenantCount = (masterDb.prepare('SELECT COUNT(*) as count FROM tenants').get() as { count: number }).count;
   if (tenantCount === 0) {
-    const tenantHash = hashPassword('wanzt123');
+    const bootTenantUser = process.env.TENANT_BOOTSTRAP_USERNAME?.trim() || 'wanzt';
+    const envTenantPass = process.env.TENANT_BOOTSTRAP_PASSWORD?.trim();
+    const bootTenantPass = envTenantPass || generateBootstrapSecretPassword(12);
+    const tenantHash = hashPassword(bootTenantPass);
     const oneYearLater = new Date();
     oneYearLater.setDate(oneYearLater.getDate() + 365);
 
@@ -189,7 +277,7 @@ export function initMasterDatabase(): Database.Database {
       'Wanzt Store',
       'Dzakwan',
       '6282173515807',
-      'wanzt',
+      bootTenantUser,
       tenantHash,
       'Enterprise',
       'active',
@@ -198,7 +286,11 @@ export function initMasterDatabase(): Database.Database {
       oneYearLater.toISOString(),
       'Unit Utama Wanzt Store (Apartemen Penthouse)'
     );
-    console.log('[Master DB] Tenant default "t_wanzt" berhasil diinisialisasi.');
+    if (envTenantPass) {
+      console.log(`[Master DB] Tenant default "t_wanzt" (${bootTenantUser}) diinisialisasi dari TENANT_BOOTSTRAP_PASSWORD.`);
+    } else {
+      console.log(`[Master DB] Tenant bootstrap "t_wanzt" dibuat (username: "${bootTenantUser}", one-time password: "${bootTenantPass}") - segera reset di Master Admin.`);
+    }
   }
 
   // Tabel Template Message

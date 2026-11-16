@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Calendar, X, Check, Clock } from 'lucide-react';
 import { Tenant, DurationUnit } from '../../types/admin.types.ts';
+import { adminFetch } from '../../utils/adminAuth.ts';
 
 interface ExtendTenantModalProps {
   isOpen: boolean;
@@ -59,7 +60,7 @@ export const ExtendTenantModal: React.FC<ExtendTenantModalProps> = ({
     }
     setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/admin/tenants/${tenant.tenant_id}/extend`, {
+      const res = await adminFetch(`/api/admin/tenants/${tenant.tenant_id}/extend`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

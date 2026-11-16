@@ -7,6 +7,10 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
+  KeyRound,
+  Eye,
+  EyeOff,
+  ShieldCheck,
 } from 'lucide-react';
 import { MasterAdminContact } from '../../../types/admin.types.ts';
 import {
@@ -16,12 +20,14 @@ import {
   toAdminOfficialPhone,
   toAdminWaDigits,
 } from '../../../utils/masterAdminHelpers.ts';
+import { adminFetch } from '../../../utils/adminAuth.ts';
 
 interface TabMasterSettingsProps {
   onShowToast: (msg: string) => void;
+  adminUsername?: string;
 }
 
-export function TabMasterSettings({ onShowToast }: TabMasterSettingsProps) {
+export function TabMasterSettings({ onShowToast, adminUsername }: TabMasterSettingsProps) {
   const [admins, setAdmins] = useState<MasterAdminContact[]>([]);
   const [initialSnapshot, setInitialSnapshot] = useState<string>('[]');
   const [loading, setLoading] = useState<boolean>(true);
@@ -29,11 +35,22 @@ export function TabMasterSettings({ onShowToast }: TabMasterSettingsProps) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  // State Ubah Password Master Admin
+  const [currentPassword, setCurrentPassword] = useState<string>('');
+  const [newPassword, setNewPassword] = useState<string>('');
+  const [confirmPassword, setConfirmPassword] = useState<string>('');
+  const [showCurrentPw, setShowCurrentPw] = useState<boolean>(false);
+  const [showNewPw, setShowNewPw] = useState<boolean>(false);
+  const [showConfirmPw, setShowConfirmPw] = useState<boolean>(false);
+  const [pwSaving, setPwSaving] = useState<boolean>(false);
+  const [pwError, setPwError] = useState<string | null>(null);
+  const [pwSuccess, setPwSuccess] = useState<string | null>(null);
+
   const loadMasterAdmins = async () => {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const res = await fetch('/api/admin/master-admins');
+      const res = await adminFetch('/api/admin/master-admins');
       const data = await res.json();
       if (data.success && Array.isArray(data.admins)) {
         const mapped: MasterAdminContact[] = data.admins.map((a: any) => ({
@@ -195,7 +212,7 @@ export function TabMasterSettings({ onShowToast }: TabMasterSettingsProps) {
         weight: Math.round(Number(item.weight) || 0),
       }));
 
-      const res = await fetch('/api/admin/master-admins', {
+      const res = await adminFetch('/api/admin/master-admins', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ admins: payload }),
@@ -227,8 +244,60 @@ export function TabMasterSettings({ onShowToast }: TabMasterSettingsProps) {
     }
   };
 
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPwError(null);
+    setPwSuccess(null);
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setPwError('Semua kolom password wajib diisi.');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setPwError('Password baru minimal 8 karakter.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPwError('Konfirmasi password baru tidak cocok.');
+      return;
+    }
+    if (newPassword === currentPassword) {
+      setPwError('Password baru tidak boleh sama dengan password saat ini.');
+      return;
+    }
+
+    setPwSaving(true);
+    try {
+      const res = await adminFetch('/api/admin/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword,
+          newPassword,
+          confirmPassword,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.success) {
+        setPwError(data.message || 'Gagal memperbarui password Master Admin.');
+        return;
+      }
+
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPwSuccess('Password akun Master Admin berhasil diperbarui. Sesi perangkat lain telah dicabut.');
+      onShowToast('Password Master Admin berhasil diperbarui.');
+    } catch (err: any) {
+      setPwError(err?.message || 'Gagal terhubung ke server.');
+    } finally {
+      setPwSaving(false);
+    }
+  };
+
   return (
-    <div className="max-w-3xl mx-auto my-2 space-y-4">
+    <div className="max-w-3xl mx-auto my-2 space-y-5">
       <form
         onSubmit={handleSave}
         className="bg-white border border-slate-200/90 rounded-2xl shadow-2xs overflow-hidden"
@@ -409,6 +478,185 @@ export function TabMasterSettings({ onShowToast }: TabMasterSettingsProps) {
               <>
                 <Save className="w-3.5 h-3.5" />
                 <span>Simpan Pengaturan</span>
+              </>
+            )}
+          </button>
+        </div>
+      </form>
+
+      {/* Form Ubah Password Master Admin */}
+      <form
+        onSubmit={handleChangePassword}
+        data-testid="change-password-card"
+        className="bg-white border border-slate-200/90 rounded-2xl shadow-2xs overflow-hidden"
+      >
+        <div className="px-5 sm:px-6 py-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-sky-50 text-[#0084D1] border border-sky-200/80 flex items-center justify-center shrink-0">
+              <KeyRound className="w-4.5 h-4.5" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-slate-900">
+                Keamanan Akun & Ubah Password
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Perbarui password login portal Master Admin secara berkala.
+              </p>
+            </div>
+          </div>
+
+          {adminUsername && (
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-xs font-mono font-semibold text-slate-700 shrink-0">
+              <ShieldCheck className="w-3.5 h-3.5 text-[#0084D1]" />
+              <span>{adminUsername}</span>
+            </div>
+          )}
+        </div>
+
+        {pwError && (
+          <div
+            role="alert"
+            data-testid="change-password-error"
+            className="px-5 sm:px-6 py-3 bg-rose-50/80 border-b border-rose-100 text-rose-700 text-xs flex items-center gap-2"
+          >
+            <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+            <span>{pwError}</span>
+          </div>
+        )}
+        {pwSuccess && (
+          <div
+            role="status"
+            data-testid="change-password-success"
+            className="px-5 sm:px-6 py-3 bg-emerald-50/80 border-b border-emerald-100 text-emerald-700 text-xs flex items-center gap-2"
+          >
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{pwSuccess}</span>
+          </div>
+        )}
+
+        <div className="p-5 sm:p-6 space-y-4">
+          <div className="space-y-1.5">
+            <label
+              htmlFor="current-admin-password"
+              className="block text-xs font-semibold text-slate-700"
+            >
+              Password Saat Ini
+            </label>
+            <div className="relative">
+              <input
+                id="current-admin-password"
+                data-testid="current-admin-password"
+                type={showCurrentPw ? 'text' : 'password'}
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(e) => {
+                  setCurrentPassword(e.target.value);
+                  setPwError(null);
+                  setPwSuccess(null);
+                }}
+                placeholder="Masukkan password saat ini"
+                className="w-full h-9.5 pl-3.5 pr-10 text-sm text-slate-900 bg-slate-50/70 border border-slate-200 rounded-lg focus:bg-white focus:border-[#0084D1] focus:ring-2 focus:ring-[#0084D1]/15 outline-hidden transition"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPw((v) => !v)}
+                aria-label={showCurrentPw ? 'Sembunyikan password saat ini' : 'Tampilkan password saat ini'}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 rounded-md cursor-pointer"
+              >
+                {showCurrentPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label
+                htmlFor="new-admin-password"
+                className="block text-xs font-semibold text-slate-700"
+              >
+                Password Baru
+              </label>
+              <div className="relative">
+                <input
+                  id="new-admin-password"
+                  data-testid="new-admin-password"
+                  type={showNewPw ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(e) => {
+                    setNewPassword(e.target.value);
+                    setPwError(null);
+                    setPwSuccess(null);
+                  }}
+                  placeholder="Minimal 8 karakter"
+                  className="w-full h-9.5 pl-3.5 pr-10 text-sm text-slate-900 bg-slate-50/70 border border-slate-200 rounded-lg focus:bg-white focus:border-[#0084D1] focus:ring-2 focus:ring-[#0084D1]/15 outline-hidden transition"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPw((v) => !v)}
+                  aria-label={showNewPw ? 'Sembunyikan password baru' : 'Tampilkan password baru'}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 rounded-md cursor-pointer"
+                >
+                  {showNewPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label
+                htmlFor="confirm-admin-password"
+                className="block text-xs font-semibold text-slate-700"
+              >
+                Konfirmasi Password Baru
+              </label>
+              <div className="relative">
+                <input
+                  id="confirm-admin-password"
+                  data-testid="confirm-admin-password"
+                  type={showConfirmPw ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    setPwError(null);
+                    setPwSuccess(null);
+                  }}
+                  placeholder="Ulangi password baru"
+                  className="w-full h-9.5 pl-3.5 pr-10 text-sm text-slate-900 bg-slate-50/70 border border-slate-200 rounded-lg focus:bg-white focus:border-[#0084D1] focus:ring-2 focus:ring-[#0084D1]/15 outline-hidden transition"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPw((v) => !v)}
+                  aria-label={showConfirmPw ? 'Sembunyikan konfirmasi password' : 'Tampilkan konfirmasi password'}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 rounded-md cursor-pointer"
+                >
+                  {showConfirmPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-5 sm:px-6 py-3.5 bg-slate-50/60 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+          <span className="text-[11px] text-slate-500">
+            Mengubah password akan mencabut sesi aktif di perangkat lain.
+          </span>
+
+          <button
+            type="submit"
+            disabled={pwSaving}
+            data-testid="save-admin-password-btn"
+            className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold whitespace-nowrap shrink-0 shadow-2xs transition cursor-pointer active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
+          >
+            {pwSaving ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Memperbarui...</span>
+              </>
+            ) : (
+              <>
+                <KeyRound className="w-3.5 h-3.5" />
+                <span>Perbarui Password</span>
               </>
             )}
           </button>

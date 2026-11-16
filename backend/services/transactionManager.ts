@@ -216,70 +216,249 @@ export function recordTransaction(data: {
   }
 }
 
+function triggerTransactionStatusNotification(existing: DbTransactionRow, newStatus: 'paid' | 'cancel'): void {
+  try {
+    const tenantId = getActiveTenantId() || 't_wanzt';
+    let storeName = 'Toko Anda';
+    try {
+      const storeRow = db.prepare('SELECT store_name FROM store_info WHERE id = 1').get() as any;
+      if (storeRow?.store_name) storeName = storeRow.store_name;
+    } catch {}
+
+    if (newStatus === 'paid') {
+      notifyTransactionPaid(tenantId, {
+        orderId: existing.order_id,
+        productName: existing.product_name,
+        variantName: existing.variant_name,
+        totalPrice: existing.total,
+        buyerNumber: existing.customer_number,
+        storeName,
+      }).catch((err) => console.error('[TelegramNotif] Error kirim paid:', err));
+    } else if (newStatus === 'cancel') {
+      notifyTransactionFailed(tenantId, {
+        orderId: existing.order_id,
+        productName: existing.product_name,
+        variantName: existing.variant_name,
+        totalPrice: existing.total,
+        reason: 'Batas waktu pembayaran habis / dibatalkan',
+        storeName,
+      }).catch((err) => console.error('[TelegramNotif] Error kirim failed:', err));
+    }
+  } catch (notifErr) {
+    console.error('[TelegramNotif] Error trigger:', notifErr);
+  }
+}
+
 /**
- * Memperbarui status transaksi (pending, paid, cancel) di SQLite
+ * Memperbarui status transaksi secara atomik hanya dari 'pending' ke 'paid' atau 'cancel'.
+ * Mengembalikan record baru jika transisi berhasil, atau null jika tidak ditemukan / sudah final.
  */
 export function updateTransactionStatus(
   identifier: string,
   newStatus: 'pending' | 'paid' | 'cancel'
 ): TransactionRecord | null {
   if (!identifier) return null;
+  if (newStatus === 'pending') return null;
+
   const now = new Date().toISOString();
 
   try {
-    const existing = db.prepare(`
-      SELECT * FROM transactions
-      WHERE order_id = ? OR trx_id = ? OR id = ?
-    `).get(identifier, identifier, identifier) as DbTransactionRow | undefined;
+    const transitionResult = db.transaction(() => {
+      const existing = db.prepare(`
+        SELECT * FROM transactions
+        WHERE order_id = ? OR trx_id = ? OR id = ?
+      `).get(identifier, identifier, identifier) as DbTransactionRow | undefined;
 
-    if (!existing) return null;
-
-    db.prepare(`
-      UPDATE transactions
-      SET status = ?, updated_at = ?
-      WHERE id = ?
-    `).run(newStatus, now, existing.id);
-
-    // Trigger Notifikasi Telegram untuk pesanan Berhasil (Paid) atau Gagal (Cancel/Expired)
-    try {
-      const tenantId = getActiveTenantId() || 't_wanzt';
-      let storeName = 'Toko Anda';
-      try {
-        const storeRow = db.prepare('SELECT store_name FROM store_info WHERE id = 1').get() as any;
-        if (storeRow?.store_name) storeName = storeRow.store_name;
-      } catch {}
-
-      if (newStatus === 'paid' && existing.status !== 'paid') {
-        notifyTransactionPaid(tenantId, {
-          orderId: existing.order_id,
-          productName: existing.product_name,
-          variantName: existing.variant_name,
-          totalPrice: existing.total,
-          buyerNumber: existing.customer_number,
-          storeName,
-        }).catch((err) => console.error('[TelegramNotif] Error kirim paid:', err));
-      } else if (newStatus === 'cancel' && existing.status === 'pending') {
-        notifyTransactionFailed(tenantId, {
-          orderId: existing.order_id,
-          productName: existing.product_name,
-          variantName: existing.variant_name,
-          totalPrice: existing.total,
-          reason: 'Batas waktu pembayaran habis / dibatalkan',
-          storeName,
-        }).catch((err) => console.error('[TelegramNotif] Error kirim failed:', err));
+      if (!existing || existing.status !== 'pending') {
+        return null;
       }
-    } catch (notifErr) {
-      console.error('[TelegramNotif] Error trigger:', notifErr);
-    }
+
+      const updateRes = db.prepare(`
+        UPDATE transactions
+        SET status = ?, updated_at = ?
+        WHERE id = ? AND status = 'pending'
+      `).run(newStatus, now, existing.id);
+
+      if (updateRes.changes !== 1) {
+        return null;
+      }
+
+      return existing;
+    })();
+
+    if (!transitionResult) return null;
+
+    triggerTransactionStatusNotification(transitionResult, newStatus);
 
     return {
-      ...mapRowToRecord(existing),
+      ...mapRowToRecord(transitionResult),
       status: newStatus,
       updatedAt: now,
     };
   } catch (err) {
     console.error('Gagal memperbarui status transaksi di SQLite:', err);
     return null;
+  }
+}
+
+export interface WebhookTransitionResult {
+  ok: boolean;
+  reason?:
+    | 'not_found'
+    | 'already_processed'
+    | 'invalid_transition'
+    | 'amount_mismatch'
+    | 'trx_mismatch'
+    | 'db_error';
+  transaction?: TransactionRecord;
+}
+
+function resolveWebhookPaidAmount(
+  payloadData: Record<string, any>,
+  existing: DbTransactionRow
+): number | null {
+  if (!payloadData || typeof payloadData !== 'object') return null;
+
+  const parseFinite = (val: unknown): number | null => {
+    if (val === undefined || val === null || val === '') return null;
+    const num = Number(val);
+    return Number.isFinite(num) && num >= 0 ? num : null;
+  };
+
+  const totalAmount = parseFinite(payloadData.total_amount);
+  if (totalAmount !== null) {
+    return totalAmount;
+  }
+
+  const paidAmount = parseFinite(payloadData.paid_amount);
+  if (paidAmount !== null) {
+    return paidAmount;
+  }
+
+  const baseAmount = parseFinite(payloadData.amount);
+  if (baseAmount !== null) {
+    const uniqueCode = parseFinite(payloadData.unique_code);
+    if (
+      uniqueCode !== null &&
+      existing.unique_code > 0 &&
+      uniqueCode === existing.unique_code
+    ) {
+      return baseAmount + uniqueCode;
+    }
+    return baseAmount;
+  }
+
+  return null;
+}
+
+/**
+ * Memproses pembaruan status dari webhook LunasQRIS secara atomik dan terverifikasi:
+ * - Memastikan order/trx ada dan konsisten
+ * - Hanya mengizinkan transisi dari status 'pending'
+ * - Memverifikasi nominal bayar webhook >= total tagihan SQLite saat status 'paid'
+ */
+export function applyLunasQrisWebhookUpdate(params: {
+  orderId?: string;
+  trxId?: string;
+  targetStatus: 'paid' | 'cancel';
+  payloadData?: Record<string, any>;
+}): WebhookTransitionResult {
+  const cleanOrderId = (params.orderId || '').trim();
+  const cleanTrxId = (params.trxId || '').trim();
+  if (!cleanOrderId && !cleanTrxId) {
+    return { ok: false, reason: 'not_found' };
+  }
+
+  const now = new Date().toISOString();
+
+  try {
+    let transitionedRow: DbTransactionRow | null = null;
+
+    const outcome: WebhookTransitionResult = db.transaction((): WebhookTransitionResult => {
+      let existing: DbTransactionRow | undefined;
+
+      if (cleanOrderId) {
+        existing = db
+          .prepare('SELECT * FROM transactions WHERE order_id = ?')
+          .get(cleanOrderId) as DbTransactionRow | undefined;
+      }
+      if (!existing && cleanTrxId) {
+        existing = db
+          .prepare('SELECT * FROM transactions WHERE trx_id = ?')
+          .get(cleanTrxId) as DbTransactionRow | undefined;
+      }
+
+      if (!existing) {
+        return { ok: false, reason: 'not_found' };
+      }
+
+      if (cleanTrxId && existing.trx_id && existing.trx_id !== cleanTrxId) {
+        return { ok: false, reason: 'trx_mismatch', transaction: mapRowToRecord(existing) };
+      }
+
+      if (cleanOrderId && existing.order_id !== cleanOrderId) {
+        return { ok: false, reason: 'trx_mismatch', transaction: mapRowToRecord(existing) };
+      }
+
+      if (existing.status !== 'pending') {
+        if (existing.status === params.targetStatus) {
+          return {
+            ok: false,
+            reason: 'already_processed',
+            transaction: mapRowToRecord(existing),
+          };
+        }
+        return {
+          ok: false,
+          reason: 'invalid_transition',
+          transaction: mapRowToRecord(existing),
+        };
+      }
+
+      if (params.targetStatus === 'paid') {
+        const expectedTotal = Number(existing.total);
+        const reportedPaid = resolveWebhookPaidAmount(params.payloadData || {}, existing);
+        if (
+          !Number.isFinite(expectedTotal) ||
+          expectedTotal <= 0 ||
+          reportedPaid === null ||
+          reportedPaid < expectedTotal
+        ) {
+          return {
+            ok: false,
+            reason: 'amount_mismatch',
+            transaction: mapRowToRecord(existing),
+          };
+        }
+      }
+
+      const res = db
+        .prepare(`UPDATE transactions SET status = ?, updated_at = ? WHERE id = ? AND status = 'pending'`)
+        .run(params.targetStatus, now, existing.id);
+
+      if (res.changes !== 1) {
+        return { ok: false, reason: 'already_processed', transaction: mapRowToRecord(existing) };
+      }
+
+      transitionedRow = existing;
+      return {
+        ok: true,
+        transaction: {
+          ...mapRowToRecord(existing),
+          status: params.targetStatus,
+          updatedAt: now,
+        },
+      };
+    })();
+
+    if (outcome.ok && transitionedRow) {
+      triggerTransactionStatusNotification(transitionedRow, params.targetStatus);
+    }
+
+    return outcome;
+  } catch (err) {
+    console.error('Gagal memproses webhook transaksi di SQLite:', err);
+    return { ok: false, reason: 'db_error' };
   }
 }
 

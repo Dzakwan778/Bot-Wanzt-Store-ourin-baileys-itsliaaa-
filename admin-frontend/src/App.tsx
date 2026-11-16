@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Tenant, Stats } from './types/admin.types.ts';
 import { AdminSidebar, AdminNavTab } from './components/layout/AdminSidebar.tsx';
 import { AdminHeader } from './components/layout/AdminHeader.tsx';
@@ -16,14 +16,28 @@ import { TabTelegramAdmin } from './components/dashboard/tabs/TabTelegramAdmin.t
 import { TabTokenManagement } from './components/dashboard/tabs/TabTokenManagement.tsx';
 import { TabPartnerApi } from './components/dashboard/tabs/TabPartnerApi.tsx';
 import { TabMasterSettings } from './components/dashboard/tabs/TabMasterSettings.tsx';
+import { TabBroadcast } from './components/dashboard/tabs/TabBroadcast.tsx';
+import { AdminLoginPage } from './components/auth/AdminLoginPage.tsx';
 import {
-  Radio,
+  MasterAdminProfile,
+  adminFetch,
+  clearAdminToken,
+  getAdminToken,
+  onAdminUnauthorized,
+  setAdminToken,
+} from './utils/adminAuth.ts';
+import {
   BarChart3,
-  CheckCircle2,
   Server,
+  MessageSquare,
+  Loader2,
 } from 'lucide-react';
 
 export default function App() {
+  const [authStatus, setAuthStatus] = useState<'checking' | 'unauthenticated' | 'authenticated'>('checking');
+  const [adminUser, setAdminUser] = useState<MasterAdminProfile | null>(null);
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
+
   const [selectedNavTab, setSelectedNavTab] = useState<AdminNavTab>('units');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
@@ -44,17 +58,17 @@ export default function App() {
   const [selectedTenantForDelete, setSelectedTenantForDelete] = useState<Tenant | null>(null);
   const [selectedTenantForSuspend, setSelectedTenantForSuspend] = useState<Tenant | null>(null);
 
-  const showToast = (msg: string) => {
+  const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
-  };
+  }, []);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const [tenantsRes, statsRes] = await Promise.all([
-        fetch('/api/admin/tenants'),
-        fetch('/api/admin/stats'),
+        adminFetch('/api/admin/tenants'),
+        adminFetch('/api/admin/stats'),
       ]);
       const tenantsData = await tenantsRes.json();
       const statsData = await statsRes.json();
@@ -70,15 +84,79 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [showToast]);
 
   useEffect(() => {
+    const unsubscribe = onAdminUnauthorized(() => {
+      setAdminUser(null);
+      setTenants([]);
+      setStats(null);
+      setAuthNotice('Sesi Master Admin Anda telah berakhir. Silakan login kembali.');
+      setAuthStatus('unauthenticated');
+    });
+
+    const verifyExistingSession = async () => {
+      const token = getAdminToken();
+      if (!token) {
+        setAuthStatus('unauthenticated');
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const res = await adminFetch('/api/admin/auth/me');
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.success && data.authenticated && data.admin) {
+          setAdminUser(data.admin);
+          setAuthStatus('authenticated');
+          await fetchData();
+        } else {
+          clearAdminToken();
+          setAdminUser(null);
+          setAuthStatus('unauthenticated');
+          setLoading(false);
+        }
+      } catch {
+        clearAdminToken();
+        setAdminUser(null);
+        setAuthStatus('unauthenticated');
+        setLoading(false);
+      }
+    };
+
+    verifyExistingSession();
+
+    return () => {
+      unsubscribe();
+    };
+  }, [fetchData]);
+
+  const handleLoginSuccess = (token: string, admin: MasterAdminProfile) => {
+    setAdminToken(token);
+    setAdminUser(admin);
+    setAuthNotice(null);
+    setAuthStatus('authenticated');
     fetchData();
-  }, []);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await adminFetch('/api/admin/auth/logout', { method: 'POST' });
+    } catch {
+      // Tetap lanjut bersihkan sesi lokal jika request logout gagal
+    }
+    clearAdminToken();
+    setAdminUser(null);
+    setTenants([]);
+    setStats(null);
+    setSelectedNavTab('units');
+    setAuthNotice('Anda telah keluar dari sesi Master Admin.');
+    setAuthStatus('unauthenticated');
+  };
 
   const handleImpersonate = async (tenant: Tenant) => {
     try {
-      const res = await fetch(`/api/admin/tenants/${tenant.tenant_id}/impersonate`, {
+      const res = await adminFetch(`/api/admin/tenants/${tenant.tenant_id}/impersonate`, {
         method: 'POST',
       });
       const data = await res.json();
@@ -123,6 +201,24 @@ export default function App() {
     return result;
   }, [tenants, statusFilter, searchQuery, sortBy]);
 
+  if (authStatus === 'checking') {
+    return (
+      <div className="min-h-[100dvh] bg-[#F8FAFC] flex flex-col items-center justify-center gap-3 text-slate-500">
+        <Loader2 className="w-7 h-7 animate-spin text-[#0084D1]" />
+        <p className="text-xs font-medium">Memverifikasi sesi Master Admin...</p>
+      </div>
+    );
+  }
+
+  if (authStatus !== 'authenticated') {
+    return (
+      <AdminLoginPage
+        initialNotice={authNotice}
+        onLoginSuccess={handleLoginSuccess}
+      />
+    );
+  }
+
   return (
     <div className="min-h-[100dvh] bg-[#F8FAFC] text-slate-800 flex font-sans antialiased">
       {/* Toast Notification */}
@@ -145,6 +241,8 @@ export default function App() {
         onRefresh={fetchData}
         isMobileOpen={isMobileSidebarOpen}
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
+        adminUsername={adminUser?.username}
+        onLogout={handleLogout}
       />
 
       {/* Main Workspace Column */}
@@ -155,6 +253,7 @@ export default function App() {
           loading={loading}
           onRefresh={fetchData}
           onOpenMobileMenu={() => setIsMobileSidebarOpen(true)}
+          onLogout={handleLogout}
         />
 
         {/* Content Workspace */}
@@ -304,29 +403,93 @@ export default function App() {
                   </div>
                 </div>
               </div>
+
+              {/* Statistik Pengiriman Pesan Bot (WhatsApp vs Telegram) */}
+              <div className="p-6 bg-white border border-slate-200/90 rounded-2xl shadow-xs space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                      <MessageSquare className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900">Statistik Pengiriman Pesan Bot (WhatsApp & Telegram)</h3>
+                      <p className="text-xs text-slate-500">Akumulasi keseluruhan pesan bot dipisahkan berdasarkan platform</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-700">
+                      Total Platform: <span className="text-indigo-600 font-bold">{stats?.totalMessages ?? 0}</span> Pesan
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                    <p className="text-xs font-semibold text-slate-500 uppercase">Keseluruhan Pesan Bot</p>
+                    <p className="text-2xl font-bold text-slate-900">{stats?.totalMessages ?? 0}</p>
+                    <p className="text-[11px] text-slate-400">Total pesan terkirim semua platform</p>
+                  </div>
+                  <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200 space-y-1">
+                    <p className="text-xs font-semibold text-emerald-700 uppercase">Total Pesan WhatsApp</p>
+                    <p className="text-2xl font-bold text-emerald-900">{stats?.whatsappMessagesTotal ?? 0}</p>
+                    <p className="text-[11px] text-emerald-600">Terkirim via Bot WhatsApp</p>
+                  </div>
+                  <div className="p-4 rounded-xl bg-sky-50/60 border border-sky-200 space-y-1">
+                    <p className="text-xs font-semibold text-sky-700 uppercase">Total Pesan Telegram</p>
+                    <p className="text-2xl font-bold text-sky-900">{stats?.telegramMessagesTotal ?? 0}</p>
+                    <p className="text-[11px] text-sky-600">Terkirim via Bot Telegram</p>
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">Rincian Per Tenant (Toko)</h4>
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+                        <tr>
+                          <th className="py-3 px-4">Nama Toko / Tenant ID</th>
+                          <th className="py-3 px-4">Owner</th>
+                          <th className="py-3 px-4 text-right">Pesan WhatsApp</th>
+                          <th className="py-3 px-4 text-right">Pesan Telegram</th>
+                          <th className="py-3 px-4 text-right">Total Pesan</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {stats?.tenantMessageStats && stats.tenantMessageStats.length > 0 ? (
+                          stats.tenantMessageStats.map((item) => (
+                            <tr key={item.tenant_id} className="hover:bg-slate-50/60 transition-colors">
+                              <td className="py-3 px-4">
+                                <div className="font-bold text-slate-900">{item.store_name}</div>
+                                <div className="font-mono text-[11px] text-slate-400">{item.tenant_id}</div>
+                              </td>
+                              <td className="py-3 px-4 font-medium text-slate-700">{item.owner_name}</td>
+                              <td className="py-3 px-4 text-right font-semibold text-emerald-600">{item.whatsapp_messages}</td>
+                              <td className="py-3 px-4 text-right font-semibold text-sky-600">{item.telegram_messages}</td>
+                              <td className="py-3 px-4 text-right font-bold text-slate-900">{item.total_messages}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={5} className="py-6 text-center text-slate-400">Belum ada data pesan tercatat</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
           {selectedNavTab === 'broadcast' && (
-            <div className="p-8 bg-white border border-slate-200/90 rounded-2xl shadow-xs text-center max-w-xl mx-auto space-y-4 my-8">
-              <div className="w-14 h-14 rounded-2xl bg-[#0084D1]/10 text-[#0084D1] flex items-center justify-center mx-auto border border-[#0084D1]/20">
-                <Radio className="w-7 h-7" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">Fitur Pesan Siaran Massal (Broadcast)</h3>
-                <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto leading-relaxed">
-                  Kirimkan pengumuman, promo pembaruan sistem, jadwal maintenance, atau pengingat sewa massal ke seluruh nomor pemilik toko sekaligus dalam 1 kali klik.
-                </p>
-              </div>
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-sky-50 text-[#0084D1] border border-sky-200 text-xs font-semibold">
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Siap Dikembangkan Selanjutnya</span>
-              </div>
-            </div>
+            <TabBroadcast showToast={showToast} />
           )}
 
           {selectedNavTab === 'settings' && (
-            <TabMasterSettings onShowToast={showToast} />
+            <TabMasterSettings
+              onShowToast={showToast}
+              adminUsername={adminUser?.username}
+            />
           )}
         </main>
       </div>

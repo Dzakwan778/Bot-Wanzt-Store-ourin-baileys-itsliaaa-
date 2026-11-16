@@ -8,6 +8,7 @@ import {
   Check,
 } from 'lucide-react';
 import { Tenant, ResetPasswordResult } from '../../types/admin.types.ts';
+import { adminFetch } from '../../utils/adminAuth.ts';
 
 interface ResetPasswordModalProps {
   isOpen: boolean;
@@ -44,7 +45,7 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/admin/tenants/${tenant.tenant_id}/reset-password`, {
+      const res = await adminFetch(`/api/admin/tenants/${tenant.tenant_id}/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

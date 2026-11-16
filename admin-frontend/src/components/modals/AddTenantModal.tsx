@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { CreatedTenantResult } from '../../types/admin.types.ts';
 import { formatTotalRentalDuration } from '../../utils/durationFormat.ts';
+import { adminFetch } from '../../utils/adminAuth.ts';
 
 interface AddTenantModalProps {
   isOpen: boolean;
@@ -82,7 +83,7 @@ export const AddTenantModal: React.FC<AddTenantModalProps> = ({
         payload.password = newPassword;
       }
 
-      const res = await fetch('/api/admin/tenants', {
+      const res = await adminFetch('/api/admin/tenants', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

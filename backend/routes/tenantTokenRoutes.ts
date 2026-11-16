@@ -7,7 +7,14 @@ export const tenantTokenRouter = Router();
 tenantTokenRouter.post('/redeem-token', (req: Request, res: Response) => {
   try {
     const { tokenCode } = req.body;
-    const tenantId = (req as any).tenantId || req.body.tenantId || 't_wanzt';
+    const authSession = (req as any).authSession;
+    const tenantId = authSession?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Akses ditolak. Sesi login tenant tidak valid.',
+      });
+    }
 
     if (!tokenCode || typeof tokenCode !== 'string' || !tokenCode.trim()) {
       return res.status(400).json({

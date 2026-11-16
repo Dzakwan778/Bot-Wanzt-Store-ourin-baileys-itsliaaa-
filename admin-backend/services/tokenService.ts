@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { getMasterDb } from '../database/masterSqlite.ts';
 import { TenantService } from './tenantService.ts';
 import { DurationUnit, LicenseToken } from '../types/admin.types.ts';
@@ -17,12 +18,12 @@ export class TokenService {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const block1 = `${day}${month}`;
 
-    // 2. Helper karakter acak
+    // 2. Helper karakter acak CSPRNG
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     const getRandomBlock = (len: number = 4) => {
       let res = '';
       for (let i = 0; i < len; i++) {
-        res += chars.charAt(Math.floor(Math.random() * chars.length));
+        res += chars.charAt(crypto.randomInt(0, chars.length));
       }
       return res;
     };

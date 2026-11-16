@@ -15,6 +15,7 @@ import {
 import { MessageTemplate, TemplateCategory } from '../../../types/admin.types.ts';
 import { AddEditTemplateModal } from '../../modals/AddEditTemplateModal.tsx';
 import { DeleteTemplateModal } from '../../modals/DeleteTemplateModal.tsx';
+import { adminFetch } from '../../../utils/adminAuth.ts';
 
 interface TabTemplatesProps {
   onRefreshParent?: () => void;
@@ -61,7 +62,7 @@ export const TabTemplates: React.FC<TabTemplatesProps> = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/admin/templates');
+      const res = await adminFetch('/api/admin/templates');
       const data = await res.json();
       if (data.success && Array.isArray(data.templates)) {
         setTemplates(data.templates);
@@ -87,7 +88,7 @@ export const TabTemplates: React.FC<TabTemplatesProps> = () => {
 
   const handleToggleStatus = async (template: MessageTemplate) => {
     try {
-      const res = await fetch(`/api/admin/templates/${template.id}/status`, {
+      const res = await adminFetch(`/api/admin/templates/${template.id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_active: template.is_active === 1 ? 0 : 1 }),
@@ -118,7 +119,7 @@ export const TabTemplates: React.FC<TabTemplatesProps> = () => {
       : '/api/admin/templates';
     const method = isEdit ? 'PUT' : 'POST';
 
-    const res = await fetch(url, {
+    const res = await adminFetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(templateData),
@@ -133,7 +134,7 @@ export const TabTemplates: React.FC<TabTemplatesProps> = () => {
   };
 
   const handleDeleteTemplate = async (id: number) => {
-    const res = await fetch(`/api/admin/templates/${id}`, {
+    const res = await adminFetch(`/api/admin/templates/${id}`, {
       method: 'DELETE',
     });
     const data = await res.json();

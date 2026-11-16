@@ -28,7 +28,7 @@ interface TabKoneksiLayananProps {
   showApiKey: boolean;
   setShowApiKey: React.Dispatch<React.SetStateAction<boolean>>;
   isSavingConfig: boolean;
-  syncConfigToServer: (config: any) => void;
+  syncConfigToServer: (config: any) => Promise<boolean | void> | void;
   showToast: (msg: string) => void;
 }
 
@@ -117,17 +117,10 @@ export const TabKoneksiLayanan: React.FC<TabKoneksiLayananProps> = ({
       showToast('Silakan masukkan API Key LunasQRIS terlebih dahulu.');
       return;
     }
-    const rawBase = localLunasBaseUrl?.trim() || 'https://lunasqris.com';
-    const cleanBase = rawBase
-      .replace(/\/+$/, '')
-      .replace(/\/api\/v1\/?$/, '')
-      .replace(/\/api\/?$/, '');
 
     try {
       const res = await fetch(
-        `/api/lunasqris/balance?apikey=${encodeURIComponent(
-          keyToCheck
-        )}&baseurl=${encodeURIComponent(cleanBase)}`
+        `/api/lunasqris/balance?apikey=${encodeURIComponent(keyToCheck)}`
       );
       const data = await res.json();
       if (data.success) {
@@ -166,13 +159,15 @@ export const TabKoneksiLayanan: React.FC<TabKoneksiLayananProps> = ({
   const handleSaveXaviera = async () => {
     setSavingXaviera(true);
     try {
-      setXavieraApiKey(localXavieraKey);
-      setXavieraBaseUrl(localXavieraBaseUrl);
-      await syncConfigToServer({
+      const ok = await syncConfigToServer({
         xavieraApiKey: localXavieraKey,
         xavieraBaseUrl: localXavieraBaseUrl,
       });
-      showToast('Konfigurasi Xaviera berhasil disimpan!');
+      if (ok !== false) {
+        setXavieraApiKey(localXavieraKey);
+        setXavieraBaseUrl(localXavieraBaseUrl);
+        showToast('Konfigurasi Xaviera berhasil disimpan!');
+      }
     } catch {
       showToast('Gagal menyimpan konfigurasi Xaviera');
     } finally {
@@ -183,15 +178,17 @@ export const TabKoneksiLayanan: React.FC<TabKoneksiLayananProps> = ({
   const handleSaveLunasQris = async () => {
     setSavingLunas(true);
     try {
-      setLunasQrisApiKey(localLunasKey);
-      setLunasQrisSecretKey(localLunasSecret);
-      setLunasQrisBaseUrl(localLunasBaseUrl);
-      await syncConfigToServer({
+      const ok = await syncConfigToServer({
         lunasQrisApiKey: localLunasKey,
         lunasQrisSecretKey: localLunasSecret,
         lunasQrisBaseUrl: localLunasBaseUrl,
       });
-      showToast('Konfigurasi LunasQRIS berhasil disimpan!');
+      if (ok !== false) {
+        setLunasQrisApiKey(localLunasKey);
+        setLunasQrisSecretKey(localLunasSecret);
+        setLunasQrisBaseUrl(localLunasBaseUrl);
+        showToast('Konfigurasi LunasQRIS berhasil disimpan!');
+      }
     } catch {
       showToast('Gagal menyimpan konfigurasi LunasQRIS');
     } finally {

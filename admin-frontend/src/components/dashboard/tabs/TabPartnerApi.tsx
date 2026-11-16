@@ -19,6 +19,7 @@ import { CollaboratorApiKey, CollaboratorLog } from '../../../types/admin.types.
 import { CreatePartnerKeyModal } from '../../modals/CreatePartnerKeyModal.tsx';
 import { PartnerKeyCreatedModal } from '../../modals/PartnerKeyCreatedModal.tsx';
 import { DeletePartnerKeyModal } from '../../modals/DeletePartnerKeyModal.tsx';
+import { adminFetch } from '../../../utils/adminAuth.ts';
 
 interface TabPartnerApiProps {
   showToast: (msg: string) => void;
@@ -52,7 +53,7 @@ export const TabPartnerApi: React.FC<TabPartnerApiProps> = ({ showToast }) => {
   const fetchPartnerData = async () => {
     try {
       setIsLoading(true);
-      const res = await fetch('/api/admin/partners');
+      const res = await adminFetch('/api/admin/partners');
       const json = await res.json();
       if (json.success && json.data) {
         setKeys(Array.isArray(json.data.keys) ? json.data.keys : []);
@@ -73,7 +74,7 @@ export const TabPartnerApi: React.FC<TabPartnerApiProps> = ({ showToast }) => {
 
   const handleCreateKey = async (name: string) => {
     try {
-      const res = await fetch('/api/admin/partners/create', {
+      const res = await adminFetch('/api/admin/partners/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
@@ -97,7 +98,7 @@ export const TabPartnerApi: React.FC<TabPartnerApiProps> = ({ showToast }) => {
     const nextStatus = keyItem.status === 'active' ? 'suspended' : 'active';
     setTogglingId(keyItem.id);
     try {
-      const res = await fetch(`/api/admin/partners/${keyItem.id}/status`, {
+      const res = await adminFetch(`/api/admin/partners/${keyItem.id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nextStatus }),
@@ -119,7 +120,7 @@ export const TabPartnerApi: React.FC<TabPartnerApiProps> = ({ showToast }) => {
 
   const handleDeleteKey = async (id: number) => {
     try {
-      const res = await fetch(`/api/admin/partners/${id}`, { method: 'DELETE' });
+      const res = await adminFetch(`/api/admin/partners/${id}`, { method: 'DELETE' });
       const json = await res.json();
 
       if (json.success) {

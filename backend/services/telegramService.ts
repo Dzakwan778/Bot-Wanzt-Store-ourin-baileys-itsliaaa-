@@ -1,4 +1,4 @@
-import { getTenantDb } from '../database/tenantDbManager.ts';
+import { getTenantDb, incrementMessageStat } from '../database/tenantDbManager.ts';
 import { getActiveTenantId } from '../database/tenantContext.ts';
 
 export interface TelegramConfig {
@@ -73,7 +73,9 @@ export function saveTelegramConfig(
   const db = getTenantDb(targetId);
   const current = getTelegramConfig(targetId);
 
-  const newBotToken = update.botToken !== undefined ? String(update.botToken).trim() : current.botToken;
+  const incomingToken = update.botToken !== undefined ? String(update.botToken).trim() : undefined;
+  const newBotToken =
+    incomingToken !== undefined && !incomingToken.includes('••••') ? incomingToken : current.botToken;
   const newChatId = update.chatId !== undefined ? String(update.chatId).trim() : current.chatId;
   const newNotifEnabled = update.notifEnabled !== undefined ? (update.notifEnabled ? 1 : 0) : (current.notifEnabled ? 1 : 0);
   const newAdminDisabled = update.adminDisabled !== undefined ? (update.adminDisabled ? 1 : 0) : (current.adminDisabled ? 1 : 0);
@@ -107,7 +109,8 @@ export async function sendTelegramMessage(
   token: string,
   chatId: string,
   message: string,
-  parseMode: 'HTML' | 'Markdown' = 'HTML'
+  parseMode: 'HTML' | 'Markdown' | 'None' = 'HTML',
+  tenantId?: string
 ): Promise<{ success: boolean; error?: string; messageId?: number }> {
   if (!token || !chatId) {
     return { success: false, error: 'Token bot atau Chat ID Telegram belum diatur' };
@@ -115,19 +118,26 @@ export async function sendTelegramMessage(
 
   try {
     const url = `https://api.telegram.org/bot${token}/sendMessage`;
+    const payload: Record<string, any> = {
+      chat_id: chatId,
+      text: message,
+      disable_web_page_preview: true,
+    };
+    if (parseMode !== 'None') {
+      payload.parse_mode = parseMode;
+    }
+
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: message,
-        parse_mode: parseMode,
-        disable_web_page_preview: true,
-      }),
+      body: JSON.stringify(payload),
     });
 
     const data = await res.json();
     if (data.ok) {
+      if (tenantId) {
+        incrementMessageStat(tenantId, 'telegram');
+      }
       return { success: true, messageId: data.result?.message_id };
     }
 
@@ -145,6 +155,9 @@ export async function sendTelegramMessage(
       });
       const retryData = await retryRes.json();
       if (retryData.ok) {
+        if (tenantId) {
+          incrementMessageStat(tenantId, 'telegram');
+        }
         return { success: true, messageId: retryData.result?.message_id };
       }
       return { success: false, error: retryData.description || 'Gagal mengirim pesan ke Telegram' };
@@ -266,7 +279,7 @@ export async function notifyTransactionPaid(
     `⏰ <b>Waktu Lunas:</b> ${timeStr}\n\n` +
     `✅ <i>Pesanan telah berhasil dibayar. Produk otomatis diproses & dikirim ke chat pembeli.</i>`;
 
-  const result = await sendTelegramMessage(config.botToken, config.chatId, text, 'HTML');
+  const result = await sendTelegramMessage(config.botToken, config.chatId, text, 'HTML', tenantId);
   return result.success;
 }
 
@@ -304,7 +317,7 @@ export async function notifyTransactionFailed(
     `⏰ <b>Waktu:</b> ${timeStr}\n\n` +
     `ℹ️ <i>Pembeli belum menyelesaikan pembayaran QRIS tepat waktu.</i>`;
 
-  const result = await sendTelegramMessage(config.botToken, config.chatId, text, 'HTML');
+  const result = await sendTelegramMessage(config.botToken, config.chatId, text, 'HTML', tenantId);
   return result.success;
 }
 
@@ -342,5 +355,51 @@ export async function sendAdminMessageToTelegram(
     `────────────────────\n` +
     `⏰ <i>Pesan resmi dari Super Admin Platform • ${timeStr}</i>`;
 
-  return sendTelegramMessage(config.botToken, config.chatId, text, 'HTML');
+  return sendTelegramMessage(config.botToken, config.chatId, text, 'HTML', tenantId);
 }
+
+/**
+ * Pengiriman pesan broadcast murni dari Master Admin ke Telegram Owner Toko (Opsi A & Opsi B):
+ * - Opsi A: Pesan dikirim murni sesuai ketikan admin tanpa header/footer tambahan.
+ * - Opsi B: Tetap dikirim selama Bot Token & Chat ID terkonfigurasi dan tidak di-suspend Admin (admin_disabled = 0),
+ *   mengabaikan saklar notif_enabled milik tenant.
+ */
+export async function sendAdminBroadcastToTelegram(
+  tenantId: string,
+  plainMessage: string
+): Promise<{ success: boolean; target: string; error?: string }> {
+  const config = getTelegramConfig(tenantId);
+
+  if (!config.isConfigured) {
+    return {
+      success: false,
+      target: config.chatId || '-',
+      error: 'Bot Telegram belum dikonfigurasi oleh tenant (Bot Token / Chat ID kosong)',
+    };
+  }
+
+  if (config.adminDisabled) {
+    return {
+      success: false,
+      target: config.chatId || '-',
+      error: 'Bot Telegram sedang dinonaktifkan (Suspend) oleh Master Admin',
+    };
+  }
+
+  const trimmed = plainMessage.trim();
+  if (!trimmed) {
+    return {
+      success: false,
+      target: config.chatId || '-',
+      error: 'Isi pesan broadcast tidak boleh kosong',
+    };
+  }
+
+  const res = await sendTelegramMessage(config.botToken, config.chatId, trimmed, 'None', tenantId);
+  return {
+    success: res.success,
+    target: config.chatId,
+    error: res.error,
+  };
+}
+

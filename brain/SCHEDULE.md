@@ -1254,3 +1254,63 @@ Rencana yang Disepakati:
 
 Hasil yang Diharapkan:
 Tenant yang masa sewanya habis langsung terputus botnya secara real-time tanpa kehilangan kredensial sesi QR, tidak dapat menjalankan bot sebelum memperpanjang masa aktif, dan dapat langsung memasukkan kode token perpanjangan pada popup terkunci hingga otomatis terbuka kembali.
+
+---
+
+[38.0] - FITUR BROADCAST MASTER ADMIN (WHATSAPP & TELEGRAM PARALEL, JADWAL OTOMATIS/BERULANG, PLACEHOLDER, DAN LOG 2 TINGKAT)
+
+- Tanggal: 2026-11-14
+- Status: Completed
+
+Tujuan:
+Membangun fitur Pesan Siaran (Broadcast) terintegrasi penuh di Dashboard Master Admin yang mengirimkan pesan pengumuman resmi dari setiap bot tenant aktif ke pemilik toko (owner) melalui WhatsApp dan/atau Telegram, dilengkapi penjadwalan sekali kirim maupun berulang otomatis serta sistem audit log 2 tingkat.
+
+Rencana yang Disepakati:
+1. Target & Syarat Pengiriman:
+   - Target otomatis hanya seluruh tenant dengan status akun `active` (tenant `expired` dan `suspended` otomatis dilewati; tanpa pilihan manual per tenant).
+   - Pilihan kanal: WhatsApp & Telegram, WhatsApp Saja, atau Telegram Saja.
+   - WhatsApp dikirim paralel melalui bot WhatsApp masing-masing tenant ke nomor `owner_phone` (tanpa delay antrean karena tiap bot memakai akun WA terpisah). Jika bot WA offline atau nomor kosong, dicatat Gagal di log.
+   - Telegram dikirim menggunakan Bot Token & Chat ID masing-masing tenant selama sudah dikonfigurasi dan tidak di-suspend Admin (`admin_disabled = 0`), mengabaikan saklar `notif_enabled` tenant (Opsi B). Jika belum dikonfigurasi atau di-suspend, dicatat Gagal di log.
+   - Pesan dikirim murni sesuai isi ketikan admin tanpa header/footer pembungkus otomatis (Opsi A), dengan substitusi placeholder dinamis (`{storeName}`, `{ownerName}`, `{tenantId}`, `{ownerPhone}`, `{expiryDate}`, `{daysRemaining}`).
+2. Penjadwalan & Kontrol Jadwal:
+   - Mendukung Kirim Sekarang (`immediate`), Jadwal Sekali Kirim (`once`), serta Jadwal Berulang Otomatis (`daily`, `weekly`, `monthly`) berbasis zona waktu WIB (`Asia/Jakarta`) di background scheduler `server.ts`.
+   - Untuk jadwal menunggu/berulang, admin dapat Edit pesan/jadwal, Kirim Sekarang, maupun Batalkan Jadwal.
+3. Audit Log 2 Tingkat:
+   - Tingkat 1 (Tabel Riwayat Kampanye): ringkasan tipe, kanal, jadwal, status, dan jumlah sukses/gagal per kanal.
+   - Tingkat 2 (Modal Log Detail Per-Tenant): rincian per toko & kanal, target nomor/chat ID, status, alasan error spesifik, waktu eksekusi, serta tombol Kirim Ulang yang Gagal.
+
+Hasil yang Diharapkan:
+Master Admin dapat menyampaikan pengumuman langsung maupun terjadwal/berulang ke seluruh pemilik toko aktif secara serentak via WhatsApp dan Telegram dengan pelacakan log yang transparan dan akurat.
+
+---
+
+[39.0] - DUKUNGAN 2 METODE KONEKSI XAVIERA (METODE PUSAT + MARGIN VS METODE API TOKO SINKRON HARGA WEB)
+
+- Tanggal: 2026-11-14
+- Status: Planned
+
+Tujuan:
+Menyediakan dua metode fleksibel bagi tenant untuk menghubungkan bot WhatsApp ke layanan Xaviera:
+1. **Metode 1 (Xaviera Pusat / Konvensional)**: Menggunakan API pusat (`https://xavierastore.com/api/v1`), di mana harga jual di bot dihitung dari harga modal API + margin keuntungan lokal tenant (`pricing_config`, `category_pricing`, `variant_pricing`).
+2. **Metode 2 (API Toko Website Tenant / `{urlweb}/api/toko/v1`)**: Menggunakan API toko milik website masing-masing tenant, di mana harga jual di bot otomatis sinkron 100% dengan harga jual di website tenant tanpa perlu mengatur margin keuntungan di bot.
+
+Rencana yang Disiapkan (Menunggu Diskusi & Persetujuan Implementasi):
+1. Skema Konfigurasi & Database Tenant (`api_config` & `tenantDbManager.ts`):
+   - Menambahkan field metode koneksi (misal `xaviera_mode`: `'central' | 'store_api'`) dan domain website toko (misal `xaviera_store_domain`) pada tabel `api_config`.
+   - Jika `xaviera_mode = 'store_api'`, Base URL dibentuk otomatis dari domain toko menjadi `https://<domain>/api/toko/v1`.
+2. Antarmuka Dashboard Tenant (Tab Koneksi Layanan & Tab Produk):
+   - Di Tab Koneksi Layanan: Menyediakan pemilih mode koneksi Xaviera (Metode 1: API Pusat + Margin vs Metode 2: API Toko Website `{urlweb}/api/toko/v1`), form input domain website toko (untuk Metode 2), serta input API Key (`xvs_...`).
+   - Di Tab Produk: Saat Metode 2 aktif, menonaktifkan/mengunci form pengaturan margin keuntungan dengan penanda bahwa harga jual disinkronkan otomatis dari website toko tenant, serta menampilkan katalog `/products` dan (sesuai keputusan nanti) `/own-products`.
+3. Adapter Backend (`xavieraService.ts`, `xavieraRoutes.ts`, & Kalkulasi Harga):
+   - Memperbarui endpoint `/api/xaviera/profile` (`GET /me`) dan `/api/xaviera/products` (`GET /products` serta dukungan `GET /own-products`) agar kompatibel dengan kedua metode koneksi.
+   - Memperbarui fungsi kalkulasi harga jual agar langsung menggunakan harga dari API (tanpa markup tambahan) saat Metode 2 aktif.
+   - Menangani ketiadaan endpoint `/smm/services` dan `/games` saat Metode 2 aktif secara anggun di UI dan API.
+4. Penanganan Kupon & Eksekusi Order (Bahan Diskusi Lanjutan):
+   - Menentukan apakah produk khusus toko (`/own-products`) ikut digabungkan ke katalog `.list` / carousel bot di Metode 2.
+   - Menentukan integrasi order otomatis ke `POST /products/order`, `POST /own-products/order`, dan `GET /orders/:id` setelah pembayaran QRIS lunas.
+   - Terkait `couponCode?`: Karena dokumentasi `/api/toko/v1` belum memiliki endpoint validasi/cek diskon kupon sebelum pembelian, penggunaan kupon di bot sementara tetap mengacu pada tabel lokal `promo_codes` (atau menunggu penambahan endpoint validasi kupon dari pihak Xaviera).
+
+Hasil yang Diharapkan:
+Tenant dapat bebas memilih antara metode konvensional berbasis margin atau metode sinkronisasi harga otomatis langsung dari website toko masing-masing (`{urlweb}/api/toko/v1`) dengan pengalaman konfigurasi yang sederhana dan tanpa merusak fungsionalitas bot yang sudah berjalan.
+
+

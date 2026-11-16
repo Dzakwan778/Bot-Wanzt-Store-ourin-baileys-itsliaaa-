@@ -15,6 +15,7 @@ import {
 import { LicenseToken, DurationUnit } from '../../../types/admin.types';
 import { CreateTokenModal } from '../../modals/CreateTokenModal';
 import { TokenCreatedModal } from '../../modals/TokenCreatedModal';
+import { adminFetch } from '../../../utils/adminAuth.ts';
 
 interface TabTokenManagementProps {
   showToast: (msg: string) => void;
@@ -40,7 +41,7 @@ export const TabTokenManagement: React.FC<TabTokenManagementProps> = ({ showToas
   const fetchTokens = async () => {
     try {
       setIsLoading(true);
-      const res = await fetch('/api/admin/tokens');
+      const res = await adminFetch('/api/admin/tokens');
       const json = await res.json();
       if (json.success && Array.isArray(json.data)) {
         setTokens(json.data);
@@ -60,7 +61,7 @@ export const TabTokenManagement: React.FC<TabTokenManagementProps> = ({ showToas
   // Handler Pembuatan Token Baru via Backend API
   const handleConfirmCreateToken = async (amount: number, unit: DurationUnit) => {
     try {
-      const res = await fetch('/api/admin/tokens/create', {
+      const res = await adminFetch('/api/admin/tokens/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount, unit }),
@@ -87,7 +88,7 @@ export const TabTokenManagement: React.FC<TabTokenManagementProps> = ({ showToas
     }
 
     try {
-      const res = await fetch(`/api/admin/tokens/${id}`, {
+      const res = await adminFetch(`/api/admin/tokens/${id}`, {
         method: 'DELETE',
       });
       const json = await res.json();

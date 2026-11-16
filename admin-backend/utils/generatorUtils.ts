@@ -1,11 +1,13 @@
+import crypto from 'node:crypto';
+
 export function generateCleanId(name?: string): string {
   const slug = (name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const random = Math.floor(1000 + Math.random() * 9000);
+  const random = crypto.randomInt(1000, 10000);
   return `t_${slug || 'unit'}_${random}`;
 }
 
 export function generateStructuredUsername(baseSlug?: string): string {
-  const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+  const randomSuffix = crypto.randomInt(1000, 10000);
   if (baseSlug && baseSlug.trim()) {
     const clean = baseSlug.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12);
     if (clean.length >= 3) {
@@ -15,11 +17,11 @@ export function generateStructuredUsername(baseSlug?: string): string {
   return `tenant_${randomSuffix}`;
 }
 
-export function generateRandomPassword(): string {
+export function generateRandomPassword(length: number = 10): string {
   const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
   let gen = 'pass_';
-  for (let i = 0; i < 6; i++) {
-    gen += chars.charAt(Math.floor(Math.random() * chars.length));
+  for (let i = 0; i < length; i++) {
+    gen += chars.charAt(crypto.randomInt(0, chars.length));
   }
   return gen;
 }

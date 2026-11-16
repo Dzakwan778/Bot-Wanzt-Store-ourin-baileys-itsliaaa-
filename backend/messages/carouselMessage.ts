@@ -147,7 +147,7 @@ Produk tersedia selama stok masih ada. Silakan pilih tindakan di bawah ini untuk
             name: 'quick_reply',
             buttonParamsJson: JSON.stringify({
               display_text: '🛒 Order',
-              id: `order_var:${encodeURIComponent(pName)}|${encodeURIComponent(v.variant)}|${sellingPrice}`,
+              id: `order_var:${encodeURIComponent(pName)}|${encodeURIComponent(v.variant)}`,
             }),
           },
           {

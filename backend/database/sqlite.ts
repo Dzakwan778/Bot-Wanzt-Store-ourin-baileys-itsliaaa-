@@ -264,28 +264,20 @@ export function initDatabase(): void {
     );
   `);
 
-  // Inisialisasi unit pertama (Unit 101) jika tabel tenants masih kosong
-  const tenantCount = db.prepare('SELECT COUNT(*) as count FROM tenants').get() as { count: number };
-  if (tenantCount.count === 0) {
-    const salt = crypto.randomBytes(16).toString('hex');
-    const hash = crypto.pbkdf2Sync('admin123', salt, 100000, 64, 'sha512').toString('hex');
-    const now = new Date();
-    const expired = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
-    db.prepare(`
-      INSERT INTO tenants (id, unit_number, name, username, password_hash, salt, phone_number, plan_name, status, start_date, expired_date, max_groups, notes, created_at, updated_at)
-      VALUES ('unit-101', 'Unit 101', 'Wanzt Store Utama', 'admin', ?, ?, '082173515807', 'Enterprise', 'active', ?, ?, 50, 'Unit apartemen utama toko official', ?, ?)
-    `).run(hash, salt, now.toISOString(), expired.toISOString(), now.toISOString(), now.toISOString());
-  }
-
-  // Inisialisasi akun Master Admin default jika belum ada
+  // Inisialisasi akun Master Admin legacy hanya jika env bootstrap diberikan secara eksplisit
   const masterAdminRow = db.prepare('SELECT id FROM master_admin WHERE id = 1').get();
   if (!masterAdminRow) {
-    const salt = crypto.randomBytes(16).toString('hex');
-    const hash = crypto.pbkdf2Sync('masterwanzt888', salt, 100000, 64, 'sha512').toString('hex');
-    db.prepare(`
-      INSERT INTO master_admin (id, username, password_hash, salt, iterations, updated_at)
-      VALUES (1, 'superadmin', ?, ?, 100000, ?)
-    `).run(hash, salt, new Date().toISOString());
+    const bootUser = process.env.APARTMENT_ADMIN_BOOTSTRAP_USERNAME?.trim();
+    const bootPass = process.env.APARTMENT_ADMIN_BOOTSTRAP_PASSWORD?.trim();
+    if (bootUser && bootPass) {
+      const salt = crypto.randomBytes(16).toString('hex');
+      const hash = crypto.scryptSync(bootPass, salt, 64, { N: 16384, r: 8, p: 1 });
+      const scryptFormatted = `scrypt$${salt}$${hash.toString('hex')}`;
+      db.prepare(`
+        INSERT INTO master_admin (id, username, password_hash, salt, iterations, updated_at)
+        VALUES (1, ?, ?, ?, 16384, ?)
+      `).run(bootUser, scryptFormatted, salt, new Date().toISOString());
+    }
   }
 
   // Jalankan migrasi data otomatis dari file JSON yang sudah ada

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AlertTriangle, Trash2 } from 'lucide-react';
 import { Tenant } from '../../types/admin.types.ts';
+import { adminFetch } from '../../utils/adminAuth.ts';
 
 interface DeleteTenantModalProps {
   isOpen: boolean;
@@ -30,7 +31,7 @@ export const DeleteTenantModal: React.FC<DeleteTenantModalProps> = ({
 
     setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/admin/tenants/${tenant.tenant_id}`, {
+      const res = await adminFetch(`/api/admin/tenants/${tenant.tenant_id}`, {
         method: 'DELETE',
       });
       const data = await res.json();

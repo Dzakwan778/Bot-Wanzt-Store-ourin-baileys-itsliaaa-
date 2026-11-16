@@ -16,11 +16,6 @@ export function useLunasQrisData(
 
   const fetchLunasQrisBalance = async (isManual = false) => {
     const cleanKey = lunasQrisApiKey?.trim();
-    const rawBase = lunasQrisBaseUrl?.trim() || 'https://lunasqris.com';
-    const cleanBase = rawBase
-      .replace(/\/+$/, '')
-      .replace(/\/api\/v1\/?$/, '')
-      .replace(/\/api\/?$/, '');
 
     if (!cleanKey) {
       setLunasQrisBalance({
@@ -39,7 +34,7 @@ export function useLunasQrisData(
     try {
       setLunasQrisBalance((prev) => ({ ...prev, loading: true, error: null }));
       const res = await fetch(
-        `/api/lunasqris/balance?apikey=${encodeURIComponent(cleanKey)}&baseurl=${encodeURIComponent(cleanBase)}`
+        `/api/lunasqris/balance?apikey=${encodeURIComponent(cleanKey)}`
       );
       const data = await res.json();
       if (data.success) {
