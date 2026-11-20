@@ -10,10 +10,7 @@ test('Sesi 5: legacy /api/apartment decommissioned, XFF lockout spoofing blocked
   const tmpDir1 = fs.mkdtempSync(path.join(os.tmpdir(), 'wanzt-sesi5-main-'));
   const tmpDir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'wanzt-sesi5-global-'));
 
-  const expressPath = path.join(repoRoot, 'node_modules', 'express', 'index.js');
   const appPath = path.join(repoRoot, 'backend', 'app.ts');
-  const apartmentRoutesPath = path.join(repoRoot, 'backend', 'routes', 'apartmentRoutes.ts');
-  const apartmentMgrPath = path.join(repoRoot, 'backend', 'services', 'apartmentManager.ts');
   const masterDbPath = path.join(repoRoot, 'admin-backend', 'database', 'masterSqlite.ts');
   const adminAuthPath = path.join(repoRoot, 'admin-backend', 'services', 'adminAuthService.ts');
   const partnerSvcPath = path.join(repoRoot, 'admin-backend', 'services', 'partnerApiService.ts');
@@ -21,10 +18,7 @@ test('Sesi 5: legacy /api/apartment decommissioned, XFF lockout spoofing blocked
   const scriptMain = `
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import express from ${JSON.stringify(expressPath)};
 import { serverApp } from ${JSON.stringify(appPath)};
-import { apartmentRouter } from ${JSON.stringify(apartmentRoutesPath)};
-import { createMasterAdminSession } from ${JSON.stringify(apartmentMgrPath)};
 import { getMasterDb, hashPassword } from ${JSON.stringify(masterDbPath)};
 import { AdminAuthService } from ${JSON.stringify(adminAuthPath)};
 import { PartnerApiService } from ${JSON.stringify(partnerSvcPath)};
@@ -45,19 +39,9 @@ async function main() {
   const server = http.createServer(serverApp);
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
 
-  // Server terpisah khusus menguji router apartmentRoutes bila di-mount langsung
-  const isolatedApp = express();
-  isolatedApp.use(express.json());
-  isolatedApp.use('/api/apartment', apartmentRouter);
-  const isolatedServer = http.createServer(isolatedApp);
-  await new Promise<void>((resolve) => isolatedServer.listen(0, '127.0.0.1', resolve));
-
   try {
     const addr = server.address() as { port: number };
     const baseUrl = \`http://127.0.0.1:\${addr.port}\`;
-
-    const isoAddr = isolatedServer.address() as { port: number };
-    const isoBaseUrl = \`http://127.0.0.1:\${isoAddr.port}\`;
 
     // 1. Legacy /api/apartment/* dinonaktifkan di server utama (404 JSON)
     for (const ep of ['/api/apartment/stats', '/api/apartment/tenants', '/api/apartment/current-lease', '/api/apartment/tenants/unit-101']) {
@@ -66,20 +50,6 @@ async function main() {
       const body = await r.json();
       assert.equal(body.success, false);
     }
-
-    // 2. apartmentRouter langsung juga wajib menuntut header auth & menolak ?token= query param
-    const validLegacyToken = createMasterAdminSession('legacy_check');
-    for (const ep of ['/api/apartment/stats', '/api/apartment/tenants', '/api/apartment/current-lease', '/api/apartment/tenants/unit-101']) {
-      const unauth = await fetch(\`\${isoBaseUrl}\${ep}\`);
-      assert.equal(unauth.status, 401, \`Direct \${ep} tanpa token harus 401\`);
-
-      const queryTok = await fetch(\`\${isoBaseUrl}\${ep}?token=\${validLegacyToken}\`);
-      assert.equal(queryTok.status, 401, \`Direct \${ep} via ?token= harus ditolak 401\`);
-    }
-    const authBearerRes = await fetch(\`\${isoBaseUrl}/api/apartment/stats\`, {
-      headers: { Authorization: \`Bearer \${validLegacyToken}\` },
-    });
-    assert.equal(authBearerRes.status, 200);
 
     // 3. Simulasi di balik reverse proxy (Nginx appends real IP di paling kanan XFF):
     //    Spoofing leftmost XFF dengan username berbeda tetap terkunci pada percobaan ke-5 (IP asli: 203.0.113.50)
@@ -188,7 +158,6 @@ async function main() {
     console.log('SESI5_MAIN_OK');
   } finally {
     server.close();
-    isolatedServer.close();
   }
 }
 

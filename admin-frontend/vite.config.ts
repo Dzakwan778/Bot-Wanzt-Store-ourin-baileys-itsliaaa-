@@ -7,10 +7,14 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig(() => {
   return {
     base: '/admin/',
+    cacheDir: path.resolve(import.meta.dirname, '../node_modules/.vite-admin'),
     plugins: [
       react(),
       tailwindcss(),
     ],
+    optimizeDeps: {
+      entries: ['index.html'],
+    },
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname, 'src'),
@@ -30,9 +34,13 @@ export default defineConfig(() => {
         ignored: [
           '**/database/**',
           '**/backend/database/**',
+          '**/storage/**',
+          '**/dist/**',
+          '**/dist-admin/**',
           '**/auth_info_baileys/**',
           '**/backend/auth_info_baileys/**',
           '**/*.log',
+          '**/*.test.*',
         ],
       },
       proxy: {

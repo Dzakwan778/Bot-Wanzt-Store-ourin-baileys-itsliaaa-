@@ -94,10 +94,8 @@ async function initializeFullApp(isProduction: boolean): Promise<Express> {
       return viteAdminPromise;
     };
 
-    // Pre-warm Vite Admin secara tenang setelah server siap melayani tenant
-    setTimeout(() => {
-      void getViteAdmin().catch(() => {});
-    }, 1500);
+    // Vite Admin diinisialisasi secara lazy saat route /admin atau subdomain admin.* diakses
+    // agar startup dev server utama ringan dan bebas kontensi CPU/cache dengan Vite Tenant.
 
     serverApp.use(async (req, res, next) => {
       // Lewati rute API
@@ -246,9 +244,9 @@ function startServer() {
   httpServer.listen(port, '0.0.0.0', () => {
     console.log(`[Wanzt Store] Server berjalan di http://0.0.0.0:${port}`);
     console.log(`[Wanzt Store] Mode: ${isProduction ? 'Production' : 'Development'}`);
-    setTimeout(() => {
+    setImmediate(() => {
       void ensureInitialized().catch(() => {});
-    }, 50);
+    });
   });
 }
 

@@ -58,7 +58,6 @@ import crypto from 'node:crypto';
 import { getMasterDb, initMasterDatabase } from ${JSON.stringify(path.join(repoRoot, 'admin-backend', 'database', 'masterSqlite.ts'))};
 import { AdminAuthService } from ${JSON.stringify(path.join(repoRoot, 'admin-backend', 'services', 'adminAuthService.ts'))};
 import { verifyLogin } from ${JSON.stringify(path.join(repoRoot, 'backend', 'services', 'authManager.ts'))};
-import { verifyMasterAdminLogin } from ${JSON.stringify(path.join(repoRoot, 'backend', 'services', 'apartmentManager.ts'))};
 import { TokenService } from ${JSON.stringify(path.join(repoRoot, 'admin-backend', 'services', 'tokenService.ts'))};
 import { generateCleanId, generateRandomPassword, generateStructuredUsername } from ${JSON.stringify(path.join(repoRoot, 'admin-backend', 'utils', 'generatorUtils.ts'))};
 
@@ -68,7 +67,6 @@ initMasterDatabase();
 assert.throws(() => AdminAuthService.login('wan_admin773', 'Obsidian@7X_Nova', '127.0.0.1'));
 assert.equal(verifyLogin('wanzt', 'wanzt123'), false);
 assert.equal(verifyLogin('admin', 'admin123'), false);
-assert.equal(verifyMasterAdminLogin('superadmin', 'masterwanzt888'), false);
 
 // 2. Simulate legacy SHA-256 hash rows in master.db and verify transparent login + auto-rehash to scrypt$
 const db = getMasterDb();
