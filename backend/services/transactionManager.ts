@@ -15,6 +15,7 @@ export interface TransactionRecord {
   total: number;
   status: 'pending' | 'paid' | 'cancel';
   paymentUrl?: string;
+  promoId?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -40,8 +41,21 @@ interface DbTransactionRow {
   total: number;
   status: string;
   payment_url: string | null;
+  promo_id: number | null;
   created_at: string;
   updated_at: string;
+}
+
+function sanitizeHttpsPaymentUrl(rawUrl?: string | null): string {
+  if (typeof rawUrl !== 'string') return '';
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return '';
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'https:' ? parsed.toString() : '';
+  } catch {
+    return '';
+  }
 }
 
 function mapRowToRecord(row: DbTransactionRow): TransactionRecord {
@@ -57,7 +71,8 @@ function mapRowToRecord(row: DbTransactionRow): TransactionRecord {
     uniqueCode: Number(row.unique_code),
     total: Number(row.total),
     status: (row.status as any) || 'pending',
-    paymentUrl: row.payment_url || '',
+    paymentUrl: sanitizeHttpsPaymentUrl(row.payment_url),
+    promoId: row.promo_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -94,13 +109,16 @@ export function recordTransaction(data: {
   uniqueCode: number;
   total: number;
   paymentUrl?: string;
+  promoId?: number | null;
   status?: 'pending' | 'paid' | 'cancel';
 }): TransactionRecord {
   const now = new Date().toISOString();
   const cleanNumber = data.customerNumber.replace(/[^0-9]/g, '');
   const id = `TRX-${data.orderId}`;
   const status = data.status || 'pending';
+  const promoId = data.promoId ? Number(data.promoId) : null;
   const customerName = data.customerName || `Pelanggan-${cleanNumber.slice(-4)}`;
+  const safePaymentUrl = sanitizeHttpsPaymentUrl(data.paymentUrl);
 
   try {
     const existing = db.prepare(`
@@ -121,6 +139,7 @@ export function recordTransaction(data: {
             total = ?,
             status = ?,
             payment_url = ?,
+            promo_id = COALESCE(?, promo_id),
             updated_at = ?
         WHERE id = ?
       `).run(
@@ -133,7 +152,8 @@ export function recordTransaction(data: {
         Math.round(data.uniqueCode),
         Math.round(data.total),
         status,
-        data.paymentUrl || existing.payment_url || '',
+        safePaymentUrl || sanitizeHttpsPaymentUrl(existing.payment_url),
+        promoId,
         now,
         existing.id
       );
@@ -150,7 +170,8 @@ export function recordTransaction(data: {
         uniqueCode: Math.round(data.uniqueCode),
         total: Math.round(data.total),
         status,
-        paymentUrl: data.paymentUrl || existing.payment_url || '',
+        paymentUrl: safePaymentUrl || sanitizeHttpsPaymentUrl(existing.payment_url),
+        promoId: promoId ?? existing.promo_id ?? null,
         createdAt: existing.created_at,
         updatedAt: now,
       };
@@ -159,8 +180,8 @@ export function recordTransaction(data: {
         INSERT INTO transactions (
           id, order_id, trx_id, customer_number, customer_name,
           product_name, variant_name, nominal, unique_code, total,
-          status, payment_url, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          status, payment_url, promo_id, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id,
         data.orderId,
@@ -173,7 +194,8 @@ export function recordTransaction(data: {
         Math.round(data.uniqueCode),
         Math.round(data.total),
         status,
-        data.paymentUrl || '',
+        safePaymentUrl,
+        promoId,
         now,
         now
       );
@@ -190,7 +212,8 @@ export function recordTransaction(data: {
         uniqueCode: Math.round(data.uniqueCode),
         total: Math.round(data.total),
         status,
-        paymentUrl: data.paymentUrl || '',
+        paymentUrl: safePaymentUrl,
+        promoId,
         createdAt: now,
         updatedAt: now,
       };
@@ -209,7 +232,8 @@ export function recordTransaction(data: {
       uniqueCode: Math.round(data.uniqueCode),
       total: Math.round(data.total),
       status,
-      paymentUrl: data.paymentUrl || '',
+      paymentUrl: safePaymentUrl,
+      promoId,
       createdAt: now,
       updatedAt: now,
     };
@@ -281,6 +305,14 @@ export function updateTransactionStatus(
 
       if (updateRes.changes !== 1) {
         return null;
+      }
+
+      if (newStatus === 'cancel' && existing.promo_id) {
+        db.prepare(`
+          UPDATE promo_codes
+          SET used_count = MAX(0, used_count - 1), updated_at = ?
+          WHERE id = ? AND used_count > 0
+        `).run(now, existing.promo_id);
       }
 
       return existing;
@@ -438,6 +470,14 @@ export function applyLunasQrisWebhookUpdate(params: {
 
       if (res.changes !== 1) {
         return { ok: false, reason: 'already_processed', transaction: mapRowToRecord(existing) };
+      }
+
+      if (params.targetStatus === 'cancel' && existing.promo_id) {
+        db.prepare(`
+          UPDATE promo_codes
+          SET used_count = MAX(0, used_count - 1), updated_at = ?
+          WHERE id = ? AND used_count > 0
+        `).run(now, existing.promo_id);
       }
 
       transitionedRow = existing;

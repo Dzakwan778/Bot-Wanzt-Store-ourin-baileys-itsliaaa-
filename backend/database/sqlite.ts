@@ -129,6 +129,7 @@ export function initDatabase(): void {
       total INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
       payment_url TEXT,
+      promo_id INTEGER DEFAULT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -1239,6 +1240,83 @@ export function validateAndApplyPromo(params: {
     sellingPriceWithoutPromo: basePrice + initialMargin,
     finalPrice,
   };
+}
+
+/**
+ * Mereservasikan 1 kuota promo secara atomik saat invoice dibuat (dalam db.transaction).
+ * Menolak bila promo nonaktif, kedaluwarsa, atau kuota sudah habis.
+ */
+export function reservePromoQuota(promoId: number): { reserved: boolean; reason?: string } {
+  const cleanId = Number(promoId);
+  if (!Number.isInteger(cleanId) || cleanId <= 0) {
+    return { reserved: false, reason: 'ID promo tidak valid.' };
+  }
+
+  try {
+    const reserveTx = db.transaction((): { reserved: boolean; reason?: string } => {
+      const promo = db.prepare(`
+        SELECT id, is_active, quota, used_count, is_forever, valid_until
+        FROM promo_codes
+        WHERE id = ?
+      `).get(cleanId) as any;
+
+      if (!promo) {
+        return { reserved: false, reason: 'Kode promo tidak ditemukan.' };
+      }
+
+      if (!promo.is_active) {
+        return { reserved: false, reason: 'Kode promo saat ini sedang nonaktif.' };
+      }
+
+      if (!promo.is_forever && promo.valid_until) {
+        const expiry = new Date(promo.valid_until);
+        if (!Number.isNaN(expiry.getTime()) && new Date() > expiry) {
+          return { reserved: false, reason: 'Masa berlaku kode promo ini telah berakhir.' };
+        }
+      }
+
+      const now = new Date().toISOString();
+      const updateRes = db.prepare(`
+        UPDATE promo_codes
+        SET used_count = used_count + 1, updated_at = ?
+        WHERE id = ? AND is_active = 1 AND (quota IS NULL OR used_count < quota)
+      `).run(now, cleanId);
+
+      if (updateRes.changes !== 1) {
+        return { reserved: false, reason: 'Kuota penggunaan kode promo ini sudah habis.' };
+      }
+
+      return { reserved: true };
+    });
+
+    return reserveTx();
+  } catch (err) {
+    console.error('Gagal mereservasikan kuota promo:', err);
+    return { reserved: false, reason: 'Gagal memproses reservasi kuota promo.' };
+  }
+}
+
+/**
+ * Mengembalikan 1 kuota promo secara atomik jika pembuatan invoice gagal atau transaksi dibatalkan/expired.
+ */
+export function releasePromoQuota(promoId: number): boolean {
+  const cleanId = Number(promoId);
+  if (!Number.isInteger(cleanId) || cleanId <= 0) return false;
+
+  try {
+    const releaseTx = db.transaction(() => {
+      const res = db.prepare(`
+        UPDATE promo_codes
+        SET used_count = MAX(0, used_count - 1), updated_at = ?
+        WHERE id = ? AND used_count > 0
+      `).run(new Date().toISOString(), cleanId);
+      return res.changes > 0;
+    });
+    return releaseTx();
+  } catch (err) {
+    console.error('Gagal mengembalikan kuota promo:', err);
+    return false;
+  }
 }
 
 

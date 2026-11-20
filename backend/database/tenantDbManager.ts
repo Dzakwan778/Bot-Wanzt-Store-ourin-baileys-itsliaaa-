@@ -158,6 +158,9 @@ export function migrateTenantDb(db: Database.Database): void {
     if (!trxCols.includes('trx_id')) {
       try { db.exec("ALTER TABLE transactions ADD COLUMN trx_id TEXT"); } catch {}
     }
+    if (!trxCols.includes('promo_id')) {
+      try { db.exec("ALTER TABLE transactions ADD COLUMN promo_id INTEGER DEFAULT NULL"); } catch {}
+    }
   }
 
   // 7. Migrasi telegram_config
@@ -288,6 +291,7 @@ export function initTenantDbTables(db: Database.Database, tenantId: string): voi
       total INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
       payment_url TEXT,
+      promo_id INTEGER DEFAULT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );

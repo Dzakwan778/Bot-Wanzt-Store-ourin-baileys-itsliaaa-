@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, FormEvent } from 'react';
+import { useState, useEffect, useCallback, useRef, FormEvent } from 'react';
 import { BotStatusResponse } from '../types/dashboard.types';
 
 export function useBotConnection(
@@ -11,6 +11,9 @@ export function useBotConnection(
   const [customCode, setCustomCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const hasLoadedInitialConfigRef = useRef(false);
+  const customCodeRef = useRef(customCode);
+  customCodeRef.current = customCode;
 
   const [botData, setBotData] = useState<BotStatusResponse>({
     status: 'idle',
@@ -27,6 +30,10 @@ export function useBotConnection(
   const refreshStatus = useCallback(async () => {
     try {
       const res = await fetch('/api/bot/status');
+      if (res.status === 401) {
+        window.dispatchEvent(new CustomEvent('wanzt:session-revoked'));
+        return null;
+      }
       if (res.ok) {
         const data: any = await res.json();
         setBotData(data);
@@ -40,18 +47,17 @@ export function useBotConnection(
     return null;
   }, [onAccountStatusChanged]);
 
-  // Polling status secara real-time
+  // Polling status secara real-time (loadInitialConfig hanya dijalankan sekali saat mount)
   useEffect(() => {
-    let hasLoadedInitialConfig = false;
     const fetchStatus = async () => {
       const data = await refreshStatus();
       if (!data) return;
 
-      if (data.customCode && !customCode) {
+      if (data.customCode && !customCodeRef.current) {
         setCustomCode(data.customCode);
       }
-      if (!hasLoadedInitialConfig && data.config) {
-        hasLoadedInitialConfig = true;
+      if (!hasLoadedInitialConfigRef.current && data.config) {
+        hasLoadedInitialConfigRef.current = true;
         if (onInitialConfigLoaded) {
           onInitialConfigLoaded(data.config);
         }
@@ -67,7 +73,7 @@ export function useBotConnection(
     fetchStatus();
     const interval = setInterval(fetchStatus, 1500);
     return () => clearInterval(interval);
-  }, [customCode, refreshStatus]);
+  }, [refreshStatus]);
 
   const handleStartPairing = async (e: FormEvent) => {
     e.preventDefault();

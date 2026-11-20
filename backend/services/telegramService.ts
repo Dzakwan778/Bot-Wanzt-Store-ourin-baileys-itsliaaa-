@@ -21,6 +21,18 @@ export interface TelegramTenantSummary {
 }
 
 /**
+ * Escape karakter HTML sensitif sebelum menyisipkan variabel dinamis ke payload Telegram parse_mode: 'HTML'
+ */
+export function escapeTelegramHtml(value?: unknown): string {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
  * Membaca konfigurasi Telegram untuk tenant tertentu
  */
 export function getTelegramConfig(tenantId?: string): TelegramConfig {
@@ -196,11 +208,16 @@ export async function testTelegramConnection(
     const username = getMeData.result?.username ? `@${getMeData.result.username}` : '';
 
     // 2. Kirim pesan tes
+    const safeStore = escapeTelegramHtml(storeName);
+    const safeBotName = escapeTelegramHtml(botName);
+    const safeUsername = escapeTelegramHtml(username);
+    const safeTime = escapeTelegramHtml(new Date().toLocaleString('id-ID'));
+
     const testMsg =
       `🎉 <b>KONEKSI TELEGRAM BERHASIL!</b>\n` +
-      `🏪 <b>Toko:</b> ${storeName}\n` +
-      `🤖 <b>Bot:</b> ${botName} (${username})\n` +
-      `⏰ <b>Waktu Tes:</b> ${new Date().toLocaleString('id-ID')}\n\n` +
+      `🏪 <b>Toko:</b> ${safeStore}\n` +
+      `🤖 <b>Bot:</b> ${safeBotName} (${safeUsername})\n` +
+      `⏰ <b>Waktu Tes:</b> ${safeTime}\n\n` +
       `✅ <i>Selamat! Bot Telegram Anda telah siap menerima notifikasi penjualan resmi secara real-time.</i>`;
 
     const sendRes = await sendTelegramMessage(token, chatId, testMsg, 'HTML');
@@ -263,21 +280,25 @@ export async function notifyTransactionPaid(
     return false;
   }
 
-  const store = orderData.storeName || 'Toko Anda';
-  const timeStr = orderData.paidAt || new Date().toLocaleString('id-ID');
-  const maskedPhone = maskPhoneNumber(orderData.buyerNumber);
+  const safeStore = escapeTelegramHtml(orderData.storeName || 'Toko Anda');
+  const safeProduct = escapeTelegramHtml(orderData.productName);
+  const safeVariant = escapeTelegramHtml(orderData.variantName || '-');
+  const safeOrderId = escapeTelegramHtml(orderData.orderId);
+  const safeAmount = escapeTelegramHtml(formatRupiah(orderData.totalPrice));
+  const safePhone = escapeTelegramHtml(maskPhoneNumber(orderData.buyerNumber));
+  const safeTime = escapeTelegramHtml(orderData.paidAt || new Date().toLocaleString('id-ID'));
 
   const text =
     `🛒 <b>PESANAN BERHASIL (LUNAS)</b>\n` +
-    `🏪 <b>Toko:</b> ${store}\n\n` +
-    `📦 <b>Produk:</b> ${orderData.productName}\n` +
-    `🔖 <b>Varian:</b> ${orderData.variantName || '-'}\n` +
-    `🧾 <b>Order ID:</b> <code>${orderData.orderId}</code>\n` +
-    `💰 <b>Total Bayar:</b> Rp ${formatRupiah(orderData.totalPrice)}\n` +
-    `📱 <b>Pembeli:</b> <code>${maskedPhone}</code>\n` +
+    `🏪 <b>Toko:</b> ${safeStore}\n\n` +
+    `📦 <b>Produk:</b> ${safeProduct}\n` +
+    `🔖 <b>Varian:</b> ${safeVariant}\n` +
+    `🧾 <b>Order ID:</b> <code>${safeOrderId}</code>\n` +
+    `💰 <b>Total Bayar:</b> Rp ${safeAmount}\n` +
+    `📱 <b>Pembeli:</b> <code>${safePhone}</code>\n` +
     `💳 <b>Metode:</b> QRIS Realtime\n` +
-    `⏰ <b>Waktu Lunas:</b> ${timeStr}\n\n` +
-    `✅ <i>Pesanan telah berhasil dibayar. Produk otomatis diproses & dikirim ke chat pembeli.</i>`;
+    `⏰ <b>Waktu Lunas:</b> ${safeTime}\n\n` +
+    `✅ <i>Pesanan telah berhasil dibayar. Produk otomatis diproses &amp; dikirim ke chat pembeli.</i>`;
 
   const result = await sendTelegramMessage(config.botToken, config.chatId, text, 'HTML', tenantId);
   return result.success;
@@ -302,19 +323,25 @@ export async function notifyTransactionFailed(
     return false;
   }
 
-  const store = orderData.storeName || 'Toko Anda';
-  const timeStr = new Date().toLocaleString('id-ID');
-  const reason = orderData.reason || 'Batas waktu pembayaran QRIS habis / dibatalkan';
+  const safeStore = escapeTelegramHtml(orderData.storeName || 'Toko Anda');
+  const safeProduct = escapeTelegramHtml(orderData.productName);
+  const safeVariant = escapeTelegramHtml(orderData.variantName || '-');
+  const safeOrderId = escapeTelegramHtml(orderData.orderId);
+  const safeAmount = escapeTelegramHtml(formatRupiah(orderData.totalPrice));
+  const safeReason = escapeTelegramHtml(
+    orderData.reason || 'Batas waktu pembayaran QRIS habis / dibatalkan'
+  );
+  const safeTime = escapeTelegramHtml(new Date().toLocaleString('id-ID'));
 
   const text =
     `❌ <b>PESANAN GAGAL / KEDALUWARSA</b>\n` +
-    `🏪 <b>Toko:</b> ${store}\n\n` +
-    `📦 <b>Produk:</b> ${orderData.productName}\n` +
-    `🔖 <b>Varian:</b> ${orderData.variantName || '-'}\n` +
-    `🧾 <b>Order ID:</b> <code>${orderData.orderId}</code>\n` +
-    `💰 <b>Nominal:</b> Rp ${formatRupiah(orderData.totalPrice)}\n` +
-    `⚠️ <b>Keterangan:</b> ${reason}\n` +
-    `⏰ <b>Waktu:</b> ${timeStr}\n\n` +
+    `🏪 <b>Toko:</b> ${safeStore}\n\n` +
+    `📦 <b>Produk:</b> ${safeProduct}\n` +
+    `🔖 <b>Varian:</b> ${safeVariant}\n` +
+    `🧾 <b>Order ID:</b> <code>${safeOrderId}</code>\n` +
+    `💰 <b>Nominal:</b> Rp ${safeAmount}\n` +
+    `⚠️ <b>Keterangan:</b> ${safeReason}\n` +
+    `⏰ <b>Waktu:</b> ${safeTime}\n\n` +
     `ℹ️ <i>Pembeli belum menyelesaikan pembayaran QRIS tepat waktu.</i>`;
 
   const result = await sendTelegramMessage(config.botToken, config.chatId, text, 'HTML', tenantId);
@@ -345,15 +372,17 @@ export async function sendAdminMessageToTelegram(
     };
   }
 
-  const store = storeName || tenantId;
-  const timeStr = new Date().toLocaleString('id-ID');
+  const safeStore = escapeTelegramHtml(storeName || tenantId);
+  const safeTenantId = escapeTelegramHtml(tenantId);
+  const safeAdminMsg = escapeTelegramHtml(adminMessage.trim());
+  const safeTime = escapeTelegramHtml(new Date().toLocaleString('id-ID'));
 
   const text =
     `📢 <b>PEMBERITAHUAN RESMI MASTER ADMIN</b>\n` +
-    `🏪 <b>Toko:</b> ${store} (<code>${tenantId}</code>)\n\n` +
-    `${adminMessage.trim()}\n\n` +
+    `🏪 <b>Toko:</b> ${safeStore} (<code>${safeTenantId}</code>)\n\n` +
+    `${safeAdminMsg}\n\n` +
     `────────────────────\n` +
-    `⏰ <i>Pesan resmi dari Super Admin Platform • ${timeStr}</i>`;
+    `⏰ <i>Pesan resmi dari Super Admin Platform • ${safeTime}</i>`;
 
   return sendTelegramMessage(config.botToken, config.chatId, text, 'HTML', tenantId);
 }

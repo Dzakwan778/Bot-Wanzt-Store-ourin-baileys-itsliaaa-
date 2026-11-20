@@ -7,7 +7,7 @@ export const authAdminRouter = Router();
 authAdminRouter.post('/login', (req: Request, res: Response) => {
   try {
     const { username, password } = req.body || {};
-    const clientIp = normalizeClientIp(req.ip, req.headers['x-forwarded-for']);
+    const clientIp = normalizeClientIp(req.ip, req.socket?.remoteAddress);
     const result = AdminAuthService.login(username, password, clientIp);
 
     return res.json({

@@ -174,94 +174,105 @@ export class TokenService {
       formattedWithHyphens = `${cleanChars.slice(0, 4)}-${cleanChars.slice(4, 8)}-${cleanChars.slice(8, 12)}-${cleanChars.slice(12, 16)}`;
     }
 
-    // Cari token di database
-    const tokenRow = db.prepare(`
-      SELECT * FROM extension_tokens
-      WHERE token_code = ? OR token_code = ?
-    `).get(normalizedInput, formattedWithHyphens) as any;
+    const redeemTx = db.transaction(() => {
+      // Cari token di database
+      const tokenRow = db.prepare(`
+        SELECT * FROM extension_tokens
+        WHERE token_code = ? OR token_code = ?
+      `).get(normalizedInput, formattedWithHyphens) as any;
 
-    if (!tokenRow) {
+      if (!tokenRow) {
+        return {
+          success: false,
+          message: 'Kode token voucher tidak ditemukan. Pastikan format 16 karakter (XXXX-XXXX-XXXX-XXXX) sudah benar.',
+        };
+      }
+
+      // Validasi status voucher
+      if (tokenRow.status === 'used') {
+        return {
+          success: false,
+          message: 'Token voucher ini sudah pernah digunakan dan tidak dapat digunakan kembali.',
+        };
+      }
+
+      if (tokenRow.status === 'revoked') {
+        return {
+          success: false,
+          message: 'Token voucher ini telah dicabut atau dinonaktifkan oleh Master Admin.',
+        };
+      }
+
+      // Verifikasi keberadaan tenant
+      const tenant = TenantService.getTenant(tenantId);
+      if (!tenant) {
+        return {
+          success: false,
+          message: `Unit toko bot dengan ID "${tenantId}" tidak ditemukan di database.`,
+        };
+      }
+
+      if (tenant.status === 'suspended') {
+        return {
+          success: false,
+          message: 'Akun toko sedang ditangguhkan (Suspended) oleh Master Admin. Silakan hubungi Master Admin untuk mengaktifkan akun.',
+        };
+      }
+
+      // Klaim token secara atomik hanya jika masih 'available'
+      const now = new Date();
+      const usedAtStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+        now.getDate()
+      ).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(
+        now.getMinutes()
+      ).padStart(2, '0')}`;
+
+      const claimResult = db.prepare(`
+        UPDATE extension_tokens
+        SET status = 'used', used_by_tenant_id = ?, used_at = ?
+        WHERE id = ? AND status = 'available'
+      `).run(tenantId, usedAtStr, tokenRow.id);
+
+      if (claimResult.changes !== 1) {
+        return {
+          success: false,
+          message: 'Token voucher ini sudah pernah digunakan atau tidak lagi tersedia.',
+        };
+      }
+
+      // Eksekusi perpanjangan masa sewa tenant di dalam transaksi atomik yang sama
+      const amount = Number(tokenRow.amount);
+      const unit = tokenRow.unit as DurationUnit;
+      const note = `Redeem token voucher: ${tokenRow.token_code} (+${tokenRow.duration_label})`;
+
+      const updatedTenant = TenantService.extendDuration(tenantId, amount, unit, note);
+
+      const newDaysRemaining = updatedTenant.days_remaining ?? 0;
+      const rawTotalDays = updatedTenant.duration_days ?? 30;
+      const newTotalDays = Math.max(rawTotalDays, newDaysRemaining, 1);
+
       return {
-        success: false,
-        message: 'Kode token voucher tidak ditemukan. Pastikan format 16 karakter (XXXX-XXXX-XXXX-XXXX) sudah benar.',
+        success: true,
+        message: `Selamat! Voucher berhasil di-redeem. Masa aktif bot WhatsApp toko Anda bertambah ${tokenRow.duration_label}.`,
+        token: {
+          id: String(tokenRow.id),
+          token_code: tokenRow.token_code,
+          amount: Number(tokenRow.amount),
+          unit: tokenRow.unit,
+          duration_label: tokenRow.duration_label,
+          status: 'used' as const,
+          created_at: tokenRow.created_at,
+          used_by_tenant_id: tenantId,
+          used_at: usedAtStr,
+        },
+        addedDuration: tokenRow.duration_label,
+        newExpiresAt: updatedTenant.expires_at,
+        newDaysRemaining,
+        newTotalDays,
       };
-    }
+    });
 
-    // Validasi status voucher
-    if (tokenRow.status === 'used') {
-      return {
-        success: false,
-        message: 'Token voucher ini sudah pernah digunakan dan tidak dapat digunakan kembali.',
-      };
-    }
-
-    if (tokenRow.status === 'revoked') {
-      return {
-        success: false,
-        message: 'Token voucher ini telah dicabut atau dinonaktifkan oleh Master Admin.',
-      };
-    }
-
-    // Verifikasi keberadaan tenant
-    const tenant = TenantService.getTenant(tenantId);
-    if (!tenant) {
-      return {
-        success: false,
-        message: `Unit toko bot dengan ID "${tenantId}" tidak ditemukan di database.`,
-      };
-    }
-
-    if (tenant.status === 'suspended') {
-      return {
-        success: false,
-        message: 'Akun toko sedang ditangguhkan (Suspended) oleh Master Admin. Silakan hubungi Master Admin untuk mengaktifkan akun.',
-      };
-    }
-
-    // Eksekusi perpanjangan masa sewa tenant
-    const amount = Number(tokenRow.amount);
-    const unit = tokenRow.unit as DurationUnit;
-    const note = `Redeem token voucher: ${tokenRow.token_code} (+${tokenRow.duration_label})`;
-
-    const updatedTenant = TenantService.extendDuration(tenantId, amount, unit, note);
-
-    // Update status token menjadi 'used'
-    const now = new Date();
-    const usedAtStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
-      now.getDate()
-    ).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(
-      now.getMinutes()
-    ).padStart(2, '0')}`;
-
-    db.prepare(`
-      UPDATE extension_tokens
-      SET status = 'used', used_by_tenant_id = ?, used_at = ?
-      WHERE id = ?
-    `).run(tenantId, usedAtStr, tokenRow.id);
-
-    const newDaysRemaining = updatedTenant.days_remaining ?? 0;
-    const rawTotalDays = updatedTenant.duration_days ?? 30;
-    const newTotalDays = Math.max(rawTotalDays, newDaysRemaining, 1);
-
-    return {
-      success: true,
-      message: `Selamat! Voucher berhasil di-redeem. Masa aktif bot WhatsApp toko Anda bertambah ${tokenRow.duration_label}.`,
-      token: {
-        id: String(tokenRow.id),
-        token_code: tokenRow.token_code,
-        amount: Number(tokenRow.amount),
-        unit: tokenRow.unit,
-        duration_label: tokenRow.duration_label,
-        status: 'used',
-        created_at: tokenRow.created_at,
-        used_by_tenant_id: tenantId,
-        used_at: usedAtStr,
-      },
-      addedDuration: tokenRow.duration_label,
-      newExpiresAt: updatedTenant.expires_at,
-      newDaysRemaining,
-      newTotalDays,
-    };
+    return redeemTx();
   }
 
   /**

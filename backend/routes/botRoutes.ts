@@ -6,6 +6,7 @@ import { TenantManager } from '../../admin-backend/services/tenantManager.ts';
 import { TenantStatusService } from '../../admin-backend/services/tenantStatusService.ts';
 import { sanitizeBotStatusResponse } from '../middleware/tenantAuth.ts';
 import { assertSafeExternalHttpsUrl, UrlSecurityError } from '../utils/urlSecurity.ts';
+import { validateStoreInfoForSave } from '../utils/storeInfoValidator.ts';
 
 export const botRouter = Router();
 
@@ -141,6 +142,15 @@ botRouter.post('/save-config', async (req: Request, res: Response) => {
     }
     if (typeof body.lunasQrisBaseUrl === 'string' && body.lunasQrisBaseUrl.trim()) {
       await assertSafeExternalHttpsUrl(body.lunasQrisBaseUrl.trim());
+    }
+    if (body.storeInfo !== undefined) {
+      const storeValidation = validateStoreInfoForSave(body.storeInfo);
+      if (!storeValidation.valid) {
+        return res.status(400).json({
+          success: false,
+          error: storeValidation.error,
+        });
+      }
     }
 
     botManager.saveConfig(body);

@@ -27,7 +27,7 @@ import {
   DEFAULT_SESSION_EXPIRED_TEMPLATE,
   DEFAULT_PROMO_CANCELLED_TEMPLATE,
 } from '../config/configManager.ts';
-import { getPricingConfig, validateAndApplyPromo, db } from '../database/sqlite.ts';
+import { getPricingConfig, validateAndApplyPromo, reservePromoQuota, releasePromoQuota } from '../database/sqlite.ts';
 import QRCode from 'qrcode';
 import axios from 'axios';
 import { handleHideTagCommand } from './hideTagHandler.ts';
@@ -80,6 +80,7 @@ export interface ExecuteInvoiceParams {
   promoCode?: string;
   discountAmount?: number;
   promoId?: number;
+  promoReserved?: boolean;
   quotedMessage?: any;
   deps: DispatcherDeps;
 }
@@ -109,6 +110,7 @@ export async function executeLunasQrisInvoice(params: ExecuteInvoiceParams): Pro
     promoCode,
     discountAmount,
     promoId,
+    promoReserved: preReserved = false,
     deps,
   } = params;
 
@@ -119,6 +121,10 @@ export async function executeLunasQrisInvoice(params: ExecuteInvoiceParams): Pro
   const lunasBase = (config.lunasQrisBaseUrl || 'https://lunasqris.com').trim();
 
   if (!lunasKey) {
+    if (preReserved && promoId) {
+      releasePromoQuota(promoId);
+      deps.addLog('info', `♻️ Kuota promo ID ${promoId} dikembalikan karena API Key LunasQRIS belum diisi.`);
+    }
     deps.addLog('error', '❌ API Key LunasQRIS belum diisi. Gagal menerbitkan QRIS otomatis.');
     const errorTpl = config.paymentErrorText || DEFAULT_PAYMENT_ERROR_TEMPLATE;
     const errorMsg = resolvePlaceholders(errorTpl, config, {
@@ -138,6 +144,31 @@ export async function executeLunasQrisInvoice(params: ExecuteInvoiceParams): Pro
     return;
   }
 
+  let promoReserved = Boolean(preReserved && promoId);
+  if (promoId && !promoReserved) {
+    const reservation = reservePromoQuota(promoId);
+    if (!reservation.reserved) {
+      deps.addLog('warning', `⚠️ Reservasi kuota promo ditolak untuk order ${orderId}: ${reservation.reason}`);
+      const errorTpl = config.paymentErrorText || DEFAULT_PAYMENT_ERROR_TEMPLATE;
+      const failMsg = resolvePlaceholders(errorTpl, config, {
+        name: productName,
+        variant: variantName,
+        orderId,
+        price: effectiveAmount,
+        total: effectiveAmount,
+        customerName: senderName,
+        customerNumber: senderCleanNumber,
+        errorMessage: reservation.reason || 'Kuota kode promo sudah habis.',
+      });
+      try {
+        const failRes = await sock.sendMessage(senderJid, { text: failMsg });
+        markMessageAsBotSent(failRes?.key?.id);
+      } catch {}
+      return;
+    }
+    promoReserved = true;
+  }
+
   deps.addLog('info', `💳 Menghubungi gateway LunasQRIS untuk order ${orderId} (Nominal: Rp ${effectiveAmount.toLocaleString('id-ID')})...`);
 
   let trxData: any = null;
@@ -154,6 +185,10 @@ export async function executeLunasQrisInvoice(params: ExecuteInvoiceParams): Pro
     );
     trxData = lunasRes.data;
   } catch (apiErr: any) {
+    if (promoReserved && promoId) {
+      releasePromoQuota(promoId);
+      deps.addLog('info', `♻️ Kuota promo ID ${promoId} dikembalikan karena pembuatan invoice gagal.`);
+    }
     deps.addLog('error', `❌ Gagal membuat transaksi LunasQRIS: ${apiErr?.message || apiErr}`);
     const errorTpl = config.paymentErrorText || DEFAULT_PAYMENT_ERROR_TEMPLATE;
     const failMsg = resolvePlaceholders(errorTpl, config, {
@@ -186,6 +221,7 @@ export async function executeLunasQrisInvoice(params: ExecuteInvoiceParams): Pro
       uniqueCode: trxData.unique_code,
       total: trxData.total_amount,
       paymentUrl: trxData.payment_url,
+      promoId: promoReserved && promoId ? promoId : null,
       status: 'pending',
     });
   } catch (dbErr: any) {
@@ -211,14 +247,6 @@ export async function executeLunasQrisInvoice(params: ExecuteInvoiceParams): Pro
         try {
           updateTransactionStatus(orderId, 'paid');
         } catch {}
-
-        if (promoId) {
-          try {
-            db.prepare('UPDATE promo_codes SET used_count = used_count + 1 WHERE id = ?').run(promoId);
-          } catch (pErr: any) {
-            deps.addLog('warning', `Gagal menambah counter promo: ${pErr?.message}`);
-          }
-        }
 
         const paidTpl = config.paymentSuccessDmText || DEFAULT_PAYMENT_SUCCESS_DM_TEMPLATE;
         const paidMsg = resolvePlaceholders(paidTpl, config, {
@@ -1198,12 +1226,48 @@ export async function dispatchIncomingMessages(
           continue;
         }
 
-        // Kode promo VALID!
+        // Reservasi kuota promo secara atomik SEBELUM menghapus sesi atau mengirim pesan sukses
+        const promoId = promoResult.promo?.id;
+        let promoReservedNow = false;
+        if (promoId) {
+          const reservation = reservePromoQuota(promoId);
+          if (!reservation.reserved) {
+            const reason = reservation.reason || 'Kuota penggunaan kode promo ini sudah habis.';
+            deps.addLog('warning', `⚠️ Kode promo "${trimmedText.trim()}" oleh ${senderName} ditolak saat reservasi kuota: ${reason}`);
+
+            const invalidTemplate =
+              config.confirmPromoInvalidText && config.confirmPromoInvalidText.trim()
+                ? config.confirmPromoInvalidText
+                : DEFAULT_CONFIRM_PROMO_INVALID_TEMPLATE;
+
+            const invalidMsg = resolvePlaceholders(invalidTemplate, config, {
+              name: activeSession.productName,
+              variant: activeSession.variantName,
+              price: activeSession.price,
+              promoCode: trimmedText.trim(),
+              reason,
+            });
+
+            const invFooter = resolvePlaceholders(
+              config.confirmFooterText || '{storeName} • Konfirmasi Pesanan',
+              config
+            );
+
+            const invResp = await sock.sendMessage(senderJid, {
+              text: invalidMsg,
+              footer: invFooter,
+            });
+            markMessageAsBotSent(invResp?.key?.id);
+            continue;
+          }
+          promoReservedNow = true;
+        }
+
+        // Kode promo VALID dan kuota SUDAH berhasil diamankan untuk pembeli ini!
         activeCheckoutSessions.delete(senderJid);
         const appliedDiscount = promoResult.actualDiscountApplied;
         const finalPrice = promoResult.finalPrice;
         const promoCodeUsed = promoResult.promo?.code || trimmedText.trim().toUpperCase();
-        const promoId = promoResult.promo?.id;
 
         deps.addLog(
           'success',
@@ -1229,11 +1293,13 @@ export async function dispatchIncomingMessages(
           config
         );
 
-        const sRes = await sock.sendMessage(senderJid, {
-          text: successMsg,
-          footer: succFooter,
-        });
-        markMessageAsBotSent(sRes?.key?.id);
+        try {
+          const sRes = await sock.sendMessage(senderJid, {
+            text: successMsg,
+            footer: succFooter,
+          });
+          markMessageAsBotSent(sRes?.key?.id);
+        } catch {}
 
         await executeLunasQrisInvoice({
           sock,
@@ -1250,6 +1316,7 @@ export async function dispatchIncomingMessages(
           promoCode: promoCodeUsed,
           discountAmount: appliedDiscount,
           promoId,
+          promoReserved: promoReservedNow,
           quotedMessage: m,
           deps,
         });

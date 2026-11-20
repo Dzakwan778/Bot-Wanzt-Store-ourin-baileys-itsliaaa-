@@ -17,6 +17,7 @@ import { TabTokenManagement } from './components/dashboard/tabs/TabTokenManageme
 import { TabPartnerApi } from './components/dashboard/tabs/TabPartnerApi.tsx';
 import { TabMasterSettings } from './components/dashboard/tabs/TabMasterSettings.tsx';
 import { TabBroadcast } from './components/dashboard/tabs/TabBroadcast.tsx';
+import { TabReports } from './components/dashboard/tabs/TabReports.tsx';
 import { AdminLoginPage } from './components/auth/AdminLoginPage.tsx';
 import {
   MasterAdminProfile,
@@ -49,6 +50,7 @@ export default function App() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'expired' | 'suspended'>('all');
   const [sortBy, setSortBy] = useState<'duration_desc' | 'duration_asc' | 'newest'>('duration_desc');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [pendingReportsCount, setPendingReportsCount] = useState<number>(0);
 
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
@@ -66,18 +68,23 @@ export default function App() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [tenantsRes, statsRes] = await Promise.all([
+      const [tenantsRes, statsRes, reportsRes] = await Promise.all([
         adminFetch('/api/admin/tenants'),
         adminFetch('/api/admin/stats'),
+        adminFetch('/api/admin/reports?status=all'),
       ]);
       const tenantsData = await tenantsRes.json();
       const statsData = await statsRes.json();
+      const reportsData = await reportsRes.json().catch(() => ({}));
 
       if (tenantsData.success) {
         setTenants(tenantsData.data);
       }
       if (statsData.success) {
         setStats(statsData.data);
+      }
+      if (reportsData.success && reportsData.counts) {
+        setPendingReportsCount(Number(reportsData.counts.terkirim) || 0);
       }
     } catch (err: any) {
       showToast('Gagal memuat data dari server: ' + err.message);
@@ -237,6 +244,7 @@ export default function App() {
         setIsCollapsed={setIsSidebarCollapsed}
         totalTenants={tenants.length}
         activeTenants={stats?.activeTenants ?? 0}
+        pendingReportsCount={pendingReportsCount}
         loading={loading}
         onRefresh={fetchData}
         isMobileOpen={isMobileSidebarOpen}
@@ -288,6 +296,13 @@ export default function App() {
                 onOpenDelete={(tenant) => setSelectedTenantForDelete(tenant)}
               />
             </>
+          )}
+
+          {selectedNavTab === 'reports' && (
+            <TabReports
+              showToast={showToast}
+              onCountsUpdated={(counts) => setPendingReportsCount(Number(counts.terkirim) || 0)}
+            />
           )}
 
           {selectedNavTab === 'templates' && (

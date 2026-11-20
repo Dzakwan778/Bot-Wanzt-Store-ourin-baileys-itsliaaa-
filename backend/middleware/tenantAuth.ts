@@ -1,9 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { getSession } from '../services/authManager.ts';
-import { impersonationTokens } from '../../admin-backend/services/adminAuthService.ts';
+import { getSession, revokeTenantSessions } from '../services/authManager.ts';
+import { AdminAuthService, impersonationTokens } from '../../admin-backend/services/adminAuthService.ts';
 import { getMasterDb } from '../../admin-backend/database/masterSqlite.ts';
 import { tenantContextStorage } from '../database/tenantContext.ts';
 import { initTenantDb } from '../database/tenantDbManager.ts';
+import { resolveEffectiveTenantStatus } from '../../admin-backend/services/tenantExpiryUtils.ts';
 
 export interface AuthenticatedTenantSession {
   token: string;
@@ -69,15 +70,37 @@ export function tenantExistsInMaster(tenantId: string): boolean {
   }
 }
 
+export function getMasterTenantEffectiveStatus(tenantId: string): 'active' | 'suspended' | 'expired' {
+  try {
+    const masterDb = getMasterDb();
+    const row = masterDb
+      .prepare('SELECT status, expires_at FROM tenants WHERE tenant_id = ?')
+      .get(tenantId) as { status: string; expires_at: string } | undefined;
+    if (!row) return 'expired';
+    return resolveEffectiveTenantStatus(row.status, row.expires_at);
+  } catch {
+    return 'expired';
+  }
+}
+
 export function resolveAuthenticatedTenant(req: Request): AuthenticatedTenantSession | null {
   const token = extractTenantTokenFromReq(req);
   if (!token) return null;
 
-  // 1. Cek sesi impersonasi Master Admin
+  // 1. Cek sesi impersonasi Master Admin (terikat dengan sesi admin pembuatnya)
   if (impersonationTokens.has(token)) {
     const imp = impersonationTokens.get(token);
-    if (imp && Date.now() < imp.expiresAt) {
+    if (
+      imp &&
+      Date.now() < imp.expiresAt &&
+      AdminAuthService.isAdminSessionActive(imp.adminSessionToken)
+    ) {
       if (!tenantExistsInMaster(imp.tenantId)) {
+        impersonationTokens.delete(token);
+        return null;
+      }
+      if (getMasterTenantEffectiveStatus(imp.tenantId) === 'suspended') {
+        impersonationTokens.delete(token);
         return null;
       }
       let username = `Tenant-${imp.tenantId}`;
@@ -111,6 +134,11 @@ export function resolveAuthenticatedTenant(req: Request): AuthenticatedTenantSes
     return null;
   }
 
+  if (getMasterTenantEffectiveStatus(session.tenantId) === 'suspended') {
+    revokeTenantSessions(session.tenantId);
+    return null;
+  }
+
   return {
     token,
     tenantId: session.tenantId,
@@ -119,12 +147,44 @@ export function resolveAuthenticatedTenant(req: Request): AuthenticatedTenantSes
   };
 }
 
+function isAllowedWhileExpired(req: Request): boolean {
+  const fullPath = `${req.baseUrl || ''}${req.path || ''}`;
+  return (
+    fullPath === '/api/bot/status' ||
+    fullPath === '/api/bot/redeem-token' ||
+    fullPath === '/api/auth/session' ||
+    fullPath === '/api/auth/store-status' ||
+    fullPath === '/api/auth/logout'
+  );
+}
+
 export function requireTenantAuth(req: Request, res: Response, next: NextFunction): void {
   const session = resolveAuthenticatedTenant(req);
   if (!session) {
     res.status(401).json({
       success: false,
       error: 'Akses ditolak. Sesi login tidak valid atau telah berakhir. Silakan login kembali.',
+    });
+    return;
+  }
+
+  const effectiveStatus = getMasterTenantEffectiveStatus(session.tenantId);
+  if (effectiveStatus === 'suspended') {
+    revokeTenantSessions(session.tenantId);
+    AdminAuthService.revokeImpersonationByTenant(session.tenantId);
+    res.status(401).json({
+      success: false,
+      suspended: true,
+      error: 'Akses ditolak. Akun toko Anda sedang ditangguhkan (Suspended) oleh Master Admin.',
+    });
+    return;
+  }
+
+  if (effectiveStatus === 'expired' && !isAllowedWhileExpired(req)) {
+    res.status(403).json({
+      success: false,
+      expired: true,
+      error: 'Akses Ditolak: Masa sewa bot Anda telah kedaluwarsa (Expired). Silakan perpanjang masa aktif menggunakan token voucher.',
     });
     return;
   }

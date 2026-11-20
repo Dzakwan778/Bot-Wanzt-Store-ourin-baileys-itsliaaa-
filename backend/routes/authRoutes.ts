@@ -3,13 +3,11 @@ import {
   initAuth,
   verifyLogin,
   createSession,
-  validateSession,
-  getSession,
   revokeSession,
   updateTenantUsername,
   updateTenantPassword,
 } from '../services/authManager.ts';
-import { impersonationTokens } from '../../admin-backend/routes/adminRoutes.ts';
+import { AdminAuthService } from '../../admin-backend/services/adminAuthService.ts';
 import { TenantManager } from '../../admin-backend/services/tenantManager.ts';
 import { saveStoreInfo, loadStoreInfo } from '../config/configManager.ts';
 import { botManager } from '../botManager.ts';
@@ -20,12 +18,43 @@ import {
   requireTenantAuth,
   resolveAuthenticatedTenant,
   extractTenantTokenFromReq,
+  tenantExistsInMaster,
 } from '../middleware/tenantAuth.ts';
+import { getMasterDb } from '../../admin-backend/database/masterSqlite.ts';
 
 export const authRouter = Router();
 
 // Inisialisasi akun default admin jika belum ada
 initAuth();
+
+export function isHttpsRequest(req: Request): boolean {
+  if (req.secure) return true;
+  const xfProto = req.headers?.['x-forwarded-proto'];
+  const proto = Array.isArray(xfProto) ? xfProto[0] : xfProto;
+  if (typeof proto === 'string' && proto.split(',')[0].trim().toLowerCase() === 'https') {
+    return true;
+  }
+  return false;
+}
+
+export function buildAuthCookieOptions(req: Request, maxAgeMs: number = 7 * 24 * 3600 * 1000) {
+  return {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax' as const,
+    secure: isHttpsRequest(req),
+    maxAge: maxAgeMs,
+  };
+}
+
+function buildClearCookieOptions(req: Request) {
+  return {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax' as const,
+    secure: isHttpsRequest(req),
+  };
+}
 
 // 1. Verifikasi Login (POST /api/auth/login)
 authRouter.post('/login', async (req: Request, res: Response) => {
@@ -38,11 +67,21 @@ authRouter.post('/login', async (req: Request, res: Response) => {
     const resolvedUsername = authResult.username || username;
     const resolvedTenantId = authResult.tenantId || 't_wanzt';
     const accountStatus = await TenantStatusService.enforceRealtimeTenantExpiry(resolvedTenantId);
-    const token = createSession(resolvedUsername, resolvedTenantId);
 
-    // Set cookie untuk memastikan request selanjutnya otomatis teridentifikasi tenant-nya
-    res.cookie('tenant_id', resolvedTenantId, { path: '/', httpOnly: false, maxAge: 7 * 24 * 3600 * 1000 });
-    res.cookie('auth_token', token, { path: '/', httpOnly: false, maxAge: 7 * 24 * 3600 * 1000 });
+    if (accountStatus === 'suspended') {
+      return res.status(403).json({
+        success: false,
+        suspended: true,
+        error: 'Akun toko Anda sedang ditangguhkan (Suspended) oleh Master Admin. Silakan hubungi Master Admin untuk mengaktifkan akun.',
+      });
+    }
+
+    const token = createSession(resolvedUsername, resolvedTenantId);
+    const cookieOpts = buildAuthCookieOptions(req);
+
+    // Set cookie aman (HttpOnly + SameSite=Lax + Secure saat HTTPS)
+    res.cookie('tenant_id', resolvedTenantId, cookieOpts);
+    res.cookie('auth_token', token, cookieOpts);
 
     return res.json({
       success: true,
@@ -54,16 +93,79 @@ authRouter.post('/login', async (req: Request, res: Response) => {
   }
 });
 
+// 1b. Penukaran Kode Impersonasi Sekali Pakai via POST (POST /api/auth/impersonate/exchange)
+authRouter.post('/impersonate/exchange', async (req: Request, res: Response) => {
+  try {
+    const { code } = req.body || {};
+    const exchange = AdminAuthService.exchangeImpersonationCode(String(code || ''));
+    if (exchange.success === false) {
+      return res.status(401).json({ success: false, error: exchange.error });
+    }
+
+    if (!tenantExistsInMaster(exchange.tenantId)) {
+      return res.status(404).json({ success: false, error: 'Tenant tidak ditemukan.' });
+    }
+
+    const accountStatus = await TenantStatusService.enforceRealtimeTenantExpiry(exchange.tenantId);
+    if (accountStatus === 'suspended') {
+      return res.status(403).json({
+        success: false,
+        suspended: true,
+        error: 'Akun tenant sedang ditangguhkan (Suspended).',
+      });
+    }
+
+    let username = `Tenant-${exchange.tenantId}`;
+    try {
+      const masterDb = getMasterDb();
+      const row = masterDb
+        .prepare('SELECT username FROM tenants WHERE tenant_id = ?')
+        .get(exchange.tenantId) as { username?: string } | undefined;
+      if (row?.username) {
+        username = row.username;
+      }
+    } catch {}
+
+    const cookieOpts = buildAuthCookieOptions(req, 30 * 60 * 1000);
+    res.cookie('tenant_id', exchange.tenantId, cookieOpts);
+    res.cookie('auth_token', exchange.token, cookieOpts);
+
+    return res.json({
+      success: true,
+      token: exchange.token,
+      user: {
+        username,
+        tenantId: exchange.tenantId,
+        accountStatus,
+        isImpersonation: true,
+      },
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err?.message || 'Gagal menukar kode impersonasi' });
+  }
+});
+
 // 2. Cek Validitas Sesi (GET /api/auth/session)
 authRouter.get('/session', async (req: Request, res: Response) => {
   const session = resolveAuthenticatedTenant(req);
   if (session) {
     const accountStatus = await TenantStatusService.enforceRealtimeTenantExpiry(session.tenantId);
-    res.cookie('tenant_id', session.tenantId, { path: '/', httpOnly: false, maxAge: 7 * 24 * 3600 * 1000 });
-    res.cookie('auth_token', session.token, { path: '/', httpOnly: false, maxAge: 7 * 24 * 3600 * 1000 });
+    if (accountStatus === 'suspended') {
+      res.clearCookie('tenant_id', buildClearCookieOptions(req));
+      res.clearCookie('auth_token', buildClearCookieOptions(req));
+      return res.json({ authenticated: false, user: null, suspended: true });
+    }
+    const cookieOpts = buildAuthCookieOptions(req);
+    res.cookie('tenant_id', session.tenantId, cookieOpts);
+    res.cookie('auth_token', session.token, cookieOpts);
     return res.json({
       authenticated: true,
-      user: { username: session.username, tenantId: session.tenantId, accountStatus },
+      user: {
+        username: session.username,
+        tenantId: session.tenantId,
+        accountStatus,
+        isImpersonation: session.isImpersonation,
+      },
     });
   }
 
@@ -74,8 +176,9 @@ authRouter.get('/session', async (req: Request, res: Response) => {
 authRouter.post('/logout', (req: Request, res: Response) => {
   const token = extractTenantTokenFromReq(req);
   revokeSession(token);
-  res.clearCookie('tenant_id', { path: '/' });
-  res.clearCookie('auth_token', { path: '/' });
+  const clearOpts = buildClearCookieOptions(req);
+  res.clearCookie('tenant_id', clearOpts);
+  res.clearCookie('auth_token', clearOpts);
   return res.json({ success: true });
 });
 
@@ -173,6 +276,7 @@ authRouter.post('/profile/update-password', requireTenantAuth, (req: Request, re
     }
 
     const { currentPassword, newPassword, confirmPassword } = req.body || {};
+    // Cabut seluruh sesi lama (termasuk token pemanggil lama) lalu terbitkan token rotasi baru
     const result = updateTenantPassword(
       session.tenantId,
       session.username,
@@ -185,9 +289,15 @@ authRouter.post('/profile/update-password', requireTenantAuth, (req: Request, re
       return res.status(400).json({ success: false, error: result.message });
     }
 
+    const rotatedToken = createSession(session.username, session.tenantId);
+    const cookieOpts = buildAuthCookieOptions(req);
+    res.cookie('tenant_id', session.tenantId, cookieOpts);
+    res.cookie('auth_token', rotatedToken, cookieOpts);
+
     return res.json({
       success: true,
       message: result.message,
+      token: rotatedToken,
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err?.message || 'Server error' });

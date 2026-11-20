@@ -11,9 +11,9 @@ Dokumen ini berisi rencana bertahap perbaikan keamanan hasil audit penuh (`secur
 | **Sesi 1** | P0 - Darurat | Isolasi Multi-Tenant & Autentikasi Endpoint Tenant | 5 temuan (2 Critical, 2 High, 1 Cross-Tenant) | `[x] Selesai` |
 | **Sesi 2** | P0/P1 - Darurat | Integritas Webhook Pembayaran & Anti-Manipulasi Harga Order | 2 temuan (1 Critical, 1 High) | `[x] Selesai` |
 | **Sesi 3** | P1 - Tinggi | Anti-SSRF Proxy Eksternal & Peningkatan Kriptografi | 2 temuan (1 Critical, 1 High) | `[x] Selesai` |
-| **Sesi 4** | P2 - Menengah | Siklus Hidup Sesi, Token Impersonasi, Cookie & Atomisitas Kuota | 3 temuan (2 Medium, 1 Low) + Hardening | `[ ] Belum Dimulai` |
-| **Sesi 5** | P2 - Menengah | Lockout Master Admin/Partner IP Trust & Legacy Endpoint | 3 temuan (2 Medium, 1 Low) | `[ ] Belum Dimulai` |
-| **Sesi 6** | P3 - Produksi | CORS, Escape HTML Telegram, Script VPS & Verifikasi Live TLS/Port | 2 temuan (1 Medium, 1 Low) + 1 Needs Validation | `[ ] Belum Dimulai` |
+| **Sesi 4** | P2 - Menengah | Siklus Hidup Sesi, Token Impersonasi, Cookie & Atomisitas Kuota | 3 temuan (2 Medium, 1 Low) + Hardening | `[x] Selesai` |
+| **Sesi 5** | P2 - Menengah | Lockout Master Admin/Partner IP Trust & Legacy Endpoint | 3 temuan (2 Medium, 1 Low) | `[x] Selesai` |
+| **Sesi 6** | P3 - Produksi | CORS, Escape HTML Telegram, Script VPS & Verifikasi Live TLS/Port | 2 temuan (1 Medium, 1 Low) + 1 Needs Validation | `[x] Kode Selesai (Menunggu Cek VPS Live)` |
 
 ---
 
@@ -107,27 +107,27 @@ Dokumen ini berisi rencana bertahap perbaikan keamanan hasil audit penuh (`secur
 **Tujuan**: Mencabut akses lama secara otomatis saat password berubah/admin logout, mengamankan cookie/impersonation, dan menghilangkan race condition kuota.
 
 ### Daftar Temuan & Hardening Terkait
-- [ ] `session.no-revocation-on-pw-change-and-weak-cookies` (Medium)
-- [ ] `session.impersonation-not-revoked-and-url-token` (Low)
-- [ ] `race.promo-quota-toctou-oversubscription` (Medium)
-- [ ] Hardening: Atomisitas `TokenService.redeemToken` (`admin-backend/services/tokenService.ts:177-239`) & hapus redundansi `activeAdminTokens` Set (`admin-backend/services/adminAuthService.ts:14`).
+- [x] `session.no-revocation-on-pw-change-and-weak-cookies` (Medium)
+- [x] `session.impersonation-not-revoked-and-url-token` (Low)
+- [x] `race.promo-quota-toctou-oversubscription` (Medium)
+- [x] Hardening: Atomisitas `TokenService.redeemToken` (`admin-backend/services/tokenService.ts`) & hapus redundansi `activeAdminTokens` Set (`admin-backend/services/adminAuthService.ts`).
 
 ### Tugas Teknis
-- [ ] Di `backend/services/authManager.ts` & `backend/routes/authRoutes.ts`:
-  - Hapus seluruh entri `activeSessions` milik `tenantId` saat `updateTenantPassword()`, suspensi, atau expired.
-  - Set atribut cookie sesi menjadi `httpOnly: true`, `sameSite: 'lax'`, dan `secure: true` (saat HTTPS).
-- [ ] Di `admin-backend/services/adminAuthService.ts` & `admin-backend/routes/impersonateRoutes.ts`:
+- [x] Di `backend/services/authManager.ts`, `backend/middleware/tenantAuth.ts`, & `backend/routes/authRoutes.ts`:
+  - Hapus seluruh entri `activeSessions` milik `tenantId` saat `updateTenantPassword()`, `resetPassword()`, `deleteTenant()`, dan status `suspended` (pada status `expired`, seluruh route operasional diblokir HTTP `403` kecuali `/api/bot/status`, `/api/bot/redeem-token`, dan `/api/auth/session|store-status|logout` untuk mendukung UI perpanjangan token pada `ExpiredAccountModal`).
+  - Set atribut cookie sesi menjadi `httpOnly: true`, `sameSite: 'lax'`, dan `secure: true` (saat HTTPS / `X-Forwarded-Proto: https`).
+- [x] Di `admin-backend/services/adminAuthService.ts` & `admin-backend/routes/impersonateRoutes.ts`:
   - Kaitkan `impersonationTokens` dengan sesi Master Admin pembuatnya agar ikut hangus saat admin logout atau ganti password.
-  - Ubah mekanisme impersonasi menjadi kode penukaran sekali pakai via `POST` alih-alih mengirim token jangka panjang melalui URL `?impersonate=`.
-  - Hapus `activeAdminTokens` Set yang redundan jika validasi sudah sepenuhnya bersandar pada tabel SQLite `admin_sessions`.
-- [ ] Di `backend/handlers/messageDispatcher.ts`, `backend/database/sqlite.ts`, dan `admin-backend/services/tokenService.ts`:
-  - Lakukan reservasi kuota promo secara atomik saat invoice dibuat di dalam `db.transaction(...)` menggunakan `UPDATE promo_codes SET used_count = used_count + 1 WHERE ... AND (quota IS NULL OR used_count < quota)` dan cek `changes === 1` (kembalikan kuota bila invoice batal/expired).
+  - Ubah mekanisme impersonasi menjadi kode penukaran sekali pakai melalui URL fragment (`/#impersonate_code=...`) -> `POST /api/auth/impersonate/exchange` alih-alih mengirim token jangka panjang melalui URL query `?impersonate=`.
+  - Hapus `activeAdminTokens` Set yang redundan sehingga validasi sepenuhnya bersandar pada tabel SQLite `admin_sessions`.
+- [x] Di `backend/handlers/messageDispatcher.ts`, `backend/database/sqlite.ts`, `backend/services/transactionManager.ts`, dan `admin-backend/services/tokenService.ts`:
+  - Lakukan reservasi kuota promo secara atomik saat invoice dibuat di dalam `db.transaction(...)` menggunakan `UPDATE promo_codes SET used_count = used_count + 1 WHERE id = ? AND is_active = 1 AND (quota IS NULL OR used_count < quota)` dan cek `changes === 1` (kembalikan kuota bila invoice gagal dibuat atau transaksi batal/expired).
   - Bungkus `TokenService.redeemToken` dalam `db.transaction(...)` dengan kondisi `WHERE id = ? AND status = 'available'`.
 
 ### Kriteria Selesai (DoD)
-- [ ] Token tenant lama langsung gagal (`401`) setelah ganti password; token impersonasi ikut mati saat Master Admin logout/ganti password.
-- [ ] Dua transaksi paralel pada promo/voucher berkuota 1 hanya meloloskan tepat 1 transaksi.
-- [ ] `npm run lint` & `npm run build` lulus.
+- [x] Token tenant lama langsung gagal (`401`) setelah ganti password; token impersonasi ikut mati saat Master Admin logout/ganti password.
+- [x] Dua transaksi paralel pada promo/voucher berkuota 1 hanya meloloskan tepat 1 transaksi.
+- [x] `npm run lint`, `npm run build`, dan seluruh unit/integration test lulus.
 
 ---
 
@@ -136,19 +136,19 @@ Dokumen ini berisi rencana bertahap perbaikan keamanan hasil audit penuh (`secur
 **Tujuan**: Mencegah spoofing IP lewat header `X-Forwarded-For` pada login Master Admin dan Partner API, serta menutup endpoint legacy `/api/apartment/*`.
 
 ### Daftar Temuan Terkait
-- [ ] `auth.apartment-unauthenticated-read-endpoints` (Medium)
-- [ ] `auth.xff-spoof-admin-lockout-bypass` (Medium)
-- [ ] `ratelimit.xff-spoof-partner-api-bypass` (Low)
+- [x] `auth.apartment-unauthenticated-read-endpoints` (Medium)
+- [x] `auth.xff-spoof-admin-lockout-bypass` (Medium)
+- [x] `ratelimit.xff-spoof-partner-api-bypass` (Low)
 
 ### Tugas Teknis
-- [ ] Evaluasi `backend/routes/apartmentRoutes.ts`: nonaktifkan router legacy `/api/apartment/*` jika sudah tergantikan penuh oleh `/api/admin/*`, atau pasang `requireMasterAdminAuth` pada seluruh route `GET` (`/stats`, `/tenants`, `/current-lease`, `/tenants/:id`) dan hapus fallback `req.query.token`.
-- [ ] Konfigurasikan `app.set('trust proxy', 1)` di Express (`backend/app.ts`) dan perbaiki `normalizeClientIp` (`admin-backend/utils/adminSecurityUtils.ts`) serta `getClientIp` (`admin-backend/routes/partnerPublicRoutes.ts`) agar menggunakan `req.ip` yang terpercaya, bukan parsing manual entri paling kiri header `X-Forwarded-For`.
-- [ ] Tambahkan lockout gagal login berbasis `username` selain IP di `AdminAuthService.login`, dan tambah fallback rate limit global untuk percobaan key invalid di Partner API.
+- [x] Evaluasi `backend/routes/apartmentRoutes.ts`: nonaktifkan router legacy `/api/apartment/*` jika sudah tergantikan penuh oleh `/api/admin/*`, atau pasang `requireMasterAdminAuth` pada seluruh route `GET` (`/stats`, `/tenants`, `/current-lease`, `/tenants/:id`) dan hapus fallback `req.query.token`.
+- [x] Konfigurasikan `app.set('trust proxy', 1)` di Express (`backend/app.ts`) dan perbaiki `normalizeClientIp` (`admin-backend/utils/adminSecurityUtils.ts`) serta `getClientIp` (`admin-backend/routes/partnerPublicRoutes.ts`) agar menggunakan `req.ip` yang terpercaya, bukan parsing manual entri paling kiri header `X-Forwarded-For`.
+- [x] Tambahkan lockout gagal login berbasis `username` selain IP di `AdminAuthService.login`, dan tambah fallback rate limit global untuk percobaan key invalid di Partner API.
 
 ### Kriteria Selesai (DoD)
-- [ ] Mengganti header `X-Forwarded-For` berulang kali tidak mereset hitungan brute-force Master Admin maupun rate limit Partner API.
-- [ ] `GET /api/apartment/*` tanpa token admin ditolak (`401` atau `404` jika dinonaktifkan).
-- [ ] `npm run lint` & `npm run build` lulus.
+- [x] Mengganti header `X-Forwarded-For` berulang kali tidak mereset hitungan brute-force Master Admin maupun rate limit Partner API.
+- [x] `GET /api/apartment/*` tanpa token admin ditolak (`401` atau `404` jika dinonaktifkan).
+- [x] `npm run lint` & `npm run build` lulus.
 
 ---
 
@@ -157,16 +157,16 @@ Dokumen ini berisi rencana bertahap perbaikan keamanan hasil audit penuh (`secur
 **Tujuan**: Mengunci konfigurasi lintas-origin, mencegah injeksi markup Telegram, memperketat script VPS, dan memastikan TLS + firewall live VPS benar.
 
 ### Daftar Temuan & Verifikasi Terkait
-- [ ] `config.wildcard-cors-and-vps-script-exposure` (Medium)
-- [ ] `injection.telegram-html-markup-interpolation` (Low)
+- [x] `config.wildcard-cors-and-vps-script-exposure` (Medium)
+- [x] `injection.telegram-html-markup-interpolation` (Low)
 - [ ] `deploy.vps-tls-and-port5000-exposure` (`needs_validation` - verifikasi oleh pemilik VPS)
-- [ ] Hardening `frontend/src/components/tabs/TabTransaksi.tsx:346` & security HTTP headers
+- [x] Hardening `frontend/src/components/tabs/TabTransaksi.tsx:346` & security HTTP headers
 
 ### Tugas Teknis
-- [ ] Di `backend/app.ts`: ganti `cors()` wildcard menjadi `cors({ origin: allowedOrigins })` berbasis environment variable `CORS_ORIGINS`, serta tambahkan header keamanan dasar (`X-Content-Type-Options: nosniff`, `X-Frame-Options`, `Strict-Transport-Security` saat HTTPS).
-- [ ] Di `backend/services/telegramService.ts`: buat helper `escapeTelegramHtml()` untuk meng-escape karakter `&`, `<`, dan `>` pada seluruh variabel dinamis (`storeName`, `productName`, `variantName`, `reason`, `adminMessage`) sebelum dikirim dengan `parse_mode: 'HTML'`.
-- [ ] Di `frontend/src/components/tabs/TabTransaksi.tsx`: tambahkan validasi eksplisit `https:` sebelum merender `trx.paymentUrl` pada tautan tombol bayar.
-- [ ] Di `deploy-vps.sh`:
+- [x] Di `backend/app.ts`: ganti `cors()` wildcard menjadi `cors({ origin: allowedOrigins })` berbasis environment variable `CORS_ORIGINS`, serta tambahkan header keamanan dasar (`X-Content-Type-Options: nosniff`, `X-Frame-Options`, `Strict-Transport-Security` saat HTTPS).
+- [x] Di `backend/services/telegramService.ts`: buat helper `escapeTelegramHtml()` untuk meng-escape karakter `&`, `<`, dan `>` pada seluruh variabel dinamis (`storeName`, `productName`, `variantName`, `reason`, `adminMessage`) sebelum dikirim dengan `parse_mode: 'HTML'`.
+- [x] Di `frontend/src/components/tabs/TabTransaksi.tsx`: tambahkan validasi eksplisit `https:` sebelum merender `trx.paymentUrl` pada tautan tombol bayar.
+- [x] Di `deploy-vps.sh`:
   - Jalankan Node.js dengan user non-root khusus.
   - Hapus `chmod 755 /root` dan `chmod -R 755 "$APP_DIR"`; terapkan izin ketat `700`/`600` pada folder `database/` dan `auth_info_baileys/`.
   - Bind backend Express ke `127.0.0.1:5000` dan hapus `ufw allow 5000/tcp` agar trafik publik wajib lewat Nginx HTTPS.
@@ -176,8 +176,8 @@ Dokumen ini berisi rencana bertahap perbaikan keamanan hasil audit penuh (`secur
   - Periksa `/etc/nginx/sites-enabled/bot-whatsapp` untuk memastikan sertifikat SSL/TLS (`certbot --nginx`) aktif dan HTTP port 80 dialihkan otomatis ke HTTPS.
 
 ### Kriteria Selesai (DoD)
-- [ ] Origin luar yang tidak terdaftar tidak mendapat header `Access-Control-Allow-Origin: *`.
-- [ ] Seluruh pesan Telegram tidak merender tag HTML liar dari input pengguna/toko.
+- [x] Origin luar yang tidak terdaftar tidak mendapat header `Access-Control-Allow-Origin: *`.
+- [x] Seluruh pesan Telegram tidak merender tag HTML liar dari input pengguna/toko.
 - [ ] `npm run lint` & `npm run build` lolos bersih, dan seluruh checklist VPS live tercentang.
 
 ---

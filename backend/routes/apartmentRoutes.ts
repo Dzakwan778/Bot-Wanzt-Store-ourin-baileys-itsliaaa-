@@ -24,7 +24,7 @@ function requireMasterAdminAuth(req: Request, res: Response, next: NextFunction)
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith('Bearer ')
     ? authHeader.slice(7).trim()
-    : (req.headers['x-master-token'] as string) || (req.query.token as string);
+    : (req.headers['x-master-token'] as string);
 
   if (!token || !validateMasterAdminSession(token)) {
     return res.status(401).json({
@@ -107,7 +107,7 @@ apartmentRouter.get('/verify-session', (req: Request, res: Response) => {
  * GET /api/apartment/stats
  * Ambil ringkasan statistik sewa seluruh unit
  */
-apartmentRouter.get('/stats', (_req: Request, res: Response) => {
+apartmentRouter.get('/stats', requireMasterAdminAuth, (_req: Request, res: Response) => {
   try {
     const stats = getApartmentStats();
     res.json({ success: true, data: stats });
@@ -118,9 +118,9 @@ apartmentRouter.get('/stats', (_req: Request, res: Response) => {
 
 /**
  * GET /api/apartment/tenants
- * Ambil daftar seluruh unit apartemen (publik/terautentikasi)
+ * Ambil daftar seluruh unit apartemen (Memerlukan Auth Master Admin)
  */
-apartmentRouter.get('/tenants', (_req: Request, res: Response) => {
+apartmentRouter.get('/tenants', requireMasterAdminAuth, (_req: Request, res: Response) => {
   try {
     const tenants = getAllTenants();
     res.json({ success: true, data: tenants });
@@ -131,9 +131,9 @@ apartmentRouter.get('/tenants', (_req: Request, res: Response) => {
 
 /**
  * GET /api/apartment/current-lease
- * Ambil data sewa unit saat ini (Unit 101) untuk ditampilkan di banner dashboard toko
+ * Ambil data sewa unit saat ini (Unit 101) (Memerlukan Auth Master Admin)
  */
-apartmentRouter.get('/current-lease', (_req: Request, res: Response) => {
+apartmentRouter.get('/current-lease', requireMasterAdminAuth, (_req: Request, res: Response) => {
   try {
     // Ambil unit-101 sebagai unit utama toko aktif
     const tenant = getTenantById('unit-101');
@@ -148,9 +148,9 @@ apartmentRouter.get('/current-lease', (_req: Request, res: Response) => {
 
 /**
  * GET /api/apartment/tenants/:id
- * Ambil rincian satu unit apartemen
+ * Ambil rincian satu unit apartemen (Memerlukan Auth Master Admin)
  */
-apartmentRouter.get('/tenants/:id', (req: Request, res: Response) => {
+apartmentRouter.get('/tenants/:id', requireMasterAdminAuth, (req: Request, res: Response) => {
   try {
     const tenant = getTenantById(String(req.params.id));
     if (!tenant) {

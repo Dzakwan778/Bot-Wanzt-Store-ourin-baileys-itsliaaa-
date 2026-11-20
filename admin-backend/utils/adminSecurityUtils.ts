@@ -116,19 +116,16 @@ export function validatePasswordChange(
   return { valid: true };
 }
 
+function cleanSingleIp(raw?: string): string {
+  if (typeof raw !== 'string') return '';
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.includes(',')) return '';
+  return trimmed.replace(/^::ffff:/i, '');
+}
+
 export function normalizeClientIp(
   reqIp?: string,
-  xForwardedFor?: string | string[]
+  socketRemoteAddress?: string
 ): string {
-  if (Array.isArray(xForwardedFor) && xForwardedFor.length > 0) {
-    const first = xForwardedFor[0].split(',')[0]?.trim();
-    if (first) return first;
-  } else if (typeof xForwardedFor === 'string' && xForwardedFor.trim()) {
-    const first = xForwardedFor.split(',')[0]?.trim();
-    if (first) return first;
-  }
-  if (reqIp && reqIp.trim()) {
-    return reqIp.trim();
-  }
-  return 'unknown';
+  return cleanSingleIp(reqIp) || cleanSingleIp(socketRemoteAddress) || 'unknown';
 }

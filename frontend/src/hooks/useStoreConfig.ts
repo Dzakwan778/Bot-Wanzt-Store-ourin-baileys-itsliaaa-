@@ -9,8 +9,18 @@ export function useStoreConfig(
   xavieraBaseUrl: string,
   showToast: (msg: string) => void
 ) {
-  // Store Info State
+  // Store Info State (tersimpan valid di server) & Draft State (input aktif di Info Profil)
   const [storeInfo, setStoreInfo] = useState<StoreInfoConfig>({
+    storeName: '',
+    ownerName: '',
+    ownerNumber: '',
+    adminName: '',
+    adminNumber: '',
+    webLink: '',
+    telegramBot: '',
+    waLink: '',
+  });
+  const [storeInfoDraft, setStoreInfoDraft] = useState<StoreInfoConfig>({
     storeName: '',
     ownerName: '',
     ownerNumber: '',
@@ -150,7 +160,10 @@ export function useStoreConfig(
     if (config.confirmPromoSuccessText) setConfirmPromoSuccessText(config.confirmPromoSuccessText);
     if (config.confirmPromoInvalidText) setConfirmPromoInvalidText(config.confirmPromoInvalidText);
     if (config.confirmFooterText) setConfirmFooterText(config.confirmFooterText);
-    if (config.storeInfo) setStoreInfo(config.storeInfo);
+    if (config.storeInfo) {
+      setStoreInfo(config.storeInfo);
+      setStoreInfoDraft(config.storeInfo);
+    }
     if (config.menuFooterText) setMenuFooterText(config.menuFooterText);
     if (config.listFooterText) setListFooterText(config.listFooterText);
     if (config.carouselFooterText) setCarouselFooterText(config.carouselFooterText);
@@ -206,7 +219,6 @@ export function useStoreConfig(
     setIsSavingConfig(true);
     try {
       let payload: any = {
-        storeInfo,
         menuOutputText,
         menuFooterText,
         menuButtons,
@@ -300,6 +312,8 @@ export function useStoreConfig(
   return {
     storeInfo,
     setStoreInfo,
+    storeInfoDraft,
+    setStoreInfoDraft,
     lunasQrisApiKey,
     setLunasQrisApiKey,
     lunasQrisSecretKey,

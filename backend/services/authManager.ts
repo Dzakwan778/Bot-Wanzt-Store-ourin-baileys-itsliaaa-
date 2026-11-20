@@ -237,6 +237,21 @@ export function revokeSession(token?: string | null): void {
 }
 
 /**
+ * Hapus seluruh sesi aktif milik tenant tertentu (misalnya saat ganti password, reset password, suspend, atau hapus tenant)
+ */
+export function revokeTenantSessions(tenantId: string, exceptToken?: string | null): number {
+  if (!tenantId) return 0;
+  let revokedCount = 0;
+  for (const [token, data] of activeSessions.entries()) {
+    if (data.tenantId === tenantId && (!exceptToken || token !== exceptToken)) {
+      activeSessions.delete(token);
+      revokedCount++;
+    }
+  }
+  return revokedCount;
+}
+
+/**
  * Hapus sesi kedaluwarsa dari memori
  */
 function cleanExpiredSessions(): void {
@@ -336,7 +351,8 @@ export function updateTenantPassword(
   username: string,
   currentPasswordRaw: string,
   newPasswordRaw: string,
-  confirmPasswordRaw: string
+  confirmPasswordRaw: string,
+  exceptToken?: string | null
 ): { success: boolean; message: string } {
   try {
     const currentPassword = (currentPasswordRaw || '').trim();
@@ -423,6 +439,9 @@ export function updateTenantPassword(
         UPDATE tenants SET password_hash = ?, salt = ? WHERE id = ?
       `).run(newLocalHash, newSalt, tenantId);
     } catch {}
+
+    // 3. Cabut seluruh sesi lama tenant agar token lama langsung invalid (401)
+    revokeTenantSessions(tenantId, exceptToken);
 
     return {
       success: true,

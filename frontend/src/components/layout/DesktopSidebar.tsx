@@ -17,6 +17,7 @@ import {
   X,
   LogOut,
   Bot,
+  Flag,
 } from 'lucide-react';
 import { BotStatusResponse, StoreInfoConfig } from '../../types/dashboard.types';
 
@@ -167,6 +168,12 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({
       badge: botData.accountStatus === 'suspended' ? 'Suspend' : botData.accountStatus === 'expired' ? 'Expired' : undefined,
       badgeColor: botData.accountStatus === 'suspended' ? 'bg-rose-600' : 'bg-amber-600',
       aliases: ['Bot Management', 'ManagementBot', 'Masa Sewa', 'Voucher Token'],
+    },
+    {
+      id: 'Laporan',
+      label: 'Laporan',
+      icon: Flag,
+      aliases: ['Laporan Masalah', 'Lapor', 'tabLaporan'],
     },
   ];
 

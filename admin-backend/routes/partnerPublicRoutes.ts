@@ -7,11 +7,13 @@ import {
   parsePartnerDuration,
   SlidingWindowRateLimiter,
 } from '../services/partnerApiUtils.ts';
+import { normalizeClientIp } from '../utils/adminSecurityUtils.ts';
 
 export const partnerPublicRouter = Router();
 
-// Rate limiter: maksimal 60 request per menit per partner key / IP
+// Rate limiter: maksimal 60 request per menit per partner key / IP & fallback global key invalid
 const partnerRateLimiter = new SlidingWindowRateLimiter(60, 60_000);
+const partnerGlobalInvalidLimiter = new SlidingWindowRateLimiter(60, 60_000);
 
 interface AuthenticatedPartnerRequest extends Request {
   partner?: {
@@ -24,11 +26,7 @@ interface AuthenticatedPartnerRequest extends Request {
 }
 
 function getClientIp(req: Request): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string' && forwarded.trim()) {
-    return forwarded.split(',')[0].trim();
-  }
-  return req.ip || req.socket?.remoteAddress || 'unknown';
+  return normalizeClientIp(req.ip, req.socket?.remoteAddress);
 }
 
 function authenticatePartnerApi(
@@ -62,14 +60,19 @@ function authenticatePartnerApi(
       });
     }
 
-    // Rate limit percobaan key tidak valid berbasis IP
-    const invalidLimit = partnerRateLimiter.check(`invalid_ip:${clientIp}`);
-    if (!invalidLimit.allowed) {
-      res.setHeader('Retry-After', String(invalidLimit.retryAfterSeconds));
+    // Rate limit percobaan key tidak valid berbasis IP terpercaya + fallback global
+    const invalidIpLimit = partnerRateLimiter.check(`invalid_ip:${clientIp}`);
+    const invalidGlobalLimit = partnerGlobalInvalidLimiter.check('global_invalid_key');
+    if (!invalidIpLimit.allowed || !invalidGlobalLimit.allowed) {
+      const retryAfterSeconds = Math.max(
+        invalidIpLimit.allowed ? 0 : invalidIpLimit.retryAfterSeconds,
+        invalidGlobalLimit.allowed ? 0 : invalidGlobalLimit.retryAfterSeconds
+      );
+      res.setHeader('Retry-After', String(retryAfterSeconds));
       return res.status(429).json({
         success: false,
         error: 'RATE_LIMIT_EXCEEDED',
-        message: `Terlalu banyak percobaan otentikasi gagal. Coba lagi dalam ${invalidLimit.retryAfterSeconds} detik.`,
+        message: `Terlalu banyak percobaan otentikasi gagal. Coba lagi dalam ${retryAfterSeconds} detik.`,
       });
     }
 

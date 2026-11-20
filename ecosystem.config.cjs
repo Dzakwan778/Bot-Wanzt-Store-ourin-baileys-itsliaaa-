@@ -27,8 +27,9 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: 5000,
-        HOST: '0.0.0.0',
+        HOST: '127.0.0.1',
         DOMAIN: 'testbot.wanma2.my.id',
+        CORS_ORIGINS: 'https://testbot.wanma2.my.id',
       },
     },
 

@@ -2,6 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import { getMasterDb } from '../database/masterSqlite.ts';
 import { getBotManager } from '../../backend/botManager.ts';
+import { revokeTenantSessions } from '../../backend/services/authManager.ts';
+import { AdminAuthService } from './adminAuthService.ts';
 import { TenantRecord } from '../types/admin.types.ts';
 import { resolveEffectiveTenantStatus, TenantAccountStatus } from './tenantExpiryUtils.ts';
 
@@ -14,6 +16,11 @@ export class TenantStatusService {
 
     if (update.changes === 0) {
       throw new Error(`Tenant dengan ID ${tenantId} tidak ditemukan`);
+    }
+
+    if (status === 'suspended') {
+      revokeTenantSessions(tenantId);
+      AdminAuthService.revokeImpersonationByTenant(tenantId);
     }
 
     if (status === 'suspended' || status === 'expired') {

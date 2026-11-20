@@ -98,9 +98,12 @@ describe('adminSecurityUtils', () => {
     });
   });
 
-  it('normalizes client IP from forwarded headers or socket IP', () => {
-    assert.equal(normalizeClientIp('127.0.0.1', '203.0.113.10, 10.0.0.1'), '203.0.113.10');
+  it('uses trusted req.ip / socket IP and never trusts spoofed multi-hop headers', () => {
+    assert.equal(normalizeClientIp('203.0.113.10', '198.51.100.1'), '203.0.113.10');
+    assert.equal(normalizeClientIp('::ffff:198.51.100.25', '127.0.0.1'), '198.51.100.25');
     assert.equal(normalizeClientIp('127.0.0.1', undefined), '127.0.0.1');
+    assert.equal(normalizeClientIp(undefined, '::ffff:127.0.0.1'), '127.0.0.1');
+    assert.equal(normalizeClientIp('198.51.100.1, 10.0.0.1', '127.0.0.1'), '127.0.0.1');
     assert.equal(normalizeClientIp(undefined, undefined), 'unknown');
   });
 });

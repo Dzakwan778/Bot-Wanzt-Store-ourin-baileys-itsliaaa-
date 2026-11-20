@@ -169,6 +169,18 @@ export class SlidingWindowRateLimiter {
 
     timestamps.push(now);
     this.hits.set(identifier, timestamps);
+
+    if (this.hits.size > 1000) {
+      for (const [key, list] of this.hits.entries()) {
+        const fresh = list.filter((t) => t > windowStart);
+        if (fresh.length === 0) {
+          this.hits.delete(key);
+        } else if (fresh.length !== list.length) {
+          this.hits.set(key, fresh);
+        }
+      }
+    }
+
     return {
       allowed: true,
       remaining: Math.max(0, this.maxRequests - timestamps.length),

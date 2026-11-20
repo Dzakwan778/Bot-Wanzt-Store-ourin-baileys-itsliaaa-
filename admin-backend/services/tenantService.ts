@@ -3,6 +3,8 @@ import path from 'path';
 import { getMasterDb, hashPassword } from '../database/masterSqlite.ts';
 import { initTenantDb, deleteTenantDb, getTenantDb } from '../../backend/database/tenantDbManager.ts';
 import { getBotManager } from '../../backend/botManager.ts';
+import { revokeTenantSessions } from '../../backend/services/authManager.ts';
+import { AdminAuthService } from './adminAuthService.ts';
 import { TenantRecord, CreateTenantInput, CreateTenantResult, GlobalStats } from '../types/admin.types.ts';
 import { normalizeIndonesianPhone } from '../utils/phoneUtils.ts';
 import { generateCleanId, generateStructuredUsername, generateRandomPassword } from '../utils/generatorUtils.ts';
@@ -226,6 +228,9 @@ export class TenantService {
       WHERE tenant_id = ?
     `).run(passwordHash, tenantId);
 
+    revokeTenantSessions(tenantId);
+    AdminAuthService.revokeImpersonationByTenant(tenantId);
+
     return {
       tenant_id: tenantId,
       username: tenant.username,
@@ -238,6 +243,9 @@ export class TenantService {
     if (tenantId === 't_wanzt') {
       throw new Error('Tenant default "t_wanzt" tidak boleh dihapus.');
     }
+
+    revokeTenantSessions(tenantId);
+    AdminAuthService.revokeImpersonationByTenant(tenantId);
 
     db.prepare('DELETE FROM tenants WHERE tenant_id = ?').run(tenantId);
     db.prepare('DELETE FROM subscription_logs WHERE tenant_id = ?').run(tenantId);

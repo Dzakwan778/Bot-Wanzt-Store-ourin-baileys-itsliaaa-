@@ -55,10 +55,16 @@ export function initMasterDatabase(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_admin_sessions_admin ON admin_sessions (admin_id);
   `);
 
-  // Tabel Pelacakan Percobaan Login Gagal (Brute-Force Protection)
+  // Tabel Pelacakan Percobaan Login Gagal Berbasis IP & Username (Brute-Force Protection)
   masterDb.exec(`
     CREATE TABLE IF NOT EXISTS admin_login_attempts (
       ip TEXT PRIMARY KEY,
+      failed_count INTEGER NOT NULL DEFAULT 0,
+      locked_until TEXT,
+      last_attempt_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS admin_username_login_attempts (
+      username TEXT PRIMARY KEY,
       failed_count INTEGER NOT NULL DEFAULT 0,
       locked_until TEXT,
       last_attempt_at TEXT NOT NULL
@@ -221,6 +227,40 @@ export function initMasterDatabase(): Database.Database {
       sent_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_broadcast_logs_campaign_run ON broadcast_logs (campaign_id, run_number);
+  `);
+
+  // Tabel Laporan Masalah Tenant (terpusat di master.db agar admin bisa memantau & merespons seluruh tenant)
+  masterDb.exec(`
+    CREATE TABLE IF NOT EXISTS tenant_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      owner_name TEXT NOT NULL DEFAULT '',
+      owner_phone TEXT NOT NULL DEFAULT '',
+      store_name TEXT NOT NULL DEFAULT '',
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'terkirim',
+      reply_enabled INTEGER NOT NULL DEFAULT 0,
+      admin_reply TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_tenant_reports_tenant_created ON tenant_reports (tenant_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_tenant_reports_status_created ON tenant_reports (status, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS tenant_report_media (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_id INTEGER NOT NULL,
+      tenant_id TEXT NOT NULL,
+      media_type TEXT NOT NULL,
+      original_name TEXT NOT NULL,
+      stored_filename TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (report_id) REFERENCES tenant_reports(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_tenant_report_media_report ON tenant_report_media (report_id);
   `);
 
   const masterAdminCount = (masterDb.prepare('SELECT COUNT(*) as count FROM master_admins').get() as { count: number }).count;

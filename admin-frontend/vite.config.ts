@@ -23,6 +23,7 @@ export default defineConfig(() => {
     server: {
       port: 3001,
       host: '0.0.0.0',
+      allowedHosts: true as const,
       hmr: false as const,
       ws: false as const,
       watch: {

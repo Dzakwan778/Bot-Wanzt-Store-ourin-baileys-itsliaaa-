@@ -11,16 +11,16 @@ import { tokenRouter } from './tokenRoutes.ts';
 import { partnerAdminRouter } from './partnerAdminRoutes.ts';
 import { masterSettingsRouter } from './masterSettingsRoutes.ts';
 import { broadcastRouter } from './broadcastRoutes.ts';
+import { reportAdminRouter } from './reportAdminRoutes.ts';
 import {
   AdminAuthService,
-  activeAdminTokens,
   impersonationTokens,
 } from '../services/adminAuthService.ts';
 
 export const adminRouter = Router();
 
 // Re-export untuk backward compatibility
-export { activeAdminTokens, impersonationTokens };
+export { impersonationTokens };
 
 export function requireMasterAdminAuth(req: Request, res: Response, next: NextFunction) {
   const session = AdminAuthService.verifySession(req.headers.authorization);
@@ -32,6 +32,7 @@ export function requireMasterAdminAuth(req: Request, res: Response, next: NextFu
   }
 
   (req as any).masterAdmin = session.admin;
+  (req as any).masterAdminSessionToken = session.token;
   next();
 }
 
@@ -52,4 +53,5 @@ adminRouter.use('/', tokenRouter);
 adminRouter.use('/', partnerAdminRouter);
 adminRouter.use('/', masterSettingsRouter);
 adminRouter.use('/', broadcastRouter);
+adminRouter.use('/', reportAdminRouter);
 adminRouter.use('/telegram', telegramAdminRouter);

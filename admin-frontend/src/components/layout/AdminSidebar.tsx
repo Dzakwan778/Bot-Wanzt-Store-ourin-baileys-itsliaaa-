@@ -16,9 +16,10 @@ import {
   Ticket,
   KeyRound,
   LogOut,
+  Flag,
 } from 'lucide-react';
 
-export type AdminNavTab = 'units' | 'templates' | 'telegram' | 'tokens' | 'partners' | 'stats' | 'broadcast' | 'settings';
+export type AdminNavTab = 'units' | 'reports' | 'templates' | 'telegram' | 'tokens' | 'partners' | 'stats' | 'broadcast' | 'settings';
 
 interface AdminSidebarProps {
   selectedTab: AdminNavTab;
@@ -27,6 +28,7 @@ interface AdminSidebarProps {
   setIsCollapsed: (collapsed: boolean | ((prev: boolean) => boolean)) => void;
   totalTenants: number;
   activeTenants: number;
+  pendingReportsCount?: number;
   loading: boolean;
   onRefresh: () => void;
   isMobileOpen: boolean;
@@ -51,6 +53,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   setIsCollapsed,
   totalTenants,
   activeTenants,
+  pendingReportsCount = 0,
   loading,
   onRefresh,
   isMobileOpen,
@@ -65,6 +68,13 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       icon: Building2,
       badge: totalTenants > 0 ? totalTenants : undefined,
       description: 'Manajemen unit penyewa',
+    },
+    {
+      id: 'reports',
+      label: 'Laporan Tenant',
+      icon: Flag,
+      badge: pendingReportsCount > 0 ? pendingReportsCount : undefined,
+      description: 'Laporan kendala dari para tenant',
     },
     {
       id: 'templates',

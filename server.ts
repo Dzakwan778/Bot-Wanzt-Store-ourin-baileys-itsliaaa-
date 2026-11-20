@@ -57,32 +57,49 @@ async function initializeFullApp(isProduction: boolean): Promise<Express> {
   if (!isProduction && viteModule) {
     const { createServer: createViteServer } = viteModule;
 
-    // Mode Development: Inisialisasi Vite dev server untuk Tenant (frontend) dan Master Admin (admin-frontend) secara paralel.
-    // HMR dan WebSocket (hmr: false, ws: false) dinonaktifkan sesuai batasan runtime environment agar tidak bentrok di port 24678.
-    const [viteTenant, viteAdmin] = await Promise.all([
-      createViteServer({
-        root: path.resolve(__dirname, 'frontend'),
-        server: {
-          middlewareMode: true,
-          hmr: false,
-          ws: false,
-        },
-        appType: 'spa',
-      }),
-      createViteServer({
-        root: path.resolve(__dirname, 'admin-frontend'),
-        base: '/admin/',
-        configFile: path.resolve(__dirname, 'admin-frontend', 'vite.config.ts'),
-        server: {
-          middlewareMode: true,
-          hmr: false,
-          ws: false,
-        },
-        appType: 'spa',
-      }),
-    ]);
+    // Mode Development: Inisialisasi Vite Tenant terlebih dahulu agar startup & healthcheck cepat.
+    // HMR dan WebSocket (hmr: false, ws: false) dinonaktifkan sesuai batasan runtime environment,
+    // dan allowedHosts: true mengizinkan Host proxy AI Studio maupun domain VPS.
+    const viteTenant = await createViteServer({
+      root: path.resolve(__dirname, 'frontend'),
+      configFile: path.resolve(__dirname, 'frontend', 'vite.config.ts'),
+      server: {
+        middlewareMode: true,
+        allowedHosts: true,
+        hmr: false,
+        ws: false,
+      },
+      appType: 'spa',
+    });
 
-    serverApp.use((req, res, next) => {
+    let viteAdminPromise: Promise<Awaited<ReturnType<typeof createViteServer>>> | null = null;
+    const getViteAdmin = () => {
+      if (!viteAdminPromise) {
+        viteAdminPromise = createViteServer({
+          root: path.resolve(__dirname, 'admin-frontend'),
+          base: '/admin/',
+          configFile: path.resolve(__dirname, 'admin-frontend', 'vite.config.ts'),
+          server: {
+            middlewareMode: true,
+            allowedHosts: true,
+            hmr: false,
+            ws: false,
+          },
+          appType: 'spa',
+        }).catch((err) => {
+          viteAdminPromise = null;
+          throw err;
+        });
+      }
+      return viteAdminPromise;
+    };
+
+    // Pre-warm Vite Admin secara tenang setelah server siap melayani tenant
+    setTimeout(() => {
+      void getViteAdmin().catch(() => {});
+    }, 1500);
+
+    serverApp.use(async (req, res, next) => {
       // Lewati rute API
       if (req.path.startsWith('/api')) {
         return next();
@@ -93,15 +110,20 @@ async function initializeFullApp(isProduction: boolean): Promise<Express> {
         return res.redirect(301, '/admin/');
       }
 
-      // Deteksi Subdomain admin.wanma2.my.id ATAU path /admin/
+      // Deteksi Subdomain admin.* ATAU path /admin/
       const isHostAdmin = req.hostname.startsWith('admin.');
       const isPathAdmin = req.path.startsWith('/admin/');
 
       if (isHostAdmin || isPathAdmin) {
-        return viteAdmin.middlewares(req, res, next);
+        try {
+          const viteAdmin = await getViteAdmin();
+          return viteAdmin.middlewares(req, res, next);
+        } catch (err) {
+          return next(err);
+        }
       }
 
-      // Default: Sajikan Web Dashboard Pengguna (dashboard.wanma2.my.id)
+      // Default: Sajikan Web Dashboard Pengguna
       return viteTenant.middlewares(req, res, next);
     });
   } else {
@@ -137,17 +159,19 @@ async function initializeFullApp(isProduction: boolean): Promise<Express> {
     });
   }
 
-  try {
-    startExpiryWarningScheduler();
-  } catch (schedErr) {
-    console.error('[Wanzt Store] Gagal memulai scheduler masa sewa:', schedErr);
-  }
+  setImmediate(() => {
+    try {
+      startExpiryWarningScheduler();
+    } catch (schedErr) {
+      console.error('[Wanzt Store] Gagal memulai scheduler masa sewa:', schedErr);
+    }
 
-  try {
-    startBroadcastScheduler();
-  } catch (broadcastSchedErr) {
-    console.error('[Wanzt Store] Gagal memulai scheduler broadcast:', broadcastSchedErr);
-  }
+    try {
+      startBroadcastScheduler();
+    } catch (broadcastSchedErr) {
+      console.error('[Wanzt Store] Gagal memulai scheduler broadcast:', broadcastSchedErr);
+    }
+  });
 
   return serverApp;
 }
@@ -158,17 +182,23 @@ function startServer() {
 
   let readyApp: Express | null = null;
   let initError: unknown = null;
+  let readyPromise: Promise<Express> | null = null;
 
-  const readyPromise = initializeFullApp(isProduction)
-    .then((app) => {
-      readyApp = app;
-      return app;
-    })
-    .catch((err) => {
-      initError = err;
-      console.error('[Wanzt Store] Gagal menginisialisasi aplikasi:', err);
-      throw err;
-    });
+  const ensureInitialized = (): Promise<Express> => {
+    if (!readyPromise) {
+      readyPromise = initializeFullApp(isProduction)
+        .then((app) => {
+          readyApp = app;
+          return app;
+        })
+        .catch((err) => {
+          initError = err;
+          console.error('[Wanzt Store] Gagal menginisialisasi aplikasi:', err);
+          throw err;
+        });
+    }
+    return readyPromise;
+  };
 
   const httpServer = http.createServer(async (req, res) => {
     const reqUrl = req.url || '/';
@@ -197,7 +227,7 @@ function startServer() {
     }
 
     try {
-      const app = readyApp ?? (await readyPromise);
+      const app = readyApp ?? (await ensureInitialized());
       app(req as any, res as any);
     } catch (err) {
       console.error('[Wanzt Store] Request gagal saat inisialisasi:', err);
@@ -216,6 +246,9 @@ function startServer() {
   httpServer.listen(port, '0.0.0.0', () => {
     console.log(`[Wanzt Store] Server berjalan di http://0.0.0.0:${port}`);
     console.log(`[Wanzt Store] Mode: ${isProduction ? 'Production' : 'Development'}`);
+    setTimeout(() => {
+      void ensureInitialized().catch(() => {});
+    }, 50);
   });
 }
 

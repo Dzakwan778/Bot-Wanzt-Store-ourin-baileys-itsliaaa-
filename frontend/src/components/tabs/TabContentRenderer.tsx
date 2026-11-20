@@ -12,6 +12,7 @@ import { TabGrup } from './TabGrup';
 import { TabTransaksi } from './TabTransaksi';
 import { TabAccountSecurity } from './TabAccountSecurity';
 import { TabBotManagement } from './TabBotManagement';
+import { TabLaporan } from './TabLaporan';
 import { useStoreConfig } from '../../hooks/useStoreConfig';
 import { useXavieraData } from '../../hooks/useXavieraData';
 import { useWhatsAppGroups } from '../../hooks/useWhatsAppGroups';
@@ -35,6 +36,7 @@ interface TabContentRendererProps {
   promosState: ReturnType<typeof usePromos>;
   lunasQrisData?: ReturnType<typeof useLunasQrisData>;
   showToast: (msg: string) => void;
+  isStoreInfoCompleteForPairing?: boolean;
   currentUsername?: string;
   onUsernameUpdated?: (newUsername: string) => void;
 }
@@ -52,6 +54,7 @@ export const TabContentRenderer: React.FC<TabContentRendererProps> = ({
   promosState,
   lunasQrisData,
   showToast,
+  isStoreInfoCompleteForPairing = true,
   currentUsername,
   onUsernameUpdated,
 }) => {
@@ -59,13 +62,17 @@ export const TabContentRenderer: React.FC<TabContentRendererProps> = ({
   if (selectedTab === 'Info Profil' || selectedTab === 'Store Info') {
     return (
       <TabStoreInfo
-        storeInfo={storeConfig.storeInfo}
-        setStoreInfo={storeConfig.setStoreInfo}
+        storeInfo={storeConfig.storeInfoDraft}
+        setStoreInfo={storeConfig.setStoreInfoDraft}
         isSavingConfig={storeConfig.isSavingConfig}
-        onSave={(updatedStoreInfo?: any) => {
-          const toSave = updatedStoreInfo || storeConfig.storeInfo;
-          storeConfig.setStoreInfo(toSave);
-          storeConfig.syncConfigToServer({ storeInfo: toSave });
+        onSave={async (updatedStoreInfo?: any) => {
+          const toSave = updatedStoreInfo || storeConfig.storeInfoDraft;
+          const ok = await storeConfig.syncConfigToServer({ storeInfo: toSave });
+          if (ok) {
+            storeConfig.setStoreInfo(toSave);
+            storeConfig.setStoreInfoDraft(toSave);
+          }
+          return ok;
         }}
         showToast={showToast}
       />
@@ -101,6 +108,7 @@ export const TabContentRenderer: React.FC<TabContentRendererProps> = ({
         onStop={botConn.handleStop}
         onReset={botConn.handleReset}
         onCopyCode={botConn.handleCopyCode}
+        isStoreInfoComplete={isStoreInfoCompleteForPairing}
         showToast={showToast}
       />
     );
@@ -497,6 +505,16 @@ export const TabContentRenderer: React.FC<TabContentRendererProps> = ({
         showToast={showToast}
       />
     );
+  }
+
+  // 13. LAPORAN MASALAH TENANT
+  if (
+    selectedTab === 'Laporan' ||
+    selectedTab === 'Laporan Masalah' ||
+    selectedTab === 'Lapor' ||
+    selectedTab === 'tabLaporan'
+  ) {
+    return <TabLaporan showToast={showToast} />;
   }
 
   return (
