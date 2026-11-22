@@ -6,6 +6,7 @@ import tailwindcss from '@tailwindcss/vite';
 // https://vite.dev/config/
 export default defineConfig(() => {
   return {
+    root: path.resolve(import.meta.dirname),
     base: '/admin/',
     cacheDir: path.resolve(import.meta.dirname, '../node_modules/.vite-admin'),
     plugins: [

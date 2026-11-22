@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Wanzt Store Dashboard</title>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            DEFAULT: '#0084D1',
+                            light: '#E6F3FB',
+                            hover: '#006BA6'
+                        },
+                        surface: '#F7F9FC',
+                        border: '#E3E9EF',
+                        text: {
+                            main: '#202A35',
+                            muted: '#7B8794'
+                        },
+                        status: {
+                            success: '#16A879',
+                            warning: '#D98A16',
+                            danger: '#D94B62'
+                        }
+                    },
+                    boxShadow: {
+                        'card': '0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 4px 12px -4px rgba(0, 0, 0, 0.02)',
+                        'floating': '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        /* Custom Scrollbar for filter chips */
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        
+        /* Smooth transitions */
+        .page-transition {
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+        }
+        .page-hidden {
+            opacity: 0;
+            pointer-events: none;
+            position: absolute;
+            transform: translateY(10px);
+            visibility: hidden;
+        }
+        .page-active {
+            opacity: 1;
+            transform: translateY(0);
+            position: relative;
+            visibility: visible;
+        }
+    </style>
+</head>
+<body class="bg-surface text-text-main antialiased font-sans selection:bg-brand selection:text-white pb-6">
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed top-16 left-1/2 transform -translate-x-1/2 z-[60] flex flex-col gap-2 w-[90%] max-w-[340px] pointer-events-none"></div>
+
+    <!-- Top Navigation Bar -->
+    <header class="sticky top-0 z-40 bg-white border-b border-border px-4 py-3 flex items-center justify-between shadow-sm">
+        <div class="flex items-center gap-3">
+            <button id="menu-btn" class="p-2 -ml-2 text-text-main hover:bg-gray-100 rounded-lg transition-colors active:scale-95" aria-label="Open Menu">
+                <i data-lucide="menu" class="w-6 h-6"></i>
+            </button>
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 bg-brand text-white rounded-lg flex items-center justify-center font-bold text-sm shadow-sm">
+                    W
+                </div>
+                <div class="flex flex-col">
+                    <h1 class="text-sm font-semibold leading-tight">Wanzt Store</h1>
+                    <span class="text-[10px] text-text-muted leading-tight">Dashboard Panel</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Connection Status Indicator -->
+        <div class="flex items-center gap-1.5 bg-green-50 border border-green-100 px-2.5 py-1 rounded-full">
+            <div class="w-2 h-2 rounded-full bg-status-success animate-pulse"></div>
+            <span class="text-xs font-medium text-status-success">Connected</span>
+        </div>
+    </header>
+
+    <!-- Navigation Drawer & Overlay -->
+    <div id="drawer-overlay" class="fixed inset-0 bg-black/40 z-50 hidden opacity-0 transition-opacity duration-300"></div>
+    
+    <nav id="drawer" class="fixed top-0 left-0 bottom-0 w-[85%] max-w-[320px] bg-white z-50 transform -translate-x-full transition-transform duration-300 ease-in-out shadow-2xl flex flex-col">
+        <!-- Drawer Header -->
+        <div class="p-4 border-b border-border flex justify-between items-center bg-gray-50/50">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-brand text-white rounded-xl flex items-center justify-center font-bold text-lg shadow-sm">
+                    W
+                </div>
+                <div>
+                    <h2 class="font-semibold text-text-main">Wanzt Store Official</h2>
+                    <p class="text-xs text-text-muted">WhatsApp Bot System</p>
+                </div>
+            </div>
+            <button id="close-drawer-btn" class="p-2 text-text-muted hover:bg-gray-200 rounded-lg">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+
+        <!-- Scrollable Menu -->
+        <div class="flex-1 overflow-y-auto py-3 px-3 hide-scrollbar flex flex-col gap-1">
+            <!-- Menu Items -->
+            <a href="#" data-page="page-connection" class="nav-item flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-text-muted hover:bg-gray-50 transition-colors">
+                <i data-lucide="smartphone" class="w-5 h-5"></i>
+                Connection
+                <span class="ml-auto text-[10px] bg-green-100 text-status-success px-2 py-0.5 rounded-full">Online</span>
+            </a>
+            <a href="#" data-page="page-integrasi" class="nav-item flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-text-muted hover:bg-gray-50 transition-colors">
+                <i data-lucide="plug" class="w-5 h-5"></i>
+                Integrasi
+            </a>
+            <a href="#" data-page="page-aplikasi" class="nav-item flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-text-muted hover:bg-gray-50 transition-colors">
+                <i data-lucide="box" class="w-5 h-5"></i>
+                Aplikasi Premium
+            </a>
+            <a href="#" data-page="page-smm" class="nav-item flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-text-muted hover:bg-gray-50 transition-colors">
+                <i data-lucide="share-2" class="w-5 h-5"></i>
+                SMM
+            </a>
+            <a href="#" data-page="page-topup" class="nav-item flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-text-muted hover:bg-gray-50 transition-colors">
+                <i data-lucide="gamepad-2" class="w-5 h-5"></i>
+                TopUp
+            </a>
+            
+            <div class="h-px bg-border my-2 mx-2"></div>
+            <div class="px-3 py-1 text-[10px] font-bold text-text-muted uppercase tracking-wider">Management</div>
+
+            <a href="#" data-page="page-profil" class="nav-item flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-text-muted hover:bg-gray-50 transition-colors">
+                <i data-lucide="store" class="w-5 h-5"></i>
+                Info Profil
+            </a>
+            <a href="#" data-page="page-saldo" class="nav-item flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-text-muted hover:bg-gray-50 transition-colors">
+                <i data-lucide="wallet" class="w-5 h-5"></i>
+                Saldo
+            </a>
+            <a href="#" data-page="page-group" class="nav-item flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-text-muted hover:bg-gray-50 transition-colors">
+                <i data-lucide="users" class="w-5 h-5"></i>
+                Management Group
+            </a>
+            <a href="#" data-page="page-transaksi" class="nav-item flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-text-muted hover:bg-gray-50 transition-colors">
+                <i data-lucide="receipt" class="w-5 h-5"></i>
+                Transaksi
+            </a>
+            <a href="#" class="flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-text-muted opacity-60 cursor-not-allowed">
+                <i data-lucide="message-square-dashed" class="w-5 h-5"></i>
+                Respon Bot (Desktop)
+            </a>
+        </div>
+        
+        <!-- Drawer Footer -->
+        <div class="p-4 border-t border-border">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-blue-100 text-brand flex items-center justify-center font-bold text-sm">
+                    D
+                </div>
+                <div class="flex-1">
+                    <p class="text-sm font-medium text-text-main">Dzakwan</p>
+                    <p class="text-xs text-text-muted">Admin Store</p>
+                </div>
+                <button class="text-text-muted hover:text-status-danger p-2">
+                    <i data-lucide="log-out" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- MAIN CONTENT AREA -->
+    <main class="px-4 mt-4 max-w-md mx-auto w-full relative">
+
+        <!-- ==========================================
+             PAGE: CONNECTION
+             ========================================== -->
+        <section id="page-connection" class="page-transition page-hidden">
+            <h2 class="text-xl font-bold text-text-main mb-1">WhatsApp Connection</h2>
+            <p class="text-sm text-text-muted mb-4">Kelola koneksi nomor WhatsApp bot Anda.</p>
+
+            <!-- Status Card -->
+            <div class="bg-white rounded-xl border border-border shadow-card p-5 mb-4 text-center">
+                <div class="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-3 relative">
+                    <div class="absolute inset-0 border-4 border-green-200 rounded-full animate-ping opacity-20"></div>
+                    <i data-lucide="check-circle-2" class="w-8 h-8 text-status-success relative z-10"></i>
+                </div>
+                <h3 class="font-bold text-lg text-text-main">Terhubung</h3>
+                <p class="text-sm text-text-muted mt-1">+62 812-3456-7890</p>
+                <div class="mt-4 pt-4 border-t border-border flex justify-around">
+                    <div class="text-center">
+                        <p class="text-xs text-text-muted">Pesan Diterima</p>
+                        <p class="font-bold text-brand">14,203</p>
+                    </div>
+                    <div class="text-center border-l border-border pl-4">
+                        <p class="text-xs text-text-muted">Pesan Dibalas</p>
+                        <p class="font-bold text-status-success">14,198</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pairing Card (Simulated Disconnected State layout) -->
+            <div class="bg-white rounded-xl border border-border shadow-card p-4">
+                <h4 class="font-semibold text-text-main mb-3 text-sm flex items-center gap-2">
+                    <i data-lucide="link" class="w-4 h-4 text-brand"></i> Hubungkan Nomor Baru
+                </h4>
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-medium text-text-muted mb-1">Nomor WhatsApp (Awalan 62)</label>
+                        <input type="number" placeholder="628..." class="w-full border border-border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand transition-all">
+                    </div>
+                    <button type="button" class="w-full bg-brand text-white rounded-lg py-2.5 text-sm font-semibold shadow-sm hover:bg-brand-hover active:scale-[0.98] transition-all">
+                        Generate Pairing Code
+                    </button>
+                    
+                    <!-- Simulated Code Display -->
+                    <div class="mt-3 bg-slate-50 border border-dashed border-border rounded-lg p-4 text-center hidden">
+                        <p class="text-xs text-text-muted mb-2">Masukkan kode ini di WhatsApp Anda</p>
+                        <div class="text-2xl font-mono font-bold tracking-[0.2em] text-text-main">A1B2-C3D4</div>
+                    </div>
+                </div>
+                
+                <div class="mt-4 bg-blue-50/50 p-3 rounded-lg border border-blue-100 flex items-start gap-2">
+                    <i data-lucide="info" class="w-4 h-4 text-brand shrink-0 mt-0.5"></i>
+                    <p class="text-xs text-text-muted leading-relaxed">
+                        Pastikan aplikasi WhatsApp Anda versi terbaru. Jika kode tidak muncul, periksa kembali koneksi internet pada perangkat.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==========================================
+             PAGE: INFO PROFIL
+             ========================================== -->
+        <section id="page-profil" class="page-transition page-active">
+            <div class="flex justify-between items-end mb-4">
+                <div>
+                    <h2 class="text-xl font-bold text-text-main mb-1">Info Profil</h2>
+                    <p class="text-sm text-text-muted">Kelola identitas utama toko Anda.</p>
+                </div>
+                <div class="text-right">
+                    <span class="text-xs font-medium text-brand bg-brand-light px-2 py-1 rounded-md">38% Selesai</span>
+                </div>
+            </div>
+
+            <form class="space-y-4" onsubmit="event.preventDefault(); showToast('Profil berhasil disimpan!', 'success');">
+                <!-- Identitas Wajib -->
+                <div class="bg-white rounded-xl border border-border shadow-card overflow-hidden">
+                    <div class="bg-gray-50 px-4 py-3 border-b border-border flex justify-between items-center">
+                        <h3 class="font-semibold text-sm text-text-main flex items-center gap-2">
+                            <i data-lucide="store" class="w-4 h-4 text-brand"></i> Identitas Utama
+                        </h3>
+                        <span class="text-[10px] font-medium text-status-danger bg-red-50 px-2 py-0.5 rounded border border-red-100">Wajib</span>
+                    </div>
+                    <div class="p-4 space-y-4">
+                        <div>
+                            <label class="block text-xs font-medium text-text-main mb-1">Nama Toko / Brand <span class="text-status-danger">*</span></label>
+                            <input type="text" value="Wanzt Store Official" class="w-full border border-border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand transition-all bg-surface">
+                            <p class="text-[10px] text-text-muted mt-1">Tampil pada header pesan & katalog.</p>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-medium text-text-main mb-1">Nama Owner <span class="text-status-danger">*</span></label>
+                                <input type="text" value="Dzakwan" class="w-full border border-border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand transition-all">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-text-main mb-1">WhatsApp Owner <span class="text-status-danger">*</span></label>
+                                <input type="tel" value="6282766837" class="w-full border border-border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand transition-all">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Info Tambahan -->
+                <div class="bg-white rounded-xl border border-border shadow-card overflow-hidden">
+                    <div class="bg-gray-50 px-4 py-3 border-b border-border flex justify-between items-center">
+                        <h3 class="font-semibold text-sm text-text-main flex items-center gap-2">
+                            <i data-lucide="link" class="w-4 h-4 text-text-muted"></i> Informasi Opsional
+                        </h3>
+                        <span class="text-[10px] font-medium text-text-muted bg-gray-100 px-2 py-0.5 rounded border border-gray-200">Opsional</span>
+                    </div>
+                    <div class="p-4 space-y-4">
+                        <div>
+                            <label class="block text-xs font-medium text-text-main mb-1">Link Website</label>
+                            <input type="url" placeholder="https://..." class="w-full border border-border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand transition-all">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-text-main mb-1">Saluran WhatsApp (Channel)</label>
+                            <input type="url" placeholder="Link channel WA..." class="w-full border border-border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand transition-all">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-2 pb-6">
+                    <button type="submit" class="w-full bg-brand text-white rounded-xl py-3 text-sm font-semibold shadow-md shadow-brand/20 hover:bg-brand-hover active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                        <i data-lucide="save" class="w-4 h-4"></i> Simpan Profil
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- ==========================================
+             PAGE: APLIKASI PREMIUM
+             ========================================== -->
+        <section id="page-aplikasi" class="page-transition page-hidden">
+            <h2 class="text-xl font-bold text-text-main mb-1">Aplikasi Premium</h2>
+            <p class="text-sm text-text-muted mb-4">Kelola harga dan katalog aplikasi.</p>
+
+            <!-- Price Setting Card -->
+            <div class="bg-white rounded-xl border border-border shadow-card p-4 mb-4">
+                <div class="flex justify-between items-start mb-3">
+                    <h3 class="font-semibold text-sm text-text-main flex items-center gap-2">
+                        <i data-lucide="tag" class="w-4 h-4 text-brand"></i> Set Harga Produk
+                    </h3>
+                    <span class="text-[10px] font-medium text-status-success bg-green-50 border border-green-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <span class="w-1.5 h-1.5 rounded-full bg-status-success"></span> Aktif: +100%
+                    </span>
+                </div>
+                <p class="text-xs text-text-muted mb-3">Atur margin keuntungan default untuk seluruh varian.</p>
+                
+                <div class="flex items-center gap-2 mb-3">
+                    <div class="relative flex-1">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <span class="text-text-muted text-sm" id="price-prefix">%</span>
+                        </div>
+                        <input type="number" value="100" class="w-full border border-border rounded-lg pl-8 pr-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand transition-all bg-surface font-semibold text-text-main">
+                    </div>
+                    
+                    <!-- Toggle Mode (Rp / %) -->
+                    <div class="flex bg-gray-100 p-1 rounded-lg border border-border">
+                        <button type="button" class="px-3 py-1 text-xs font-medium rounded-md bg-white shadow-sm text-text-main">
+                            %
+                        </button>
+                        <button type="button" class="px-3 py-1 text-xs font-medium rounded-md text-text-muted hover:text-text-main transition-colors">
+                            Rp
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bg-surface rounded-lg p-3 border border-border mb-3">
+                    <p class="text-[11px] text-text-muted flex justify-between">
+                        <span>Formula: <span class="font-semibold text-text-main">Harga Asli + 100%</span></span>
+                    </p>
+                    <p class="text-[11px] text-text-muted mt-1">
+                        Simulasi Modal Rp 10.000: Harga Jual <span class="font-bold text-brand">Rp 20.000</span>
+                    </p>
+                </div>
+
+                <button type="button" onclick="showToast('Pengaturan harga disimpan', 'success')" class="w-full bg-brand text-white rounded-lg py-2.5 text-sm font-semibold shadow-sm hover:bg-brand-hover active:scale-[0.98] transition-all">
+                    Simpan Pengaturan
+                </button>
+            </div>
+
+            <!-- Search & Filter -->
+            <div class="mb-4 sticky top-16 z-30 bg-surface pb-2 pt-1 -mx-4 px-4">
+                <div class="relative mb-3">
+                    <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted"></i>
+                    <input type="text" placeholder="Cari aplikasi atau varian..." class="w-full border border-border rounded-xl pl-9 pr-4 py-2.5 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand bg-white shadow-sm transition-all">
+                </div>
+                
+                <!-- Filter Chips -->
+                <div class="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
+                    <button class="shrink-0 bg-brand text-white px-4 py-1.5 rounded-full text-xs font-medium shadow-sm">Semua</button>
+                    <button class="shrink-0 bg-white border border-border text-text-muted px-4 py-1.5 rounded-full text-xs font-medium hover:bg-gray-50">Streaming</button>
+                    <button class="shrink-0 bg-white border border-border text-text-muted px-4 py-1.5 rounded-full text-xs font-medium hover:bg-gray-50">Music</button>
+                    <button class="shrink-0 bg-white border border-border text-text-muted px-4 py-1.5 rounded-full text-xs font-medium hover:bg-gray-50">Design</button>
+                    <button class="shrink-0 bg-white border border-border text-text-muted px-4 py-1.5 rounded-full text-xs font-medium hover:bg-gray-50">AI Tool</button>
+                </div>
+            </div>
+
+            <!-- Product List -->
+            <div class="space-y-3 pb-8">
+                <!-- Product Card 1 -->
+                <div class="bg-white rounded-xl border border-border shadow-sm p-4 relative overflow-hidden">
+                    <div class="absolute top-0 left-0 w-1 h-full bg-status-success"></div>
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <span class="text-[10px] font-medium text-text-muted uppercase tracking-wider">AI Tool</span>
+                            <h4 class="font-bold text-text-main text-sm mt-0.5 leading-tight">ChatGPT</h4>
+                            <p class="text-xs text-text-muted mt-1 leading-tight line-clamp-2">ChatGPT GO Sharing 1 bulan</p>
+                        </div>
+                        <span class="text-[10px] font-medium text-status-success bg-green-50 border border-green-100 px-2 py-1 rounded-md shrink-0">
+                            22 unit
+                        </span>
+                    </div>
+                    <div class="mt-3 pt-3 border-t border-gray-100 flex justify-between items-end">
+                        <div>
+                            <p class="text-[10px] text-text-muted mb-0.5">Modal</p>
+                            <p class="text-xs font-medium text-text-muted line-through opacity-70">Rp 15.000</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-[10px] text-text-muted mb-0.5">Harga Jual</p>
+                            <p class="text-base font-bold text-text-main">Rp 16.000</p>
+                            <p class="text-[10px] font-medium text-status-warning mt-0.5 bg-orange-50 inline-block px-1.5 rounded">Custom (+Rp 1.000)</p>
+                        </div>
+                    </div>
+                    <button class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-gray-100 hover:bg-gray-200 text-text-main p-1.5 rounded-full opacity-0 hover:opacity-100 transition-opacity focus:opacity-100">
+                        <i data-lucide="pencil" class="w-3 h-3"></i>
+                    </button>
+                </div>
+
+                <!-- Product Card 2 (Habis) -->
+                <div class="bg-white rounded-xl border border-border shadow-sm p-4 relative overflow-hidden opacity-75">
+                    <div class="absolute top-0 left-0 w-1 h-full bg-status-danger"></div>
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <span class="text-[10px] font-medium text-text-muted uppercase tracking-wider">AI Tool</span>
+                            <h4 class="font-bold text-text-main text-sm mt-0.5 leading-tight">ChatGPT</h4>
+                            <p class="text-xs text-text-muted mt-1 leading-tight line-clamp-2">ChatGPT GO Privat 1 bulan No Garansi</p>
+                        </div>
+                        <span class="text-[10px] font-medium text-status-danger bg-red-50 border border-red-100 px-2 py-1 rounded-md shrink-0">
+                            Habis
+                        </span>
+                    </div>
+                    <div class="mt-3 pt-3 border-t border-gray-100 flex justify-between items-end">
+                        <div>
+                            <p class="text-[10px] text-text-muted mb-0.5">Modal</p>
+                            <p class="text-xs font-medium text-text-muted">Rp 23.000</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-[10px] text-text-muted mb-0.5">Harga Jual</p>
+                            <p class="text-base font-bold text-text-main">Rp 46.000</p>
+                            <p class="text-[10px] font-medium text-brand mt-0.5 bg-brand-light inline-block px-1.5 rounded">+Rp 23.000 (100%)</p>
+                        </div>
+                    </div>
+                </div>
+                
+                 <!-- Product Card 3 -->
+                 <div class="bg-white rounded-xl border border-border shadow-sm p-4 relative overflow-hidden">
+                    <div class="absolute top-0 left-0 w-1 h-full bg-status-success"></div>
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <span class="text-[10px] font-medium text-text-muted uppercase tracking-wider">Streaming</span>
+                            <h4 class="font-bold text-text-main text-sm mt-0.5 leading-tight">Netflix</h4>
+                            <p class="text-xs text-text-muted mt-1 leading-tight line-clamp-2">Premium 1 Bulan (Sharing 1 Device)</p>
+                        </div>
+                        <span class="text-[10px] font-medium text-status-success bg-green-50 border border-green-100 px-2 py-1 rounded-md shrink-0">
+                            99+ unit
+                        </span>
+                    </div>
+                    <div class="mt-3 pt-3 border-t border-gray-100 flex justify-between items-end">
+                        <div>
+                            <p class="text-[10px] text-text-muted mb-0.5">Modal</p>
+                            <p class="text-xs font-medium text-text-muted">Rp 25.000</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-[10px] text-text-muted mb-0.5">Harga Jual</p>
+                            <p class="text-base font-bold text-text-main">Rp 50.000</p>
+                            <p class="text-[10px] font-medium text-brand mt-0.5 bg-brand-light inline-block px-1.5 rounded">+Rp 25.000 (100%)</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==========================================
+             PAGE: TRANSAKSI (Example of Table to Card)
+             ========================================== -->
+        <section id="page-transaksi" class="page-transition page-hidden">
+            <h2 class="text-xl font-bold text-text-main mb-1">Riwayat Transaksi</h2>
+            <p class="text-sm text-text-muted mb-4">Pantau pesanan dari pelanggan.</p>
+
+            <div class="space-y-3 pb-8">
+                <!-- Transaksi Card 1 -->
+                <div class="bg-white rounded-xl border border-border shadow-sm p-4">
+                    <div class="flex justify-between items-center mb-3 pb-2 border-b border-gray-100">
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="receipt" class="w-4 h-4 text-text-muted"></i>
+                            <span class="text-xs font-mono font-medium text-text-main">INV-98273</span>
+                        </div>
+                        <span class="text-[10px] font-bold text-status-success bg-green-50 px-2 py-1 rounded uppercase tracking-wide border border-green-100">Lunas</span>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <p class="text-sm font-semibold text-text-main">Netflix Premium 1 Bulan</p>
+                        <p class="text-xs text-text-muted mt-0.5">Pembeli: +628123456789</p>
+                    </div>
+
+                    <div class="bg-surface rounded-lg p-3 grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                            <span class="text-text-muted block mb-0.5">Nominal</span>
+                            <span class="font-medium">Rp 50.000</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-text-muted block mb-0.5">Kode Unik</span>
+                            <span class="font-mono text-status-warning">+Rp 213</span>
+                        </div>
+                        <div class="col-span-2 border-t border-border pt-2 mt-1 flex justify-between items-center">
+                            <span class="font-semibold text-text-main">Total Bayar</span>
+                            <span class="font-bold text-brand text-sm">Rp 50.213</span>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3 flex justify-end">
+                        <button onclick="showDeleteConfirm()" class="text-xs text-status-danger flex items-center gap-1 hover:bg-red-50 px-2 py-1 rounded transition-colors">
+                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Hapus
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Transaksi Card 2 (Pending) -->
+                <div class="bg-white rounded-xl border border-border shadow-sm p-4">
+                    <div class="flex justify-between items-center mb-3 pb-2 border-b border-gray-100">
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="receipt" class="w-4 h-4 text-text-muted"></i>
+                            <span class="text-xs font-mono font-medium text-text-main">INV-98274</span>
+                        </div>
+                        <span class="text-[10px] font-bold text-status-warning bg-orange-50 px-2 py-1 rounded uppercase tracking-wide border border-orange-100">Menunggu</span>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <p class="text-sm font-semibold text-text-main">Diamond Mobile Legends 86</p>
+                        <p class="text-xs text-text-muted mt-0.5">Pembeli: +628987654321</p>
+                    </div>
+
+                    <div class="bg-surface rounded-lg p-3 flex justify-between items-center text-sm">
+                        <span class="font-semibold text-text-main">Total Tagihan</span>
+                        <span class="font-bold text-status-warning">Rp 23.450</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Placeholder Sections for others to prove architecture works -->
+        <section id="page-integrasi" class="page-transition page-hidden">
+            <h2 class="text-xl font-bold text-text-main mb-4">Integrasi Layanan</h2>
+            <div class="bg-white rounded-xl border border-border p-4 mb-4 text-center">
+                <i data-lucide="blocks" class="w-8 h-8 text-brand mx-auto mb-2 opacity-50"></i>
+                <p class="text-sm font-medium">Xaviera API & Payment Gateway</p>
+                <p class="text-xs text-text-muted mt-1">Form integrasi diletakkan di sini dalam bentuk card terpisah.</p>
+            </div>
+        </section>
+
+        <section id="page-smm" class="page-transition page-hidden">
+            <h2 class="text-xl font-bold text-text-main mb-4">Layanan SMM</h2>
+            <div class="bg-white rounded-xl border border-border p-4 mb-4 text-center">
+                <i data-lucide="share-2" class="w-8 h-8 text-brand mx-auto mb-2 opacity-50"></i>
+                <p class="text-sm font-medium">Daftar Layanan SMM</p>
+                <p class="text-xs text-text-muted mt-1">Struktur list card sama seperti Aplikasi Premium, dioptimalkan untuk banyak data.</p>
+            </div>
+        </section>
+
+        <section id="page-topup" class="page-transition page-hidden">
+            <h2 class="text-xl font-bold text-text-main mb-4">Katalog TopUp Game</h2>
+            <div class="bg-white rounded-xl border border-border p-4 mb-4 text-center">
+                <i data-lucide="gamepad-2" class="w-8 h-8 text-brand mx-auto mb-2 opacity-50"></i>
+                <p class="text-sm font-medium">Daftar TopUp</p>
+                <p class="text-xs text-text-muted mt-1">Struktur list card untuk produk game.</p>
+            </div>
+        </section>
+
+        <section id="page-saldo" class="page-transition page-hidden">
+            <h2 class="text-xl font-bold text-text-main mb-4">Informasi Saldo</h2>
+            <div class="space-y-3">
+                <div class="bg-white rounded-xl border border-border p-4 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-xs text-text-muted">Saldo Xaviera</p>
+                        <p class="text-lg font-bold text-text-main">Rp 3.529</p>
+                    </div>
+                    <button class="p-2 bg-gray-50 text-text-muted rounded-full border border-border"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+                </div>
+                <div class="bg-white rounded-xl border border-border p-4 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-xs text-text-muted">Saldo Payment (QRIS)</p>
+                        <p class="text-lg font-bold text-text-main">Rp 150.000</p>
+                    </div>
+                    <button class="p-2 bg-gray-50 text-text-muted rounded-full border border-border"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+                </div>
+            </div>
+        </section>
+
+        <section id="page-group" class="page-transition page-hidden">
+            <h2 class="text-xl font-bold text-text-main mb-4">Management Group</h2>
+            <div class="bg-white rounded-xl border border-border p-4 shadow-sm flex items-center justify-between">
+                <div>
+                    <h4 class="text-sm font-semibold text-text-main">Grup Reseller VIP</h4>
+                    <p class="text-xs text-text-muted">124 Anggota</p>
+                </div>
+                <!-- Custom Toggle Switch -->
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" class="sr-only peer" checked>
+                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand"></div>
+                </label>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Confirmation Modal Overlay -->
+    <div id="confirm-modal" class="fixed inset-0 bg-black/50 z-[70] hidden opacity-0 transition-opacity duration-200 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl w-full max-w-[320px] p-5 shadow-2xl transform scale-95 transition-transform duration-200" id="confirm-modal-content">
+            <div class="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-4 text-status-danger">
+                <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+            </div>
+            <h3 class="text-lg font-bold text-text-main mb-1">Hapus Transaksi?</h3>
+            <p class="text-sm text-text-muted mb-5 leading-relaxed">Tindakan ini tidak dapat dibatalkan. Data transaksi akan dihapus secara permanen dari sistem.</p>
+            <div class="flex gap-3">
+                <button onclick="closeConfirmModal()" class="flex-1 py-2.5 rounded-lg border border-border text-sm font-semibold text-text-main hover:bg-gray-50 transition-colors">Batal</button>
+                <button onclick="executeDelete()" class="flex-1 py-2.5 rounded-lg bg-status-danger text-white text-sm font-semibold shadow-sm hover:bg-red-600 transition-colors">Hapus</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Initialization Scripts -->
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // --- Navigation Logic ---
+        const menuBtn = document.getElementById('menu-btn');
+        const closeBtn = document.getElementById('close-drawer-btn');
+        const drawer = document.getElementById('drawer');
+        const overlay = document.getElementById('drawer-overlay');
+        const navItems = document.querySelectorAll('.nav-item');
+        const pages = document.querySelectorAll('.page-transition');
+
+        function openDrawer() {
+            overlay.classList.remove('hidden');
+            // Small delay to allow display block to apply before animating opacity
+            setTimeout(() => {
+                overlay.classList.remove('opacity-0');
+                drawer.classList.remove('-translate-x-full');
+            }, 10);
+            document.body.style.overflow = 'hidden'; // Prevent background scrolling
+        }
+
+        function closeDrawer() {
+            overlay.classList.add('opacity-0');
+            drawer.classList.add('-translate-x-full');
+            setTimeout(() => {
+                overlay.classList.add('hidden');
+                document.body.style.overflow = '';
+            }, 300);
+        }
+
+        menuBtn.addEventListener('click', openDrawer);
+        closeBtn.addEventListener('click', closeDrawer);
+        overlay.addEventListener('click', closeDrawer);
+
+        // Page Switching
+        function switchPage(pageId) {
+            // Update Navigation UI
+            navItems.forEach(item => {
+                if(item.dataset.page === pageId) {
+                    // Active state styling matches desktop blue highlight requirement
+                    item.classList.add('bg-brand-light', 'text-brand', 'border-l-4', 'border-brand', 'rounded-l-none');
+                    item.classList.remove('text-text-muted');
+                    // update icon color
+                    const icon = item.querySelector('svg');
+                    if(icon) icon.classList.add('text-brand');
+                } else {
+                    item.classList.remove('bg-brand-light', 'text-brand', 'border-l-4', 'border-brand', 'rounded-l-none');
+                    item.classList.add('text-text-muted');
+                    const icon = item.querySelector('svg');
+                    if(icon) icon.classList.remove('text-brand');
+                }
+            });
+
+            // Update Content Visibility
+            pages.forEach(page => {
+                if(page.id === pageId) {
+                    page.classList.remove('page-hidden');
+                    page.classList.add('page-active');
+                } else {
+                    page.classList.remove('page-active');
+                    page.classList.add('page-hidden');
+                }
+            });
+
+            window.scrollTo(0,0);
+        }
+
+        navItems.forEach(item => {
+            item.addEventListener('click', (e) => {
+                e.preventDefault();
+                const targetPage = item.dataset.page;
+                if(targetPage) {
+                    switchPage(targetPage);
+                    closeDrawer();
+                }
+            });
+        });
+
+        // Initialize first page (Aplikasi Premium as per screenshot 2 flow)
+        switchPage('page-aplikasi');
+
+        // --- UI Utilities (Replacing alerts) ---
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            // Base styles
+            toast.className = `flex items-center gap-3 px-4 py-3 rounded-xl shadow-floating text-sm font-medium transform translate-y-[-20px] opacity-0 transition-all duration-300 pointer-events-auto`;
+            
+            // Type specific styles
+            let iconName = 'info';
+            if(type === 'success') {
+                toast.classList.add('bg-white', 'text-text-main', 'border-l-4', 'border-status-success');
+                iconName = 'check-circle-2';
+                toast.innerHTML = `
+                    <i data-lucide="${iconName}" class="w-5 h-5 text-status-success shrink-0"></i>
+                    <span>${message}</span>
+                `;
+            } else if (type === 'error') {
+                 toast.classList.add('bg-status-danger', 'text-white');
+                 iconName = 'alert-circle';
+                 toast.innerHTML = `
+                    <i data-lucide="${iconName}" class="w-5 h-5 text-white shrink-0"></i>
+                    <span>${message}</span>
+                `;
+            }
+
+            container.appendChild(toast);
+            lucide.createIcons({ root: toast }); // Re-init icons for new DOM element
+
+            // Animate in
+            setTimeout(() => {
+                toast.classList.remove('translate-y-[-20px]', 'opacity-0');
+                toast.classList.add('translate-y-0', 'opacity-100');
+            }, 10);
+
+            // Remove after 3s
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-[-20px]', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // --- Modal Logic ---
+        const modal = document.getElementById('confirm-modal');
+        const modalContent = document.getElementById('confirm-modal-content');
+
+        function showDeleteConfirm() {
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                modalContent.classList.remove('scale-95');
+            }, 10);
+        }
+
+        function closeConfirmModal() {
+            modal.classList.add('opacity-0');
+            modalContent.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 200);
+        }
+
+        function executeDelete() {
+            closeConfirmModal();
+            showToast('Transaksi berhasil dihapus', 'success');
+        }
+    </script>
+</body>
+</html>

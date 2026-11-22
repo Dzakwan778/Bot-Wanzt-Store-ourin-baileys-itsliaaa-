@@ -131,12 +131,21 @@ async function initializeFullApp(isProduction: boolean): Promise<Express> {
       : path.resolve(__dirname, 'dist');
     const distAdmin = path.resolve(__dirname, 'dist-admin');
 
-    if (fs.existsSync(distAdmin)) {
-      serverApp.use('/admin', express.static(distAdmin));
+    const staticAdmin = fs.existsSync(distAdmin) ? express.static(distAdmin) : null;
+    const staticTenant = fs.existsSync(distTenant) ? express.static(distTenant) : null;
+
+    if (staticAdmin) {
+      serverApp.use('/admin', staticAdmin);
     }
-    if (fs.existsSync(distTenant)) {
-      serverApp.use(express.static(distTenant));
-    }
+
+    serverApp.use((req, res, next) => {
+      if (req.path.startsWith('/api')) return next();
+      const isHostAdmin = req.hostname.startsWith('admin.');
+      if (isHostAdmin) {
+        return staticAdmin ? staticAdmin(req, res, next) : next();
+      }
+      return staticTenant ? staticTenant(req, res, next) : next();
+    });
 
     serverApp.use((req, res, next) => {
       if (req.method !== 'GET' || req.path.startsWith('/api')) return next();
