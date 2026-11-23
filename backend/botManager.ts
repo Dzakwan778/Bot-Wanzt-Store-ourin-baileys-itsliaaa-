@@ -6,6 +6,8 @@ import makeWASocket, {
 } from '@itsliaaa/baileys';
 import NodeCache from '@cacheable/node-cache';
 import pino from 'pino';
+import { incrementMessageStat } from './database/tenantDbManager.ts';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
@@ -52,7 +54,13 @@ import { sendListInteractiveMessage } from './messages/listMessage.ts';
 import { sendProductVariantsCarousel } from './messages/carouselMessage.ts';
 import { sendAdminContactMessage } from './messages/adminContactMessage.ts';
 import { dispatchIncomingMessages, markMessageAsBotSent } from './handlers/messageDispatcher.ts';
-import { GroupItem, loadGroupsConfig, setGroupToggle } from './services/groupService.ts';
+import {
+  GroupItem,
+  loadGroupsConfig,
+  setGroupToggle,
+  loadGroupOnlySetting,
+  saveGroupOnlySetting,
+} from './services/groupService.ts';
 import { getActiveTenantId, runWithTenant } from './database/tenantContext.ts';
 
 export class BotManager {
@@ -86,7 +94,7 @@ export class BotManager {
 
   addLog(type: 'info' | 'success' | 'warning' | 'error' | 'code', message: string) {
     const entry: LogEntry = {
-      id: Date.now() + Math.random().toString(36).substring(2, 6),
+      id: Date.now() + '_' + crypto.randomBytes(3).toString('hex'),
       time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       type,
       message,
@@ -200,19 +208,25 @@ export class BotManager {
       throw new Error(`Custom pairing code tidak sesuai: wajib tepat 8 karakter (saat ini ${codeToUse.length} karakter).`);
     }
 
-    // Validasi mutlak: tolak koneksi bot jika akun tenant berstatus suspended atau expired
+    // Validasi mutlak: tolak koneksi bot jika akun tenant berstatus suspended atau expired secara real-time
+    let guardError: Error | null = null;
     try {
-      const { TenantManager } = await import('../admin-backend/services/tenantManager.ts');
-      const tenant = TenantManager.getTenant(this.tenantId);
-      if (tenant && tenant.status !== 'active') {
+      const { TenantStatusService } = await import('../admin-backend/services/tenantStatusService.ts');
+      const effectiveStatus = await TenantStatusService.enforceRealtimeTenantExpiry(this.tenantId);
+      if (effectiveStatus !== 'active') {
         this.status = 'closed';
-        this.addLog('error', `⛔ Permintaan koneksi ditolak: Akun tenant "${this.tenantId}" sedang berstatus ${tenant.status}.`);
-        throw new Error(`Akun toko sedang ditangguhkan (${tenant.status}). Seluruh koneksi bot WhatsApp diblokir.`);
+        this.addLog('error', `⛔ Permintaan koneksi ditolak: Akun tenant "${this.tenantId}" berstatus ${effectiveStatus}.`);
+        guardError = new Error(
+          effectiveStatus === 'suspended'
+            ? 'Akun toko sedang ditangguhkan (suspended). Seluruh koneksi bot WhatsApp diblokir.'
+            : 'Masa sewa bot toko telah kedaluwarsa (expired). Silakan perpanjang masa aktif terlebih dahulu.'
+        );
       }
     } catch (checkErr: any) {
-      if (checkErr.message?.includes('ditangguhkan')) {
-        throw checkErr;
-      }
+      console.warn(`[BotManager] Peringatan pengecekan status tenant ${this.tenantId}:`, checkErr?.message || checkErr);
+    }
+    if (guardError) {
+      throw guardError;
     }
 
     this.phoneNumber = cleanPhone;
@@ -296,12 +310,14 @@ export class BotManager {
       // Lacak ID pesan yang dikirim bot secara otomatis agar tidak memicu respon berulang (loop)
       const originalSendMessage = this.sock.sendMessage.bind(this.sock);
       this.sock.sendMessage = async (...args: any[]) => {
+        const jid = args[0];
         const result = await originalSendMessage(...args);
         if (result?.key?.id) {
           markMessageAsBotSent(result.key.id);
           if (result.message) {
             messageCache.set(result.key.id, result.message);
           }
+          incrementMessageStat(this.tenantId, 'whatsapp');
         }
         return result;
       };
@@ -365,6 +381,14 @@ export class BotManager {
 
       // Handler Pesan Masuk didelegasikan ke messageDispatcher dalam konteks tenant
       this.sock.ev.on('messages.upsert', async ({ messages, type }: any) => {
+        try {
+          const { TenantStatusService } = await import('../admin-backend/services/tenantStatusService.ts');
+          const effectiveStatus = await TenantStatusService.enforceRealtimeTenantExpiry(this.tenantId);
+          if (effectiveStatus !== 'active') {
+            return;
+          }
+        } catch {}
+
         for (const m of messages || []) {
           if (m?.key?.id && m?.message) {
             messageCache.set(m.key.id, m.message);
@@ -419,7 +443,10 @@ export class BotManager {
     this.addLog('info', 'Koneksi WhatsApp bot dimatikan oleh admin.');
   }
 
-  async forceDisconnect() {
+  async forceDisconnect(options?: { clearSession?: boolean; reason?: 'suspended' | 'expired' }) {
+    const clearSession = options?.clearSession ?? true;
+    const reason = options?.reason ?? 'suspended';
+
     if (this.sock) {
       try {
         if (this.sock.ev) {
@@ -432,18 +459,31 @@ export class BotManager {
       this.sock = null;
     }
 
-    // Bersihkan folder sesi kredensial agar WhatsApp terlepas total dan tidak dapat reconnect di background
-    try {
-      if (fs.existsSync(this.sessionDir)) {
-        fs.rmSync(this.sessionDir, { recursive: true, force: true });
+    // Jika suspended, bersihkan folder sesi kredensial agar WhatsApp terlepas total.
+    // Jika expired, simpan folder sesi agar tenant bisa langsung menyambungkan kembali setelah perpanjangan.
+    if (clearSession) {
+      try {
+        if (fs.existsSync(this.sessionDir)) {
+          fs.rmSync(this.sessionDir, { recursive: true, force: true });
+        }
+      } catch (cleanErr) {
+        console.error(`Gagal membersihkan folder sesi tenant ${this.tenantId}:`, cleanErr);
       }
-    } catch (cleanErr) {
-      console.error(`Gagal membersihkan folder sesi tenant ${this.tenantId}:`, cleanErr);
     }
 
     this.status = 'closed';
     this.pairingCode = '';
-    this.addLog('warning', '⛔ Koneksi WhatsApp bot diputus paksa dan sesi dibersihkan karena akun toko telah ditangguhkan (suspended) oleh Master Admin.');
+    if (reason === 'expired') {
+      this.addLog(
+        'warning',
+        '⛔ Koneksi WhatsApp bot diputus paksa karena masa sewa toko telah kedaluwarsa (expired). Sesi penautan tetap disimpan hingga masa aktif diperpanjang.'
+      );
+    } else {
+      this.addLog(
+        'warning',
+        '⛔ Koneksi WhatsApp bot diputus paksa dan sesi dibersihkan karena akun toko telah ditangguhkan (suspended) oleh Master Admin.'
+      );
+    }
   }
 
   async reset() {
@@ -458,11 +498,13 @@ export class BotManager {
     this.addLog('warning', 'Folder sesi telah dibersihkan total. Siap untuk penautan baru.');
   }
 
-  async getParticipatingGroups(): Promise<{ connected: boolean; groups: GroupItem[]; message?: string }> {
+  async getParticipatingGroups(): Promise<{ connected: boolean; groups: GroupItem[]; groupOnly: boolean; message?: string }> {
+    const groupOnly = this.getGroupOnlySetting();
     if (!this.sock || this.status !== 'connected') {
       return {
         connected: false,
         groups: [],
+        groupOnly,
         message: 'Bot belum terhubung ke WhatsApp. Silakan hubungkan bot terlebih dahulu di tab status.',
       };
     }
@@ -493,12 +535,14 @@ export class BotManager {
       return {
         connected: true,
         groups,
+        groupOnly,
       };
     } catch (err: any) {
       this.addLog('error', `Gagal mengambil daftar grup dari WhatsApp: ${err?.message || err}`);
       return {
         connected: true,
         groups: [],
+        groupOnly,
         message: `Gagal memuat grup: ${err?.message || err}`,
       };
     }
@@ -506,6 +550,14 @@ export class BotManager {
 
   setGroupToggle(groupId: string, enabled: boolean) {
     return runWithTenant(this.tenantId, () => setGroupToggle(groupId, enabled));
+  }
+
+  getGroupOnlySetting(): boolean {
+    return runWithTenant(this.tenantId, () => loadGroupOnlySetting());
+  }
+
+  setGroupOnlySetting(enabled: boolean): boolean {
+    return runWithTenant(this.tenantId, () => saveGroupOnlySetting(enabled));
   }
 }
 

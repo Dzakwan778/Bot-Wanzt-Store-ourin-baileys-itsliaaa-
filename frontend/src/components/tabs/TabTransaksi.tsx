@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useTransactions } from '../../hooks/useTransactions';
 import { TransactionItem } from '../../types/dashboard.types';
+import { sanitizeSafeHttpsUrl } from '../../utils/urlValidation';
 
 interface TabTransaksiProps {
   transactionsState: ReturnType<typeof useTransactions>;
@@ -259,6 +260,7 @@ export const TabTransaksi: React.FC<TabTransaksiProps> = ({
               {paginatedTransactions.map((trx) => {
                 const buyerClean = trx.customerNumber ? trx.customerNumber.replace(/[^0-9]/g, '') : '';
                 const waUrl = buyerClean ? `https://wa.me/${buyerClean}` : '';
+                const safePaymentUrl = sanitizeSafeHttpsUrl(trx.paymentUrl);
                 const orderKey = `order-${trx.orderId}`;
                 const numKey = `num-${trx.orderId}`;
 
@@ -341,11 +343,11 @@ export const TabTransaksi: React.FC<TabTransaksiProps> = ({
 
                     {/* Footer Card: Web Checkout Link & Hapus */}
                     <div className="flex justify-between items-center pt-1">
-                      {trx.paymentUrl ? (
+                      {safePaymentUrl ? (
                         <a
-                          href={trx.paymentUrl}
+                          href={safePaymentUrl}
                           target="_blank"
-                          rel="noreferrer"
+                          rel="noopener noreferrer"
                           className="text-xs text-sky-600 hover:text-sky-700 font-medium inline-flex items-center gap-1"
                         >
                           <ExternalLink className="w-3 h-3" />
@@ -421,6 +423,7 @@ export const TabTransaksi: React.FC<TabTransaksiProps> = ({
                   {paginatedTransactions.map((trx) => {
                     const buyerClean = trx.customerNumber ? trx.customerNumber.replace(/[^0-9]/g, '') : '';
                     const waUrl = buyerClean ? `https://wa.me/${buyerClean}` : '';
+                    const safePaymentUrl = sanitizeSafeHttpsUrl(trx.paymentUrl);
                     const orderKey = `order-${trx.orderId}`;
                     const numKey = `num-${trx.orderId}`;
 
@@ -518,11 +521,11 @@ export const TabTransaksi: React.FC<TabTransaksiProps> = ({
                         {/* Aksi */}
                         <td className="py-3 px-4 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
-                            {trx.paymentUrl && (
+                            {safePaymentUrl && (
                               <a
-                                href={trx.paymentUrl}
+                                href={safePaymentUrl}
                                 target="_blank"
-                                rel="noreferrer"
+                                rel="noopener noreferrer"
                                 className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-medium inline-flex items-center gap-1 transition"
                                 title="Buka Web Checkout"
                               >

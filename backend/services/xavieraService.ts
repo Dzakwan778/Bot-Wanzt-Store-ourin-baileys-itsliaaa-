@@ -1,4 +1,6 @@
+import crypto from 'node:crypto';
 import { CommandsConfig, ProductVariantItem } from '../types/bot.types.ts';
+import { safeExternalFetch } from '../utils/urlSecurity.ts';
 
 export const DEFAULT_CATALOG = [
   {
@@ -388,7 +390,7 @@ export async function generateDaftarProdukText(config: CommandsConfig): Promise<
   }
 
   try {
-    const response = await fetch(`${baseUrl}/products`, {
+    const response = await safeExternalFetch(`${baseUrl}/products`, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -478,7 +480,7 @@ export async function getSingleSelectSections(config: CommandsConfig): Promise<S
   }
 
   try {
-    const response = await fetch(`${baseUrl}/products`, {
+    const response = await safeExternalFetch(`${baseUrl}/products`, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -614,7 +616,7 @@ export async function getProductVariants(
 
   if (apiKey) {
     try {
-      const response = await fetch(`${baseUrl}/products`, {
+      const response = await safeExternalFetch(`${baseUrl}/products`, {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -664,7 +666,7 @@ export async function getProductVariants(
                   else if (typeof item.stock === 'number') stockNum = item.stock;
 
                   resultVariants.push({
-                    id: v.id || v.code || `var-${Math.random().toString(36).substring(2, 6)}`,
+                    id: v.id || v.code || `var-${crypto.randomBytes(3).toString('hex')}`,
                     name: pName,
                     variant: v.name || v.variant || `${pName} Varian`,
                     stock: stockNum,
@@ -681,7 +683,7 @@ export async function getProductVariants(
                 else if (item.status && item.status.toString().toLowerCase().includes('empty')) stockNum = 0;
 
                 resultVariants.push({
-                  id: item.code || item.id || `var-${Math.random().toString(36).substring(2, 6)}`,
+                  id: item.code || item.id || `var-${crypto.randomBytes(3).toString('hex')}`,
                   name: item.brand || item.name || productName,
                   variant: item.name || item.product_name || `${productName} Varian`,
                   stock: stockNum,
@@ -718,7 +720,7 @@ export async function checkXavieraBalance(
   }
 
   try {
-    const res = await fetch(`${baseUrl}/me`, {
+    const res = await safeExternalFetch(`${baseUrl}/me`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${apiKey}`,

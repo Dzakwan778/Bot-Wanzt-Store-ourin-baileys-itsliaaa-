@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
@@ -187,7 +188,7 @@ export function saveTenantPicture(
       .toLowerCase()
       .replace(/[^a-z0-9_-]/g, '_')
       .substring(0, 20);
-    const newFilename = `${rawClean || 'img'}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}${ext}`;
+    const newFilename = `${rawClean || 'img'}_${Date.now()}_${crypto.randomBytes(3).toString('hex')}${ext}`;
 
     const tenantDir = getTenantMediaDir(tenantId);
     const targetPath = path.join(tenantDir, newFilename);

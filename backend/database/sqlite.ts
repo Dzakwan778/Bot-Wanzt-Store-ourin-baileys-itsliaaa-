@@ -105,6 +105,15 @@ export function initDatabase(): void {
     );
   `);
 
+  // 5b. Tabel Pengaturan Bot Umum (contoh: group_only)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS bot_settings (
+      setting_key TEXT PRIMARY KEY,
+      setting_value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
   // 6. Tabel Riwayat Transaksi (ACID, Indexed)
   db.exec(`
     CREATE TABLE IF NOT EXISTS transactions (
@@ -120,6 +129,7 @@ export function initDatabase(): void {
       total INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
       payment_url TEXT,
+      promo_id INTEGER DEFAULT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -255,28 +265,20 @@ export function initDatabase(): void {
     );
   `);
 
-  // Inisialisasi unit pertama (Unit 101) jika tabel tenants masih kosong
-  const tenantCount = db.prepare('SELECT COUNT(*) as count FROM tenants').get() as { count: number };
-  if (tenantCount.count === 0) {
-    const salt = crypto.randomBytes(16).toString('hex');
-    const hash = crypto.pbkdf2Sync('admin123', salt, 100000, 64, 'sha512').toString('hex');
-    const now = new Date();
-    const expired = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
-    db.prepare(`
-      INSERT INTO tenants (id, unit_number, name, username, password_hash, salt, phone_number, plan_name, status, start_date, expired_date, max_groups, notes, created_at, updated_at)
-      VALUES ('unit-101', 'Unit 101', 'Wanzt Store Utama', 'admin', ?, ?, '082173515807', 'Enterprise', 'active', ?, ?, 50, 'Unit apartemen utama toko official', ?, ?)
-    `).run(hash, salt, now.toISOString(), expired.toISOString(), now.toISOString(), now.toISOString());
-  }
-
-  // Inisialisasi akun Master Admin default jika belum ada
+  // Inisialisasi akun Master Admin legacy hanya jika env bootstrap diberikan secara eksplisit
   const masterAdminRow = db.prepare('SELECT id FROM master_admin WHERE id = 1').get();
   if (!masterAdminRow) {
-    const salt = crypto.randomBytes(16).toString('hex');
-    const hash = crypto.pbkdf2Sync('masterwanzt888', salt, 100000, 64, 'sha512').toString('hex');
-    db.prepare(`
-      INSERT INTO master_admin (id, username, password_hash, salt, iterations, updated_at)
-      VALUES (1, 'superadmin', ?, ?, 100000, ?)
-    `).run(hash, salt, new Date().toISOString());
+    const bootUser = process.env.APARTMENT_ADMIN_BOOTSTRAP_USERNAME?.trim();
+    const bootPass = process.env.APARTMENT_ADMIN_BOOTSTRAP_PASSWORD?.trim();
+    if (bootUser && bootPass) {
+      const salt = crypto.randomBytes(16).toString('hex');
+      const hash = crypto.scryptSync(bootPass, salt, 64, { N: 16384, r: 8, p: 1 });
+      const scryptFormatted = `scrypt$${salt}$${hash.toString('hex')}`;
+      db.prepare(`
+        INSERT INTO master_admin (id, username, password_hash, salt, iterations, updated_at)
+        VALUES (1, ?, ?, ?, 16384, ?)
+      `).run(bootUser, scryptFormatted, salt, new Date().toISOString());
+    }
   }
 
   // Jalankan migrasi data otomatis dari file JSON yang sudah ada
@@ -1238,6 +1240,83 @@ export function validateAndApplyPromo(params: {
     sellingPriceWithoutPromo: basePrice + initialMargin,
     finalPrice,
   };
+}
+
+/**
+ * Mereservasikan 1 kuota promo secara atomik saat invoice dibuat (dalam db.transaction).
+ * Menolak bila promo nonaktif, kedaluwarsa, atau kuota sudah habis.
+ */
+export function reservePromoQuota(promoId: number): { reserved: boolean; reason?: string } {
+  const cleanId = Number(promoId);
+  if (!Number.isInteger(cleanId) || cleanId <= 0) {
+    return { reserved: false, reason: 'ID promo tidak valid.' };
+  }
+
+  try {
+    const reserveTx = db.transaction((): { reserved: boolean; reason?: string } => {
+      const promo = db.prepare(`
+        SELECT id, is_active, quota, used_count, is_forever, valid_until
+        FROM promo_codes
+        WHERE id = ?
+      `).get(cleanId) as any;
+
+      if (!promo) {
+        return { reserved: false, reason: 'Kode promo tidak ditemukan.' };
+      }
+
+      if (!promo.is_active) {
+        return { reserved: false, reason: 'Kode promo saat ini sedang nonaktif.' };
+      }
+
+      if (!promo.is_forever && promo.valid_until) {
+        const expiry = new Date(promo.valid_until);
+        if (!Number.isNaN(expiry.getTime()) && new Date() > expiry) {
+          return { reserved: false, reason: 'Masa berlaku kode promo ini telah berakhir.' };
+        }
+      }
+
+      const now = new Date().toISOString();
+      const updateRes = db.prepare(`
+        UPDATE promo_codes
+        SET used_count = used_count + 1, updated_at = ?
+        WHERE id = ? AND is_active = 1 AND (quota IS NULL OR used_count < quota)
+      `).run(now, cleanId);
+
+      if (updateRes.changes !== 1) {
+        return { reserved: false, reason: 'Kuota penggunaan kode promo ini sudah habis.' };
+      }
+
+      return { reserved: true };
+    });
+
+    return reserveTx();
+  } catch (err) {
+    console.error('Gagal mereservasikan kuota promo:', err);
+    return { reserved: false, reason: 'Gagal memproses reservasi kuota promo.' };
+  }
+}
+
+/**
+ * Mengembalikan 1 kuota promo secara atomik jika pembuatan invoice gagal atau transaksi dibatalkan/expired.
+ */
+export function releasePromoQuota(promoId: number): boolean {
+  const cleanId = Number(promoId);
+  if (!Number.isInteger(cleanId) || cleanId <= 0) return false;
+
+  try {
+    const releaseTx = db.transaction(() => {
+      const res = db.prepare(`
+        UPDATE promo_codes
+        SET used_count = MAX(0, used_count - 1), updated_at = ?
+        WHERE id = ? AND used_count > 0
+      `).run(new Date().toISOString(), cleanId);
+      return res.changes > 0;
+    });
+    return releaseTx();
+  } catch (err) {
+    console.error('Gagal mengembalikan kuota promo:', err);
+    return false;
+  }
 }
 
 

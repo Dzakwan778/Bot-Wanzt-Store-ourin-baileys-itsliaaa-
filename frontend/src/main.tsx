@@ -11,10 +11,8 @@ try {
       const url = typeof input === 'string' ? input : (input instanceof Request ? input.url : input.toString());
       if (url.startsWith('/api') || url.includes('/api/')) {
         let token: string | null = null;
-        let tenantId: string | null = null;
         try {
           token = localStorage.getItem('wanzt_bot_auth_token');
-          tenantId = localStorage.getItem('wanzt_tenant_id');
         } catch {
           // Abaikan jika ada batasan akses storage di iframe sandbox
         }
@@ -23,9 +21,6 @@ try {
 
         if (token && !headers.has('Authorization')) {
           headers.set('Authorization', `Bearer ${token}`);
-        }
-        if (tenantId && !headers.has('x-tenant-id')) {
-          headers.set('x-tenant-id', tenantId);
         }
 
         return originalFetch(url, {

@@ -1507,5 +1507,1457 @@ Hasil:
 
 Kendala:
 Tidak ada.
+---
 
+[41.0] - REFACTORING ARSITEKTUR MODULAR PENUH ADMIN-FRONTEND DAN ADMIN-BACKEND
+
+- Tanggal: 2026-11-06 22:56
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 41.0
+
+Pekerjaan yang Dilakukan:
+1. Modularisasi Lengkap Arsitektur admin-backend:
+   - Membuat tipe data terpusat di admin-backend/types/admin.types.ts (TenantRecord, CreateTenantInput, CreateTenantResult, GlobalStats).
+   - Memisahkan fungsi utilitas ke admin-backend/utils/phoneUtils.ts (normalisasi no. telepon) dan generatorUtils.ts (generator ID bot, username terstruktur, dan password acak).
+   - Memecah layanan bisnis menjadi service terisolasi:
+     * admin-backend/services/adminAuthService.ts: Otentikasi Super Admin dan manajemen sesi token in-memory.
+     * admin-backend/services/tenantService.ts: Operasi CRUD tenant, kalkulasi sisa hari sewa, ranking, perpanjangan sewa, dan pembaruan profil toko.
+     * admin-backend/services/tenantStatusService.ts: Penegakan status suspend/aktif/expired, pemutusan paksa socket Baileys, dan pembersihan file kredensial sesi.
+     * admin-backend/services/adminMessagingService.ts: Pengiriman pesan resmi Master Admin ke owner via socket bot WhatsApp.
+   - Merefaktor admin-backend/services/tenantManager.ts menjadi facade delegator bersih untuk menjamin backward compatibility penuh bagi server.ts dan backend bot.
+   - Memecah rute Express API ke admin-backend/routes/ (authAdminRoutes.ts, statsRoutes.ts, tenantRoutes.ts, messageRoutes.ts, impersonateRoutes.ts) dan merefaktor admin-backend/routes/adminRoutes.ts sebagai router agregator ringkas.
+2. Modularisasi Lengkap Arsitektur admin-frontend:
+   - Membuat tipe data di admin-frontend/src/types/admin.types.ts (Tenant, Stats, CreatedTenantResult, ResetPasswordResult).
+   - Memisahkan helper normalisasi telepon di admin-frontend/src/utils/phoneHelper.ts.
+   - Memisahkan komponen layout navbar di admin-frontend/src/components/layout/AdminHeader.tsx.
+   - Memisahkan kartu metrik statistik di admin-frontend/src/components/dashboard/StatCards.tsx.
+   - Memisahkan kontrol tabel di admin-frontend/src/components/dashboard/TableControls.tsx.
+   - Memisahkan baris sel tabel dan kontainer tabel di admin-frontend/src/components/dashboard/TenantTableRow.tsx dan TenantTable.tsx.
+   - Memecah seluruh modal pop-up dialog ke modul-modul mandiri di admin-frontend/src/components/modals/:
+     * AddTenantModal.tsx: Pendaftaran unit baru (Mode Instan & Mode Kustom) + Kartu salin kredensial baru.
+     * ExtendTenantModal.tsx: Perpanjangan masa sewa (+hari dan catatan sewa).
+     * ResetPasswordModal.tsx: Reset kata sandi tenant (manual/acak) + Kartu salin password baru.
+     * SendMessageModal.tsx: Pengiriman pesan resmi ke owner via bot WhatsApp + template pesan cepat dan fallback wa.me.
+     * DeleteTenantModal.tsx: Konfirmasi dialog hapus tenant permanen.
+     * ToggleSuspendModal.tsx: Konfirmasi penangguhan atau pengaktifan status unit tenant.
+   - Merefaktor admin-frontend/src/App.tsx dari file monolitik berukuran 1.730 baris menjadi file orkestrator yang sangat ringkas, bersih, dan elegan (~189 baris).
+3. Menjalankan verifikasi build kompilasi (compile_applet) dan validasi type checking TypeScript (lint_applet) dengan hasil 100% lulus tanpa satupun error.
+
+File yang Diubah/Dibuat:
+- admin-backend:
+  * "admin-backend/types/admin.types.ts" (Baru)
+  * "admin-backend/utils/phoneUtils.ts" (Baru)
+  * "admin-backend/utils/generatorUtils.ts" (Baru)
+  * "admin-backend/services/adminAuthService.ts" (Baru)
+  * "admin-backend/services/tenantService.ts" (Baru)
+  * "admin-backend/services/tenantStatusService.ts" (Baru)
+  * "admin-backend/services/adminMessagingService.ts" (Baru)
+  * "admin-backend/services/tenantManager.ts" (Refactor facade)
+  * "admin-backend/routes/authAdminRoutes.ts" (Baru)
+  * "admin-backend/routes/statsRoutes.ts" (Baru)
+  * "admin-backend/routes/tenantRoutes.ts" (Baru)
+  * "admin-backend/routes/messageRoutes.ts" (Baru)
+  * "admin-backend/routes/impersonateRoutes.ts" (Baru)
+  * "admin-backend/routes/adminRoutes.ts" (Refactor agregator)
+- admin-frontend:
+  * "admin-frontend/src/types/admin.types.ts" (Baru)
+  * "admin-frontend/src/utils/phoneHelper.ts" (Baru)
+  * "admin-frontend/src/components/layout/AdminHeader.tsx" (Baru)
+  * "admin-frontend/src/components/dashboard/StatCards.tsx" (Baru)
+  * "admin-frontend/src/components/dashboard/TableControls.tsx" (Baru)
+  * "admin-frontend/src/components/dashboard/TenantTableRow.tsx" (Baru)
+  * "admin-frontend/src/components/dashboard/TenantTable.tsx" (Baru)
+  * "admin-frontend/src/components/modals/AddTenantModal.tsx" (Baru)
+  * "admin-frontend/src/components/modals/ExtendTenantModal.tsx" (Baru)
+  * "admin-frontend/src/components/modals/ResetPasswordModal.tsx" (Baru)
+  * "admin-frontend/src/components/modals/SendMessageModal.tsx" (Baru)
+  * "admin-frontend/src/components/modals/DeleteTenantModal.tsx" (Baru)
+  * "admin-frontend/src/components/modals/ToggleSuspendModal.tsx" (Baru)
+  * "admin-frontend/src/App.tsx" (Refactor ramping)
+- Dokumentasi:
+  * "brain/SCHEDULE.md" - Pembaruan status entri [23.0] menjadi Completed.
+  * "brain/LANGKAH_IMPLEMENTASI.md" - Pembaruan status entri [41.0] menjadi Completed.
+  * "brain/PROGRESS.md" - Pencatatan hasil penyelesaian entri [41.0].
+
+Alasan Perubahan:
+Menghilangkan file monolitik raksasa (>1.700 baris) pada admin-frontend dan menata ulang arsitektur admin-backend agar selaras dengan arsitektur modular yang sudah diterapkan di dashboard bot, sehingga memudahkan penambahan fitur baru dan mempermudah pemeliharaan sistem.
+
+Hasil:
+1. admin-frontend/src/App.tsx berhasil dirampingkan dari >1.700 baris menjadi ~189 baris kode bersih.
+2. Seluruh komponen tampilan (Header, Cards, Table, Modals) berdiri sendiri secara modular.
+3. Seluruh rute dan logika backend terpisah dengan rapi ke dalam modul services dan routes tanpa merusak kompatibilitas eksternal.
+4. Kompilasi dan linting TypeScript lulus 100% bebas dari error.
+
+Kendala:
+Tidak ada.
+---
+
+[42.0] - DESAIN ULANG DASHBOARD MASTER: PENYELARASAN TEMA CLEAN LIGHT DAN PEMBUATAN NAVBAR SIDEBAR
+
+- Tanggal: 2026-11-06 23:26
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 42.0
+
+Pekerjaan yang Dilakukan:
+1. Pembuatan Komponen Navbar Sidebar Responsif (AdminSidebar.tsx):
+   - Merancang layout sidebar persisten desktop (w-64, sticky min-h-screen) dan mobile drawer overlay dengan transisi spring.
+   - Menggunakan identitas logo Wanzt Apartemen dengan ikon Building2 berlatar gradien biru #0084D1.
+   - Menerapkan 4 tab navigasi utama: Daftar Unit Bot (dengan badge count total unit), Statistik Platform (badge unit aktif), Pesan Siaran (badge Segera), dan Pengaturan Master.
+   - Menggunakan indikator aktif berupa garis vertikal kiri w-1.25 h-7 rounded-r-full bg-[#0084D1] dan background tint bg-[#0084D1]/10, 100% konsisten dengan DesktopSidebar di Dashboard Bot.
+   - Menyematkan profil Super Admin di bagian bawah sidebar dengan badge status Akses Penuh dan tombol pintas Buka Web Toko (/).
+2. Pembaruan Komponen Topbar Workspace (AdminHeader.tsx):
+   - Mengubah dari navbar fixed gelap menjadi Topbar Workspace terang (bg-white/85 border-b border-slate-200/90 backdrop-blur-md).
+   - Menambahkan tombol hamburger mobile untuk memicu drawer sidebar di layar ponsel.
+   - Menampilkan judul tab aktif dan keterangan deskripsi yang tersinkronisasi.
+   - Menyediakan tombol aksi cepat Buka Web Toko dan tombol Muat Ulang Data Apartemen.
+3. Penyelarasan Kartu Statistik Metrik (StatCards.tsx):
+   - Mengubah latar kartu menjadi putih bersih (bg-white border border-slate-200/90 rounded-2xl shadow-xs).
+   - Mengubah tipografi angka menjadi kontras tinggi text-slate-900 font-bold dan label teks uppercase tracking-wider.
+   - Menggunakan warna lembut untuk ikon: #0084D1 untuk Total Unit, Emerald untuk Unit Aktif, Rose untuk Expired, dan Amber untuk Ditangguhkan.
+4. Penyelarasan Kontrol Tabel (TableControls.tsx):
+   - Menerapkan filter status bergaya pill bersih (bg-[#0084D1] text-white saat aktif, bg-slate-100 text-slate-600 saat inaktif).
+   - Mengubah form input pencarian dan dropdown pengurutan ke tema terang (bg-slate-50 border-slate-300 text-slate-900 focus:bg-white focus:border-[#0084D1]).
+   - Mengubah tombol "Daftarkan Unit Baru" ke warna resmi bg-[#0084D1] hover:bg-[#0073B7].
+5. Penyelarasan Tabel 14-Kolom Penyewa (TenantTable.tsx & TenantTableRow.tsx):
+   - Mengubah kontainer tabel menjadi bg-white border border-slate-200/90 rounded-2xl shadow-xs.
+   - Header thead menggunakan bg-slate-50 border-slate-200/90 dengan teks text-slate-600 font-bold.
+   - Baris tbody tr hover:bg-slate-50/80 border-slate-100 text-slate-700.
+   - Badge status akun dan status bot menggunakan warna terang lembut berlatar transparan (Emerald, Amber, Rose).
+   - Menyelaraskan seluruh tombol aksi (Pesan, Perpanjang, Suspend Switch, Reset, Hapus) ke tema bersih.
+6. Penyelarasan Seluruh Modul Pop-Up Modal (AddTenantModal, ExtendTenantModal, ResetPasswordModal, SendMessageModal, DeleteTenantModal, ToggleSuspendModal):
+   - Mengubah kontainer modal dari bg-slate-900 gelap menjadi bg-white border border-slate-200/90 rounded-2xl shadow-2xl text-slate-900.
+   - Menyesuaikan form input, textarea, card mono, tombol aksi utama bg-[#0084D1], dan tombol batal bg-slate-100.
+7. Penataan Layout Terpadu di admin-frontend/src/App.tsx:
+   - Membungkus halaman dalam layout dua kolom: AdminSidebar di kiri dan Main Workspace di kanan berlatar bg-[#F8FAFC].
+   - Mendukung peralihan tab navigasi: 'units' (tabel utama), 'stats' (grafik distribusi sewa & server), 'broadcast' (fitur siaran massal), dan 'settings' (kontak master & status database).
+8. Verifikasi:
+   - Pengujian kompilasi (compile_applet) dan linting type checking (lint_applet) 100% lulus tanpa error.
+   - Pengecekan grep memastikan nol (0) karakter em-dash (—) di seluruh kode.
+
+File yang Diubah/Dibuat:
+- "admin-frontend/src/components/layout/AdminSidebar.tsx" - Komponen baru Sidebar Navigasi Master responsif.
+- "admin-frontend/src/components/layout/AdminHeader.tsx" - Refactor Topbar Workspace terang dengan tombol hamburger.
+- "admin-frontend/src/components/dashboard/StatCards.tsx" - Refactor kartu metrik Clean Light Theme.
+- "admin-frontend/src/components/dashboard/TableControls.tsx" - Refactor kontrol pencarian, sort, dan filter status pill.
+- "admin-frontend/src/components/dashboard/TenantTableRow.tsx" - Refactor baris tabel tema terang dan tombol aksi.
+- "admin-frontend/src/components/dashboard/TenantTable.tsx" - Refactor kontainer tabel terang dan header rapi.
+- "admin-frontend/src/components/modals/AddTenantModal.tsx" - Refactor modal tambah unit baru ke tema terang.
+- "admin-frontend/src/components/modals/ExtendTenantModal.tsx" - Refactor modal perpanjangan masa sewa ke tema terang.
+- "admin-frontend/src/components/modals/ResetPasswordModal.tsx" - Refactor modal reset password ke tema terang.
+- "admin-frontend/src/components/modals/SendMessageModal.tsx" - Refactor modal kirim pesan ke tema terang.
+- "admin-frontend/src/components/modals/DeleteTenantModal.tsx" - Refactor modal konfirmasi hapus tenant ke tema terang.
+- "admin-frontend/src/components/modals/ToggleSuspendModal.tsx" - Refactor modal suspend/aktifkan ke tema terang.
+- "admin-frontend/src/App.tsx" - Refactor layout sidebar + main workspace + tab switcher dinamis.
+- "admin-frontend/index.html" - Penyesuaian class body ke bg-[#F8FAFC] text-slate-800.
+- "brain/SCHEDULE.md" - Pembaruan status entri [24.0] menjadi Completed.
+- "brain/LANGKAH_IMPLEMENTASI.md" - Pembaruan status entri [42.0] menjadi Completed.
+- "brain/PROGRESS.md" - Pencatatan hasil penyelesaian entri [42.0].
+
+Alasan Perubahan:
+Menjawab instruksi pengguna untuk menyelaraskan desain visual Dashboard Master Admin agar menggunakan color palette yang sama dengan Dashboard Bot (#0084D1, background light #F8FAFC, kartu putih bersih) dan menambahkan layout Navbar Sidebar yang responsif untuk menampung fitur-fitur baru ke depan.
+
+Hasil:
+1. Dashboard Master Admin tampil modern, rapi, bersih, dan selaras sempurna dengan Dashboard Bot.
+2. Tersedia Navbar Sidebar di sisi kiri dengan 4 menu navigasi utama (Daftar Unit Bot, Statistik Platform, Pesan Siaran, dan Pengaturan Master) serta profil Super Admin di bagian bawah.
+3. Tampilan responsif di desktop maupun layar ponsel dengan drawer animasi spring yang mulus.
+4. Seluruh fitur operasional (tambah unit, perpanjang masa sewa, toggle suspend, reset password, kirim pesan, hapus unit, impersonate) berfungsi normal 100%.
+5. Bebas dari AI-slop dan nol karakter em-dash di seluruh kode.
+
+Kendala:
+Tidak ada.
+
+---
+
+[43.0] - PEMINDAHAN TITIK AKSES DASHBOARD MASTER: PENGHAPUSAN DARI DASHBOARD BOT DAN POPUP BANNED, PENEMPATAN DI HALAMAN LOGIN
+
+- Tanggal: 2026-11-06 23:51
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 43.0
+
+Pekerjaan yang Dilakukan:
+1. Penghapusan Tombol Akses Dashboard Master dari DesktopTopNav (frontend/src/components/layout/DesktopTopNav.tsx):
+   - Menghapus tombol pintas "Master Apartemen" yang sebelumnya mengarah ke /admin/.
+   - Menghapus impor ikon Building2 yang tidak lagi digunakan pada komponen top navigation bar desktop.
+2. Penghapusan Tombol Akses Dashboard Master dari Navbar (frontend/src/components/layout/Navbar.tsx):
+   - Menghapus tombol navigasi "Master" yang sebelumnya mengarah ke /admin/.
+   - Menghapus impor ikon Building2 yang tidak lagi digunakan pada komponen navbar umum/mobile.
+3. Penghapusan Tombol Akses Dashboard Master dari Popup Akun Ditangguhkan (frontend/src/components/modals/SuspendedAccountModal.tsx):
+   - Menghapus tombol "Dashboard Master" yang sebelumnya berada di samping tombol Tutup Sementara.
+   - Menata ulang tombol "Tutup Sementara" menjadi tombol lebar penuh (w-full) dengan styling rapi dan kontras seimbang.
+   - Menghapus impor ikon Building2 yang tidak lagi digunakan pada modal.
+4. Penempatan Tombol Resmi Masuk ke Dashboard Master Admin pada Halaman Login (frontend/src/components/auth/LoginPage.tsx):
+   - Menyematkan tombol kartu akses elegan tepat di bawah kartu login utama bot dashboard.
+   - Dilengkapi dengan ikon Building2 berlatar biru muda lembut, label jelas "Masuk ke Dashboard Master Admin", dan ikon ExternalLink.
+   - Menautkan tautan ke rute resmi /admin/ sehingga Super Admin dapat membuka portal Master Admin kapan saja sebelum login toko.
+   - Mengimpor React, useState, FormEvent, Building2, dan ExternalLink secara rapi.
+5. Verifikasi dan Pengujian:
+   - Validasi type checking TypeScript menggunakan lint_applet (tsc --noEmit) berhasil 100% tanpa error.
+   - Pengujian build kompilasi Vite menggunakan compile_applet berhasil dengan status Build Succeeded.
+   - Pengecekan grep memastikan nol (0) karakter em-dash (—) dan en-dash (–) pada seluruh file terkait.
+
+File yang Diubah:
+- "frontend/src/components/layout/DesktopTopNav.tsx" - Menghapus tombol "Master Apartemen" dan impor Building2.
+- "frontend/src/components/layout/Navbar.tsx" - Menghapus tombol "Master" dan impor Building2.
+- "frontend/src/components/modals/SuspendedAccountModal.tsx" - Menghapus tombol "Dashboard Master", menata ulang tombol Tutup Sementara, dan menghapus impor Building2.
+- "frontend/src/components/auth/LoginPage.tsx" - Menambahkan tombol "Masuk ke Dashboard Master Admin" berikon Building2 dan ExternalLink.
+- "brain/SCHEDULE.md" - Memperbarui status entri [25.0] menjadi Completed.
+- "brain/LANGKAH_IMPLEMENTASI.md" - Memperbarui status entri [43.0] menjadi Completed.
+- "brain/PROGRESS.md" - Pencatatan hasil penyelesaian entri [43.0].
+
+Alasan Perubahan:
+Memenuhi instruksi pengguna untuk menghapus tombol ke dashboard master dari dalam dashboard bot dan popup banned, serta menempatkan tombol akses ke dashboard master hanya pada menu login di dashboard bot agar lebih mudah diakses dan tidak membingungkan pengguna/penyewa toko.
+
+Hasil:
+1. Dashboard bot bersih dari tombol master apartemen baik di header desktop maupun navbar mobile.
+2. Popup suspend/banned murni menyajikan tombol hubungi WhatsApp dan tombol tutup sementara tanpa tombol master.
+3. Halaman login kini memiliki tombol terpusat dan elegan untuk langsung berpindah ke Dashboard Master Admin (/admin/).
+4. Kompilasi dan linting TypeScript sukses 100% tanpa error.
+
+Kendala:
+Tidak ada.
+
+---
+
+[44.0] - IMPLEMENTASI FITUR TEMPLATE MESSAGE PADA DASHBOARD MASTER DAN INTEGRASI RESPO BOT
+
+- Tanggal: 2026-11-09 14:26
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 44.0
+
+Pekerjaan yang Dilakukan:
+1. Pembangunan Skema Database Master Terpusat (admin-backend/database/masterSqlite.ts):
+   - Membuat tabel `message_templates` di database SQLite pusat `database/master.db` dengan kolom: `id`, `name`, `category`, `content`, `is_active`, `created_at`, dan `updated_at`.
+   - Melakukan auto-seeding 5 template bawaan profesional berkualitas tinggi untuk masing-masing kategori: menu, list, carousel, invoice, dan confirmation.
+2. Pembuatan Backend Service dan RESTful Router Master Admin (admin-backend/):
+   - Membuat `templateService.ts` yang mengimplementasikan seluruh operasi CRUD: `getAllTemplates`, `getActiveTemplatesByCategory`, `getTemplateById`, `createTemplate`, `updateTemplate`, `toggleTemplateStatus`, dan `deleteTemplate`.
+   - Membuat router `templateRoutes.ts` dengan endpoint: GET /templates, POST /templates, PUT /templates/:id, PATCH /templates/:id/status, DELETE /templates/:id.
+   - Mendaftarkan router di `adminRoutes.ts` sebagai sub-rute /templates.
+3. Pembuatan API Publik Tenant untuk Dashboard Bot (backend/routes/tenantTemplateRoutes.ts & backend/app.ts):
+   - Membuat endpoint `GET /api/bot/templates` yang menerima query parameter `category` dan hanya mengembalikan template yang berstatus aktif (`is_active = 1`).
+   - Mendaftarkan rute ini pada aplikasi Express bot utama di `backend/app.ts`.
+4. Pembangunan Halaman "Template Message" di Dashboard Master Admin (admin-frontend/):
+   - Menambahkan tipe data TypeScript `TemplateCategory`, `MessageTemplate`, dan `CreateTemplateInput` pada `admin.types.ts`.
+   - Menambahkan menu navigasi "Template Message" berikon `LayoutTemplate` pada `AdminSidebar.tsx` dan menangani judul di `AdminHeader.tsx`.
+   - Membuat komponen utama `TabTemplates.tsx` dengan filter kategori pill (Semua, Menu, List, Carousel, Invoice, Konfirmasi), input pencarian, sakelar switch status aktif/nonaktif langsung, tombol aksi edit, salin, dan hapus.
+   - Membuat komponen modal `AddEditTemplateModal.tsx` dengan form lengkap: nama template, kategori fungsi, textarea isi pesan, chip variabel placeholder siap klik, dan toggle status aktif.
+   - Membuat modal konfirmasi in-app `DeleteTemplateModal.tsx` yang aman dan serasi dengan desain tema master.
+   - Mengintegrasikan halaman dan orkestrasi modal di `App.tsx`.
+5. Integrasi Pemilih Template Terisolasi di Dashboard Bot (frontend/):
+   - Membuat komponen modal `TemplatePickerModal.tsx` yang mengonsumsi endpoint tenant, memfilter ketat hanya template aktif sesuai kategori sub-tab yang dibuka, dan menyediakan tombol Gunakan dan Salin teks.
+   - Menambahkan fitur konfirmasi sebelum menimpa jika textarea form respon bot sudah berisi teks.
+   - Memasang tombol "Pilih Template" di 5 sub-tab halaman Respon Bot (`TabCommand.tsx`): Menu, List, Carousel, Invoice, dan Konfirmasi.
+   - Memastikan aturan pemisahan ketat (anti-campur): template menu hanya muncul di sub-tab menu, list hanya di list, carousel hanya di carousel, invoice hanya di invoice, dan konfirmasi hanya di konfirmasi.
+6. Verifikasi dan Pengujian:
+   - Validasi type checking TypeScript menggunakan `lint_applet` (`tsc --noEmit`) berhasil 100% tanpa error.
+   - Kompilasi seluruh aplikasi web menggunakan `compile_applet` berhasil dengan pesan Build Succeeded.
+   - Pengecekan grep memastikan nol (0) karakter em-dash (—) dan en-dash (–) pada seluruh file baru yang dibuat.
+
+File yang Diubah dan Dibuat:
+- "admin-backend/database/masterSqlite.ts" - Menambahkan tabel message_templates dan data awal seeding.
+- "admin-backend/services/templateService.ts" - Service database SQLite untuk manajemen template.
+- "admin-backend/routes/templateRoutes.ts" - REST API Master Admin untuk CRUD template.
+- "admin-backend/routes/adminRoutes.ts" - Mendaftarkan templateRouter ke adminRouter.
+- "backend/routes/tenantTemplateRoutes.ts" - Endpoint publik bot untuk mengambil template aktif per kategori.
+- "backend/app.ts" - Mendaftarkan tenantTemplateRouter pada express app bot.
+- "admin-frontend/src/types/admin.types.ts" - Penambahan interface template message.
+- "admin-frontend/src/components/layout/AdminSidebar.tsx" - Penambahan item navigasi Template Message.
+- "admin-frontend/src/components/layout/AdminHeader.tsx" - Penanganan header judul tab templates.
+- "admin-frontend/src/components/dashboard/tabs/TabTemplates.tsx" - Halaman manajemen template pesan master admin.
+- "admin-frontend/src/components/modals/AddEditTemplateModal.tsx" - Modal tambah dan edit template.
+- "admin-frontend/src/components/modals/DeleteTemplateModal.tsx" - Modal konfirmasi hapus template.
+- "admin-frontend/src/App.tsx" - Rendering tab templates dan modal handler.
+- "frontend/src/components/modals/TemplatePickerModal.tsx" - Modal pemilih template bot terisolasi.
+- "frontend/src/components/tabs/TabCommand.tsx" - Tombol pemilih template pada 5 sub-tab respon bot.
+- "brain/SCHEDULE.md" - Memperbarui status [19.0] menjadi Completed.
+- "brain/LANGKAH_IMPLEMENTASI.md" - Memperbarui status [44.0] menjadi Completed.
+- "brain/PROGRESS.md" - Pencatatan hasil penyelesaian entri [44.0].
+
+Alasan Perubahan:
+Memenuhi instruksi pengguna untuk mengembangkan fitur Template Message di Dashboard Master Admin agar admin dapat mengelola template secara fleksibel (tambah, edit, nonaktifkan, hapus) serta memudahkan tenant di Dashboard Bot memilih template respon yang rapi dan terisolasi ketat sesuai kategori fungsinya.
+
+Hasil:
+1. Halaman Template Message aktif di Dashboard Master Admin dengan antarmuka Clean Modern selaras dengan dashboard bot.
+2. Master Admin dapat menambah template baru, mengedit, mengubah status aktif/nonaktif secara instan, serta menghapus template.
+3. Tombol "Pilih Template" terpasang di semua sub-tab respon bot (Menu, List, Carousel, Invoice, Konfirmasi).
+4. Pemisahan ketat antar-kategori terjamin 100%: sub-tab menu hanya menampilkan template menu, list hanya template list, dst.
+5. Pemilihan template secara otomatis mengisi form respon bot dengan konfirmasi penimpaan teks jika diperlukan.
+6. Seluruh pengujian kompilasi dan linting TypeScript berhasil tanpa kendala.
+
+Kendala:
+Tidak ada.
+
+---
+
+[45.0] - IMPLEMENTASI 4 SUB-KATEGORI TEMPLATE PESAN KHUSUS UNTUK KONFIRMASI CHECKOUT BOT
+
+- Tanggal: 2026-11-09 16:01
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 45.0
+
+Pekerjaan yang Dilakukan:
+1. Pembaharuan Skema Database & Migrasi (admin-backend/database/masterSqlite.ts):
+   - Memperluas kategori fungsi template dari 5 menjadi 8 kategori terisolasi.
+   - Melakukan migrasi otomatis untuk template ber-kategori 'confirmation' lama menjadi 'confirm_summary'.
+   - Melakukan auto-seeding default template profesional untuk 4 varian konfirmasi:
+     * `confirm_summary`: Ringkasan Pesanan Interaktif (Order Summary).
+     * `confirm_promo_input`: Instruksi Input Kupon Promo.
+     * `confirm_promo_valid`: Pemberitahuan Promo Berhasil Diterapkan.
+     * `confirm_promo_invalid`: Pemberitahuan Kode Promo Tidak Valid.
+2. Pembaharuan Backend Service (admin-backend/services/templateService.ts):
+   - Memperluas union type `TemplateCategory`.
+   - Menjamin method `getActiveTemplatesByCategory('confirm_summary')` juga mencakup backward compatibility untuk data legacy jika ada.
+3. Pembaharuan Halaman Template Message di Master Admin (admin-frontend/):
+   - `admin.types.ts`: Memperbarui interface `TemplateCategory` dengan 8 kategori spesifik.
+   - `TabTemplates.tsx`: Menambahkan tab filter pill baru untuk "Ringkasan Order", "Input Promo", "Promo Valid", dan "Promo Invalid" serta badge styling warna visual yang kontras dan elegan.
+   - `AddEditTemplateModal.tsx`: Menambahkan opsi dropdown ke-4 sub-kategori konfirmasi lengkap dengan deskripsi fungsional serta tag chips variabel placeholder yang relevan ({promoCode}, {discount}, {finalPrice}, {reason}, dsb).
+4. Integrasi Pemilih Template Lengkap di Dashboard Bot Toko (frontend/src/components/tabs/TabCommand.tsx):
+   - Form 1 (Ringkasan Pesan Order): Memanggil picker template kategori `confirm_summary`.
+   - Form 2 (Permintaan Input Kode Promo): Menambahkan tombol "Pilih Template" khusus kategori `confirm_promo_input`.
+   - Form 3 (Pesan Jika Kode Promo Valid): Menambahkan tombol "Pilih Template" khusus kategori `confirm_promo_valid`.
+   - Form 4 (Pesan Jika Kode Promo Invalid): Menambahkan tombol "Pilih Template" khusus kategori `confirm_promo_invalid`.
+   - `TemplatePickerModal.tsx`: Memperbarui union `BotCommandCategory` agar sinkron dengan 8 kategori.
+5. Verifikasi dan Pengujian:
+   - Kompilasi `compile_applet` sukses (Build succeeded).
+   - Typechecking `lint_applet` (`tsc --noEmit`) sukses 100% tanpa error.
+   - Grep verification memastikan 0 karakter em-dash (-) dan en-dash (-).
+
+File yang Diubah:
+- "admin-backend/database/masterSqlite.ts" - Migrasi data lama & auto-seed 4 template varian konfirmasi.
+- "admin-backend/services/templateService.ts" - Dukungan kategori baru & backward compatibility.
+- "admin-frontend/src/types/admin.types.ts" - Penambahan enum TemplateCategory.
+- "admin-frontend/src/components/dashboard/tabs/TabTemplates.tsx" - Filter pills & badges kategori baru.
+- "admin-frontend/src/components/modals/AddEditTemplateModal.tsx" - Dropdown kategori & variabel placeholder baru.
+- "frontend/src/components/modals/TemplatePickerModal.tsx" - Dukungan kategori baru di modal picker.
+- "frontend/src/components/tabs/TabCommand.tsx" - Tombol "Pilih Template" pada form 1, 2, 3, dan 4 konfirmasi.
+- "brain/SCHEDULE.md" - Memperbarui status [28.0] menjadi Completed.
+- "brain/LANGKAH_IMPLEMENTASI.md" - Memperbarui status [45.0] menjadi Completed.
+- "brain/PROGRESS.md" - Pencatatan hasil penyelesaian entri [45.0].
+
+Alasan Perubahan:
+Memenuhi koreksi pengguna agar masing-masing dari 4 alur pesan konfirmasi bot (Ringkasan Order, Input Promo, Promo Valid, dan Promo Invalid) memiliki template mandiri dan terisolasi secara ketat.
+
+Hasil:
+1. Keempat form respon konfirmasi kini masing-masing memiliki tombol "Pilih Template" mandiri.
+2. Setiap tombol hanya menampilkan template yang sesuai dengan jenis responnya (anti-campur).
+3. Dashboard Master Admin dapat mengelola, menambah, mengedit, menonaktifkan, dan menghapus template untuk masing-masing dari 4 sub-kategori konfirmasi secara independen.
+4. Seluruh kode lolos build dan linting tanpa error.
+
+Kendala:
+Tidak ada.
+
+---
+
+[46.0] - IMPLEMENTASI FITUR PERINGATAN OTOMATIS MASA SEWA KEDALUWARSA (EXPIRED WARNING) DENGAN TOMBOL NATIVE CTA_URL
+
+- Tanggal: 2026-11-09 20:25
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 46.0
+
+Pekerjaan yang Dilakukan:
+1. Pembaharuan Skema Database Master (admin-backend/database/masterSqlite.ts):
+   - Menambahkan 4 kolom flag baru pada tabel `tenants`: `warned_3d`, `warned_1d`, `warned_5h`, dan `warned_1h` (INTEGER default 0).
+   - Menambahkan mekanisme migrasi otomatis menggunakan `PRAGMA table_info` untuk memastikan kolom tersedia tanpa merusak data yang ada.
+2. Pembaharuan Tipe Data (admin-backend/types/admin.types.ts & admin-frontend/src/types/admin.types.ts):
+   - Menambahkan properti flag peringatan pada interface `TenantRecord` dan `Tenant`.
+3. Integrasi Logic Perpanjangan Sewa (admin-backend/services/tenantService.ts):
+   - Memodifikasi method `extendDuration` untuk mereset seluruh flag peringatan kembali ke 0 ketika masa sewa diperpanjang.
+4. Pembuatan Expiry Warning Service (backend/services/expiryWarningService.ts):
+   - Implementasi `startExpiryWarningScheduler` menggunakan `setInterval` yang berjalan setiap 5 menit.
+   - Implementasi `checkAllTenantsExpiry` untuk memindai seluruh tenant aktif dan menentukan interval peringatan (H-3 Hari, H-1 Hari, H-5 Jam, H-1 Jam).
+   - Implementasi pengirim pesan WhatsApp interaktif menggunakan Baileys `nativeFlow` dengan tombol `cta_url` ("💳 Perpanjang Masa Sewa").
+   - Menambahkan fallback pesan teks biasa dengan tautan WhatsApp eksplisit jika pengiriman pesan interaktif gagal.
+   - Mekanisme pengiriman cerdas: mencoba menggunakan bot milik tenant itu sendiri, jika offline akan mencoba menggunakan bot master default.
+5. Pembuatan API Endpoint Master Admin (admin-backend/routes/expiryRoutes.ts):
+   - Menambahkan endpoint `POST /api/admin/expiry-warning/check-now` untuk memicu pengecekan masa sewa secara manual dan instan.
+6. Integrasi Server Lifecycle (server.ts & admin-backend/routes/adminRoutes.ts):
+   - Mendaftarkan `expiryRouter` ke dalam `adminRouter`.
+   - Menjalankan scheduler otomatis saat server Node.js pertama kali hidup.
+7. Verifikasi dan Pengujian:
+   - Kompilasi `compile_applet` sukses (Build succeeded).
+   - Typechecking `lint_applet` sukses 100% tanpa error.
+   - Grep verification memastikan 0 karakter em-dash (-) dan en-dash (-).
+   - Pengujian manual via curl ke endpoint `check-now` berhasil memberikan laporan status pengecekan.
+
+File yang Diubah/Dibuat:
+- "admin-backend/database/masterSqlite.ts" - Migrasi kolom flag peringatan.
+- "admin-backend/types/admin.types.ts" - Update interface TenantRecord.
+- "admin-frontend/src/types/admin.types.ts" - Update interface Tenant.
+- "admin-backend/services/tenantService.ts" - Reset flag pada perpanjangan sewa.
+- "backend/services/expiryWarningService.ts" - Core scheduler dan pengirim pesan tombol interaktif.
+- "admin-backend/routes/expiryRoutes.ts" - Endpoint pemicu manual check-now.
+- "admin-backend/routes/adminRoutes.ts" - Mounting router baru.
+- "server.ts" - Inisialisasi scheduler otomatis.
+- "brain/SCHEDULE.md" - Update status [20.0] menjadi Completed.
+- "brain/LANGKAH_IMPLEMENTASI.md" - Update status [46.0] menjadi Completed.
+- "brain/PROGRESS.md" - Pencatatan hasil penyelesaian entri [46.0].
+
+Alasan Perubahan:
+Memberikan peringatan dini yang profesional dan proaktif kepada pemilik toko bot sebelum masa sewa berakhir, sehingga operasional bisnis mereka tidak terganggu dan mempermudah proses perpanjangan sewa melalui integrasi tombol WhatsApp.
+
+Hasil:
+1. Sistem pengingat otomatis kini aktif berjalan di background setiap 5 menit.
+2. Tenant akan menerima total 4 kali pengingat pada interval kritis (H-3, H-1, H-5 Jam, H-1 Jam).
+3. Pesan pengingat tampil sangat premium dengan tombol "Perpanjang Masa Sewa" yang langsung terhubung ke WhatsApp Master Admin.
+4. Flag peringatan otomatis ter-reset setiap kali admin memperbarui durasi sewa tenant.
+
+Kendala:
+Tidak ada.
+
+
+
+
+---
+
+[29.0] - IMPLEMENTASI PERPANJANGAN MASA SEWA DENGAN DURASI FLEKSIBEL (MENIT, JAM, HARI, MINGGU, BULAN)
+
+- Tanggal: 2026-11-09 21:20
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 48.0
+
+Pekerjaan yang Dilakukan:
+1. Menambahkan tipe `DurationUnit` pada `admin-frontend/src/types/admin.types.ts` untuk standarisasi unit durasi (minutes, hours, days, weeks, months).
+2. Memperbarui `ExtendTenantModal.tsx` di dashboard Master Admin:
+   - Ganti state `extendDays` menjadi `amount` dan `unit`.
+   - Menambahkan fungsi `getExpiryPreview()` untuk menampilkan simulasi tanggal kedaluwarsa baru secara real-time berdasarkan sisa waktu tenant ditambah durasi baru.
+   - Menggunakan `Intl.DateTimeFormat` dengan locale `id-ID` dan timezone `Asia/Jakarta` untuk format tanggal Indonesia yang rapi.
+   - Redesain UI durasi: Menambahkan 4 tombol preset cepat (+1 Jam, +1 Hari, +30 Hari, +1 Tahun) dan Input Angka + Select Unit yang berdampingan.
+   - Memperbarui payload API `/api/admin/tenants/:id/extend` agar mengirim `{ amount, unit, note }`.
+3. Memverifikasi kelulusan build dengan `compile_applet` dan type-check `lint_applet` (100% lulus tanpa error).
+
+File yang Diubah:
+- "admin-frontend/src/types/admin.types.ts" - Menambahkan export type `DurationUnit`.
+- "admin-frontend/src/components/modals/ExtendTenantModal.tsx" - Update UI dan logika perpanjangan durasi fleksibel.
+
+Alasan Perubahan:
+Memberikan fleksibilitas bagi Master Admin untuk memperpanjang masa sewa dalam berbagai unit waktu, tidak hanya hari, serta memberikan feedback visual berupa pratinjau tanggal kedaluwarsa baru yang akurat.
+
+Hasil:
+1. Modal perpanjang masa sewa tampil lebih modern dan informatif.
+2. Admin dapat memperpanjang durasi dalam hitungan menit hingga bulan dengan mudah.
+3. Pratinjau tanggal baru langsung muncul saat angka atau unit diubah, meningkatkan User Experience (UX).
+4. Build dan linter lulus 100%.
+
+Kendala:
+Tidak ada.
+
+---
+
+[30.0] - PERBAIKAN VALIDASI INPUT DURASI (ALLOW EMPTY & WARNING MESSAGE)
+
+- Tanggal: 2026-11-09 21:26
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 49.0
+
+Pekerjaan yang Dilakukan:
+1. Memperbarui `AddTenantModal.tsx` dan `ExtendTenantModal.tsx`:
+   - Mengubah tipe state durasi dari `number` ke `number | string` untuk memungkinkan kolom kosong saat diedit.
+   - Menambahkan logika `onChange` yang mendukung penghapusan angka sepenuhnya.
+   - Menambahkan pesan peringatan visual "Form Tersebut Wajib Di Isi, Misal : 1" yang muncul secara dinamis saat kolom kosong, lengkap dengan animasi pulse dan border merah.
+   - Memastikan kalkulasi pratinjau kedaluwarsa tetap aman meskipun kolom kosong (dianggap sebagai 0).
+   - Menambahkan validasi tambahan pada saat submit form untuk mencegah durasi kosong atau tidak valid terkirim ke backend.
+2. Memverifikasi kelulusan build dan linting 100% sukses.
+
+File yang Diubah:
+- "admin-frontend/src/components/modals/AddTenantModal.tsx"
+- "admin-frontend/src/components/modals/ExtendTenantModal.tsx"
+
+Alasan Perubahan:
+Meningkatkan UX pada pengisian form durasi agar pengguna tidak terganggu oleh auto-default angka "1" saat mencoba menghapus dan mengetik ulang nilai durasi.
+
+Hasil:
+1. Pengguna kini dapat menghapus isi kolom durasi sepenuhnya.
+2. Muncul peringatan instruktif yang jelas jika kolom kosong.
+3. Form terlindungi dari pengiriman durasi kosong.
+4. Tampilan konsisten dengan standar desain yang bersih dan responsif.
+
+---
+
+[31.0] - KUSTOMISASI LENGKAP RESPON BOT, TEMPLATE MULTI-KATEGORI, DAN DUKUNGAN PLACEHOLDER DINAMIS
+
+- Tanggal: 2026-11-10 13:15
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 50.0
+
+Pekerjaan yang Dilakukan:
+1. Memperluas skema data perintah bot `CommandsConfig` di backend (`backend/types/bot.types.ts`) dan frontend (`frontend/src/types/dashboard.types.ts`) dengan 11 pasangan teks respon dan footer yang sebelumnya hardcoded:
+   - `paymentSuccessDmText` & `paymentSuccessDmFooter` (Lunas di DM)
+   - `paymentSuccessGroupText` & `paymentSuccessGroupFooter` (Lunas di Grup)
+   - `paymentExpiredText` & `paymentExpiredFooter` (Invoice Kedaluwarsa)
+   - `paymentErrorText` & `paymentErrorFooter` (Kendala Gateway QRIS)
+   - `orderGroupNotifText` & `orderGroupNotifFooter` (Petunjuk Order Grup ke DM)
+   - `stockEmptyText` & `stockEmptyFooter` (Stok Kosong / Restock)
+   - `sessionExpiredText` & `sessionExpiredFooter` (Sesi Checkout Habis 90s)
+   - `promoCancelledText` & `promoCancelledFooter` (Pembatalan Kupon 'BATAL')
+   - `contactOwnerEmptyText` (Kontak Owner Belum Diatur)
+   - `contactAdminEmptyText` (Kontak CS / Admin Belum Diatur)
+   - `expiryWarningOwnerText` & `expiryWarningOwnerFooter` (Peringatan Masa Sewa Bot)
+2. Memperluas `backend/services/placeholderHelper.ts` untuk mendukung seluruh placeholder dinamis:
+   - `{customerName}`, `{senderName}`, `{customerNumber}`, `{senderNumber}`, `{orderId}`, `{produkName}`, `{varian}`, `{price}`, `{totalPrice}`, `{total}`, `{unikCode}`, `{promoCode}`, `{discount}`, `{finalPrice}`, `{reason}`, `{errorMessage}`, `{tenantId}`, `{remainingTime}`, `{sisaWaktu}`, `{expiryDate}`, `{waktuKedaluwarsa}`, `{storeName}`, `{ownerName}`, `{ownerNumber}`, `{adminName}`, `{adminNumber}`, `{webLink}`.
+3. Memperbarui `backend/config/configManager.ts`:
+   - Menambahkan default constants untuk respon transaksi, notifikasi, dan kontak.
+   - Mengintegrasikan pemuatan dan penyimpanan SQLite per-tenant di tabel `commands_config`.
+4. Memperbarui handler pesan bot di backend:
+   - `backend/handlers/messageDispatcher.ts`: Mengganti pesan hardcoded pada penanganan transaksi lunas DM & grup, error gateway QRIS, invoice expired, alur checkout grup ke DM, timeout sesi 90 detik, dan pembatalan kode promo dengan konfigurasi dinamis tenant via `resolvePlaceholders`.
+   - `backend/messages/carouselMessage.ts`: Mengganti pesan stok kosong dengan `config.stockEmptyText`.
+   - `backend/messages/adminContactMessage.ts`: Mengganti respon kontak owner/admin kosong dengan `config.contactOwnerEmptyText` dan `config.contactAdminEmptyText`.
+   - `backend/services/expiryWarningService.ts`: Mengambil template peringatan masa sewa dari master database atau fallback ke default dan memformatnya dengan placeholder.
+5. Memperbarui Master Admin (`admin-backend` dan `admin-frontend`):
+   - Menambahkan 11 kategori baru ke `TemplateCategory` union type.
+   - Auto-seeding 11 template default pada `admin-backend/database/masterSqlite.ts`.
+   - Menambahkan tab filter pills untuk 11 kategori baru pada `admin-frontend/src/components/dashboard/tabs/TabTemplates.tsx`.
+   - Memperbarui modal tambah/edit template `admin-frontend/src/components/modals/AddEditTemplateModal.tsx` dengan pilihan kategori baru dan chip placeholder baru.
+6. Memperbarui Tenant Bot Dashboard (`frontend`):
+   - Menambahkan state, handler `loadInitialConfig`, dan sinkronisasi `syncConfigToServer` pada `frontend/src/hooks/useStoreConfig.ts`.
+   - Memperluas kategori pada `frontend/src/components/modals/TemplatePickerModal.tsx`.
+   - Menambahkan tab baru ('Transaksi', 'Notifikasi', 'Kontak') pada `frontend/src/components/tabs/TabCommand.tsx` dengan kartu editor, chip insert tag, tombol "Pilih Template", tombol "Reset Default", dan tombol "Simpan".
+   - Menghubungkan seluruh props dan aksi simpan di `frontend/src/components/tabs/TabContentRenderer.tsx`.
+7. Menjalankan pengujian kompilasi `compile_applet` dan linting `lint_applet` (100% sukses tanpa error).
+
+File yang Diubah:
+- "backend/types/bot.types.ts"
+- "backend/services/placeholderHelper.ts"
+- "backend/config/configManager.ts"
+- "backend/handlers/messageDispatcher.ts"
+- "backend/messages/carouselMessage.ts"
+- "backend/messages/adminContactMessage.ts"
+- "backend/services/expiryWarningService.ts"
+- "admin-backend/types/admin.types.ts"
+- "admin-backend/services/templateService.ts"
+- "admin-backend/database/masterSqlite.ts"
+- "admin-frontend/src/types/admin.types.ts"
+- "admin-frontend/src/components/dashboard/tabs/TabTemplates.tsx"
+- "admin-frontend/src/components/modals/AddEditTemplateModal.tsx"
+- "frontend/src/types/dashboard.types.ts"
+- "frontend/src/hooks/useStoreConfig.ts"
+- "frontend/src/components/modals/TemplatePickerModal.tsx"
+- "frontend/src/components/tabs/TabCommand.tsx"
+- "frontend/src/components/tabs/TabContentRenderer.tsx"
+- "brain/PROGRESS.md"
+- "brain/SCHEDULE.md"
+- "brain/LANGKAH_IMPLEMENTASI.md"
+
+Alasan Perubahan:
+Memenuhi instruksi pengguna agar seluruh pesan respon bot yang sebelumnya belum dapat dikustomisasi kini dapat diubah bebas oleh tenant maupun master admin dengan pilihan template dan placeholder dinamis yang lengkap.
+
+Hasil:
+1. Seluruh 11 alur pesan bot kini 100% dinamis dan tersimpan per-tenant di SQLite.
+2. Master Admin dapat mengelola, menambah, dan mengedit template untuk 11 kategori baru.
+3. Tenant di dashboard "Respon Bot" dapat memilih template resmi, mengedit teks dan footer, serta menyisipkan variabel placeholder dengan mudah.
+4. Lolos typecheck, build, dan linting.
+
+Kendala:
+Tidak ada.
+
+---
+
+[32.0] - FORMAT TAMPILAN NOMOR TELEPON 8xxxxxx DAN PENYIMPANAN RESMI +62
+
+- Tanggal: 2026-11-10 17:53
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 51.0
+
+Pekerjaan yang Dilakukan:
+1. Membuat modul utilitas `frontend/src/utils/phoneUtils.ts` yang menyediakan:
+   - `toDisplayPhone`: memangkas awalan kode negara ('+62', '62', '0') dari nomor telepon sehingga hanya menyisakan angka lokal yang diawali digit '8...' untuk keperluan tampilan di dalam kolom input yang sudah memiliki badge '+62'.
+   - `toOfficialPhone`: mengonversi nomor lokal menjadi format resmi negara berawalan '+62' (contoh: '+6282173515807').
+   - `formatOfficialDisplay`: memformat nomor telepon untuk keperluan label/preview tanpa risiko double plus ('++62').
+2. Memperbarui antarmuka form toko di `frontend/src/components/tabs/TabStoreInfo.tsx`:
+   - Kolom "WhatsApp Owner" kini hanya menampilkan format '8...' (`toDisplayPhone(formData.ownerNumber)`), sementara nilai yang tersimpan di state dan dikirim ke server berformat resmi '+62...'.
+   - Menambahkan auto-sanitasi pada event `onChange`: jika pengguna mengetik atau menyalin nomor berawalan '08...', '628...', atau '+628...', awalan otomatis dipangkas sehingga teks di dalam kotak form selalu berawalan '8...'.
+   - Menerapkan perlakuan identik pada kolom "WhatsApp Admin CS".
+   - Memperbarui pratinjau nomor di hero banner, tanda tangan footer pesan bot, dan kartu variabel dinamis agar selalu menampilkan format resmi tanpa double '+'.
+3. Memperbarui modal setup wajib toko `frontend/src/components/modals/MandatoryStoreSetupModal.tsx`:
+   - Nilai input nomor WhatsApp diawali dengan `toDisplayPhone`.
+   - Handler `onChange` otomatis memangkas awalan 62 atau 0.
+   - Saat submit, nomor dinormalisasi ke `toOfficialPhone` ('+628...') sebelum dikirim ke API `/api/auth/store-setup`.
+4. Memperbarui backend di `backend/services/placeholderHelper.ts` dan `backend/config/configManager.ts`:
+   - Menambahkan fungsi `toOfficialIndonesianPhone`.
+   - Pada fungsi `saveStoreInfo`, nomor telepon owner dan admin otomatis dinormalisasi menjadi format resmi '+62' sebelum disimpan ke database SQLite toko dan disinkronkan ke `master.db`.
+5. Memperbarui rute backend `backend/routes/authRoutes.ts` pada endpoint `/api/auth/store-setup` agar menyimpan dan menyinkronkan nomor owner dalam format '+628...'.
+6. Memperbarui `admin-backend/utils/phoneUtils.ts` dan `admin-backend/services/tenantService.ts`:
+   - `normalizeIndonesianPhone` kini mengembalikan format resmi '+628...'.
+   - `updateStoreInfo` otomatis menormalisasi nomor telepon saat memperbarui data di `master.db`.
+7. Memperbarui modal tambah tenant di `admin-frontend/src/components/modals/AddTenantModal.tsx` dengan badge bendera +62 dan format input 8...
+8. Melakukan migrasi data existing pada `database/master.db` dan seluruh database SQLite tenant (`database/tenants/*.db`) sehingga nomor telepon yang tersimpan sebelumnya diperbarui ke format resmi '+628...'.
+9. Menguji verifikasi kompilasi (`compile_applet`), linting TypeScript (`lint_applet`), dan pengujian API via curl (100% sukses tanpa kendala).
+
+File yang Diubah:
+- "frontend/src/utils/phoneUtils.ts"
+- "frontend/src/components/tabs/TabStoreInfo.tsx"
+- "frontend/src/components/modals/MandatoryStoreSetupModal.tsx"
+- "backend/services/placeholderHelper.ts"
+- "backend/config/configManager.ts"
+- "backend/routes/authRoutes.ts"
+- "admin-backend/utils/phoneUtils.ts"
+- "admin-backend/services/tenantService.ts"
+- "admin-frontend/src/components/modals/AddTenantModal.tsx"
+- "brain/LANGKAH_IMPLEMENTASI.md"
+- "brain/PROGRESS.md"
+
+Alasan Perubahan:
+Menghilangkan kebingungan pengguna akibat duplikasi tampilan kode negara pada form WhatsApp Owner (badge +62 berdampingan dengan angka 62 di input), serta memastikan data nomor telepon tersimpan dengan format resmi internasional negara (+62).
+
+Hasil:
+1. Kolom input WhatsApp Owner dan Admin CS kini hanya menampilkan nomor bersih '82173515807'.
+2. Pengguna yang mengetik atau paste '0821...' atau '62821...' otomatis diubah tampilannya menjadi '821...'.
+3. Database SQLite toko dan database master admin menyimpan nomor telepon dalam format resmi negara '+6282173515807'.
+4. Tautan vCard, WhatsApp link, dan bot Baileys tetap berfungsi normal tanpa hambatan.
+5. Lolos uji linting TypeScript dan kompilasi build 100%.
+
+Kendala:
+Tidak ada.
+
+---
+
+[33.0] - IMPLEMENTASI NOTIFIKASI TRANSAKSI PENJUALAN VIA TELEGRAM BOT & PORTAL KELOLA TELEGRAM MASTER ADMIN
+
+- Tanggal: 2026-11-10 21:58
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 52.0
+
+Pekerjaan yang Dilakukan:
+1. Membangun Skema Database SQLite Per-Tenant untuk Telegram di `backend/database/tenantDbManager.ts`:
+   - Menambahkan pembuatan tabel `telegram_config` (`id`, `bot_token`, `chat_id`, `notif_enabled`, `admin_disabled`, `updated_at`) pada inisialisasi dan migrasi database tenant.
+2. Membangun Layanan Backend Telegram di `backend/services/telegramService.ts`:
+   - `getTelegramConfig` & `saveTelegramConfig` untuk membaca dan menyimpan konfigurasi per-tenant.
+   - `sendTelegramMessage` dengan integrasi aman ke Telegram Bot API (`https://api.telegram.org/bot<token>/sendMessage`) dengan mode non-blocking dan fallback teks polos jika parsing HTML gagal.
+   - `testTelegramConnection` untuk memverifikasi sambungan token dan chat ID secara instan.
+   - `notifyTransactionPaid` untuk mengirimkan notifikasi penjualan transaksi lunas/berhasil (Paid) lengkap dengan format rapi (Nama Toko, Nominal, Varian, ID Pesanan, dan Waktu).
+   - `notifyTransactionFailed` untuk mengirimkan notifikasi transaksi gagal, kadaluwarsa, atau dibatalkan (Cancel/Expired). Sesuai permintaan pengguna, pesanan berstatus Pending tidak dikirimkan ke Telegram.
+   - `sendAdminMessageToTelegram` untuk meneruskan pengumuman resmi Master Admin ke Telegram pemilik toko.
+3. Membangun Router Tenant di `backend/routes/telegramRoutes.ts`:
+   - `GET /api/bot/telegram/config`
+   - `POST /api/bot/telegram/config`
+   - `POST /api/bot/telegram/test`
+   - Mendaftarkannya di `backend/app.ts` pada path `/api/bot/telegram`.
+4. Menghubungkan Trigger Notifikasi Otomatis di `backend/services/transactionManager.ts`:
+   - Pada `updateTransactionStatus`, memicu `notifyTransactionPaid` saat `newStatus === 'paid'`.
+   - Memicu `notifyTransactionFailed` saat `newStatus === 'cancel'`. Status `pending` tidak memicu notifikasi apapun.
+5. Membangun Layanan & Rute Master Admin:
+   - `admin-backend/services/telegramAdminService.ts`: Mengambil ringkasan tenant tanpa pernah mengekspos token dan chat ID (jaminan privasi penuh), fitur toggle matikan/hidupkan bot per-tenant, serta pengiriman pesan resmi admin ke Telegram owner.
+   - `admin-backend/routes/telegramAdminRoutes.ts`: Menyediakan endpoint `GET /api/admin/telegram/tenants`, `POST /api/admin/telegram/tenants/:id/toggle`, dan `POST /api/admin/telegram/tenants/:id/send-message`.
+   - Mendaftarkan router di `admin-backend/routes/adminRoutes.ts`.
+6. Membangun Antarmuka Tenant di `frontend/src/components/tabs/TabStoreInfo.tsx`:
+   - Seksi 4 khusus "Notifikasi Telegram Real-Time (Purchase Notice)".
+   - Toggle switcher aktif/nonaktif notifikasi Telegram.
+   - Kolom Bot Token (@BotFather) dengan tombol intip/sembunyikan token (Eye/EyeOff).
+   - Kolom Telegram Chat ID (@userinfobot) dengan panduan ringkas dan tautan langsung.
+   - Banner peringatan dinamis jika bot dinonaktifkan oleh Master Admin.
+   - Tombol "Tes Kirim Notifikasi" dan "Simpan Pengaturan Telegram".
+7. Membangun Antarmuka Master Admin di `admin-frontend`:
+   - `admin-frontend/src/components/layout/AdminSidebar.tsx`: Menambahkan menu navigasi "Bot Telegram" dengan ikon Send.
+   - `admin-frontend/src/components/modals/SendTelegramMessageModal.tsx`: Modal penulisan pesan pengumuman/informasi resmi admin ke Telegram owner tanpa memperlihatkan kredensial rahasia bot.
+   - `admin-frontend/src/components/dashboard/tabs/TabTelegramAdmin.tsx`: Halaman kelola bot Telegram memuat ringkasan metrik (Total Tenant, Bot Aktif, Dinonaktifkan Admin, Belum Dikonfigurasi), banner kebijakan privasi, filter status, tabel (ID Tenant, Nama Toko, Status Bot, Terakhir Diperbarui, dan Tombol Aksi: Kirim Pesan & Matikan/Aktifkan Bot).
+   - `admin-frontend/src/App.tsx`: Menghubungkan rendering tab telegram ke navigasi sidebar.
+8. Verifikasi dan Pengujian:
+   - Menguji endpoint `GET /api/admin/telegram/tenants` dan `POST /api/admin/telegram/tenants/:id/toggle` via curl.
+   - Menguji endpoint `GET /api/bot/telegram/config`.
+   - Menjalankan `compile_applet` dan `lint_applet` bersamaan (100% lulus, 0 error).
+
+File yang Diubah / Dibuat:
+- "backend/database/tenantDbManager.ts" - Migrasi tabel `telegram_config` di SQLite tenant.
+- "backend/services/telegramService.ts" - Service Telegram Bot API & formatting notifikasi.
+- "backend/routes/telegramRoutes.ts" - Rute API tenant Telegram.
+- "backend/app.ts" - Registrasi telegramRouter.
+- "backend/services/transactionManager.ts" - Trigger notifikasi otomatis paid & cancel.
+- "admin-backend/services/telegramAdminService.ts" - Service manajemen Telegram Master Admin.
+- "admin-backend/routes/telegramAdminRoutes.ts" - Rute API Master Admin Telegram.
+- "admin-backend/routes/adminRoutes.ts" - Registrasi telegramAdminRouter.
+- "frontend/src/components/tabs/TabStoreInfo.tsx" - Form konfigurasi Telegram di dashboard toko.
+- "admin-frontend/src/components/layout/AdminSidebar.tsx" - Menu sidebar Bot Telegram.
+- "admin-frontend/src/components/modals/SendTelegramMessageModal.tsx" - Modal kirim pesan admin ke Telegram.
+- "admin-frontend/src/components/dashboard/tabs/TabTelegramAdmin.tsx" - Halaman manajemen Telegram Master Admin.
+- "admin-frontend/src/App.tsx" - Integrasi tab Bot Telegram di dashboard admin.
+- "brain/LANGKAH_IMPLEMENTASI.md" - Entri [52.0] diperbarui menjadi Completed.
+- "brain/PROGRESS.md" - Entri [33.0] dicatat.
+
+Alasan Perubahan:
+Memenuhi permintaan pengembangan fitur SCHEDULE 21.0 dengan persyaratan khusus pengguna: notifikasi Telegram hanya dikirim untuk pesanan Berhasil dan Gagal (tidak saat pending), halaman manajemen bot Telegram di dashboard Master Admin dengan kemampuan menonaktifkan bot, perlindungan privasi mutlak (token & chat ID tidak pernah terlihat oleh admin), serta kemampuan Master Admin mengirimkan pesan pengumuman ke Telegram pemilik toko.
+
+Hasil:
+1. Notifikasi transaksi otomatis terkirim ke Telegram pemilik toko saat transaksi berstatus Berhasil (Paid) dan Gagal/Batal/Expired (Cancel), tanpa spam pada status Pending.
+2. Tenant dapat mengonfigurasi Bot Token dan Chat ID mereka sendiri, melakukan tes kirim notifikasi, dan mengaktifkan/menonaktifkan notifikasi secara mandiri.
+3. Master Admin memiliki halaman khusus untuk memantau status bot setiap tenant, menonaktifkan/mengaktifkan bot tenant, dan mengirimkan pesan resmi ke Telegram owner.
+4. Kredensial rahasia bot (token dan chat ID) terlindungi dan tidak dapat diintip oleh Master Admin.
+5. Seluruh kode lolos build dan linting TypeScript dengan sempurna.
+
+Kendala:
+Tidak ada.
+
+---
+
+[34.0] - RELOKASI PENGATURAN TELEGRAM KE HALAMAN CONNECTION & PENYEMPURNAAN TABEL MASTER ADMIN (KOLOM KIRIM PESAN, TOGGLE ON/OFF, 4 STATUS BOT)
+
+- Tanggal: 2026-11-11 00:10
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 53.0
+
+Pekerjaan yang Dilakukan:
+1. Merelokasi Pengaturan Telegram dari Info Profil ke Halaman Connection:
+   - Menghapus Seksi 4 Telegram beserta seluruh state dan handler terkait dari `frontend/src/components/tabs/TabStoreInfo.tsx`.
+   - Mengintegrasikan kartu "Koneksi Bot Telegram (Purchase Notice)" ke `frontend/src/components/tabs/TabConnectionDedicated.tsx` di atas Live Socket Terminal, lengkap dengan input Bot Token (@BotFather), Chat ID Telegram (@userinfobot), toggle aktif/nonaktif, tombol tes koneksi, tombol simpan, dan panduan 4 langkah ringkas.
+2. Memisahkan Kolom Kirim Pesan di Dashboard Master Admin (`TabTelegramAdmin.tsx`):
+   - Menambahkan kolom header dan data tersendiri "Kirim Pesan" dengan tombol aksi khusus untuk membuka modal penulisan pesan pengumuman/informasi resmi admin ke Telegram owner.
+3. Mengubah Aksi Menonaktifkan Bot Menjadi Sakelar On/Off (Toggle Switch):
+   - Pada kolom "Aksi Management", tombol teks sebelumnya diganti dengan komponen sakelar On/Off (Toggle Switch) yang interaktif, memiliki visual switch hijau (ON) / abu-abu (OFF), label status yang jelas, serta animasi transisi yang mulus.
+4. Menyelaraskan 4 Standar Status Bot Telegram:
+   - Nonaktif (badge abu-abu): bot belum di-set oleh tenant (`!isConfigured`).
+   - Online (badge hijau): bot terhubung (`isConfigured && notifEnabled && !adminDisabled`).
+   - Offline (badge abu-abu): bot dimatikan oleh tenant (`isConfigured && !notifEnabled && !adminDisabled`).
+   - Suspend (badge merah): bot dimatikan oleh admin (`adminDisabled`).
+   - Logika status ini juga telah diselaraskan pada `admin-backend/services/telegramAdminService.ts` dan filter tabs di admin frontend.
+5. Verifikasi dan Pengujian:
+   - Uji API endpoint `/api/admin/telegram/tenants` dan endpoint toggle via cURL (berjalan sempurna mengembalikan status `nonaktif` dan `suspend`).
+   - Verifikasi ganda `compile_applet` dan `lint_applet` (100% lulus, 0 error).
+   - Memastikan nol karakter em-dash di seluruh file.
+
+File yang Diubah:
+- "frontend/src/components/tabs/TabStoreInfo.tsx" - Pembersihan konfigurasi Telegram dari halaman Info Profil.
+- "frontend/src/components/tabs/TabConnectionDedicated.tsx" - Penempatan kartu pengaturan koneksi Telegram Bot di halaman Connection.
+- "backend/services/telegramService.ts" - Penyesuaian union type status bot.
+- "admin-backend/services/telegramAdminService.ts" - Penyesuaian pemetaan 4 status bot.
+- "admin-frontend/src/components/dashboard/tabs/TabTelegramAdmin.tsx" - Pemisahan kolom Kirim Pesan, sakelar toggle On/Off di Aksi Management, dan 4 badge status standar.
+- "brain/LANGKAH_IMPLEMENTASI.md" - Entri [53.0] diselesaikan.
+- "brain/PROGRESS.md" - Entri [34.0] dicatat.
+
+Alasan Perubahan:
+Memenuhi instruksi revisi pengguna agar konfigurasi Telegram diletakkan di halaman Connection, memisahkan tombol Kirim Pesan dari kolom aksi di tabel admin, menerapkan sakelar On/Off untuk menonaktifkan bot dari sisi admin, serta menstandarkan 4 jenis status bot (Nonaktif, Online, Offline, Suspend).
+
+Hasil:
+1. Halaman Info Profil kini bersih kembali dan fokus pada data identitas toko.
+2. Pengaturan bot Telegram tersaji rapi di halaman Connection di atas Live Socket Terminal.
+3. Tabel Master Admin kini memiliki kolom Kirim Pesan mandiri dan kolom Aksi Management berupa sakelar toggle switch On/Off.
+4. Keempat status bot (Nonaktif, Online, Offline, Suspend) terpetakan dengan tepat sesuai kondisi sebenarnya.
+5. Build dan linter TypeScript lulus tanpa kendala.
+
+Kendala:
+Tidak ada.
+
+---
+
+[35.0] - PERBAIKAN STABILITAS DEV SERVER, PENANGANAN CRASH PRE-WARMING & SOCKET ISOLATION
+
+- Tanggal: 2026-11-11 01:33
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 54.0
+
+Pekerjaan yang Dilakukan:
+1. Memperbaiki Konfigurasi Port Socket Vite Middleware di `server.ts`:
+   - Menonaktifkan opsi HMR port independen (`hmr: { port: 24678 }` dan `hmr: { port: 24679 }`) menjadi `hmr: false` pada kedua instance Vite (Tenant dan Master Admin). Hal ini mencegah Vite membuka port WebSocket acak yang dilarang/diblokir oleh container runtime environment AI Studio.
+2. Mendukung Parsing Parameter CLI di `server.ts`:
+   - Menambahkan pembacaan argumen `--port` dari `process.argv` dengan fallback ke `process.env.PORT` atau default 3000, sehingga runner server AI Studio (`tsx server.ts --port 3000 --host 0.0.0.0`) terbaca dengan sempurna tanpa konflik.
+3. Menambahkan Global Exception Handlers:
+   - Memasang listener `process.on('uncaughtException')` dan `process.on('unhandledRejection')` di tingkat paling atas `server.ts` agar server Node.js tidak mati secara tiba-tiba jika terjadi disconnect socket atau timeout jaringan.
+4. Membungkus Eksekusi Background Cron Scheduler:
+   - Membungkus pemanggilan `startExpiryWarningScheduler()` dalam blok `try-catch` yang aman pada callback `serverApp.listen()`.
+5. Pengujian dan Verifikasi:
+   - Merestart dev server menggunakan `restart_dev_server`.
+   - Menguji endpoint kesehatan `/api/health` via cURL (merespon `HTTP 200 OK` dengan payload JSON valid).
+   - Menguji halaman Tenant `/` dan Master Admin `/admin/` (keduanya merespon `HTTP 200 OK`).
+   - Menjalankan `compile_applet` dan `lint_applet` bersamaan (100% lulus, 0 error).
+
+File yang Diubah:
+- "server.ts" - Perbaikan startup dev server, HMR false, penanganan argumen CLI, dan global exception handling.
+- "brain/LANGKAH_IMPLEMENTASI.md" - Entri [54.0] diselesaikan.
+- "brain/PROGRESS.md" - Entri [35.0] dicatat.
+
+Alasan Perubahan:
+Menyelesaikan error "Pre-warming failed: dev server process died" pada sistem runner environment AI Studio yang disebabkan oleh pembukaan port HMR tambahan dan ketiadaan error handler global pada proses server.
+
+Hasil:
+1. Dev server berjalan stabil di port 3000 tanpa crash saat pre-warming.
+2. Endpoint `/api/health`, dashboard toko (`/`), dan portal admin (`/admin/`) aktif dan dapat diakses dengan cepat.
+3. Kompilasi build dan validasi linting TypeScript lulus 100%.
+
+Kendala:
+Tidak ada.
+
+---
+
+[36.0] - IMPLEMENTASI FRONTEND HALAMAN MANAGEMENT BOT (TENANT) DAN MANAGEMENT TOKEN (MASTER ADMIN)
+
+- Tanggal: 2026-11-11 21:06
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 55.0
+
+Pekerjaan yang Dilakukan:
+1. Pembangunan Frontend Halaman "Management Bot" pada Dashboard Tenant (`frontend/src/components/tabs/TabBotManagement.tsx`):
+   - Kartu 1 (Status Bot): Menampilkan status bot (Aktif, Suspend, Expired) dengan badge kontras yang jelas (hijau emerald untuk aktif, merah rose untuk suspend, amber untuk expired) serta deskripsi kondisi operasional.
+   - Kartu 2 (Masa Aktif): Menampilkan sisa hari dan total masa aktif dalam format wajib [sisa]/[total] day (contoh: 26/30 day), lengkap dengan progress bar persentase visual yang adaptif.
+   - Kartu 3 (Tanggal Expired): Menampilkan hari dan tanggal kedaluwarsa lengkap dalam format bahasa Indonesia resmi (contoh: Rabu, 30 Desember 2026 pukul 23:59 WIB).
+   - Kartu 4 (Form Redeem Voucher): Form input kode token dengan placeholder XXXX-XXXX-XXXX-XXXX, fitur auto-uppercase dan auto-format tanda strip per 4 karakter saat diketik, tombol "Gunakan Token" dengan animasi loading dan validasi panjang 16 karakter (12 karakter alfanumerik + strip), penjelasan aturan token (universal, single-use), serta tombol contoh salin kode voucher cepat untuk simulasi pengujian UI.
+2. Pendaftaran Tab "Management Bot" pada Dashboard Tenant:
+   - Menambahkan menu navigasi "Management Bot" berikon Bot pada `frontend/src/components/layout/DesktopSidebar.tsx` dengan badge status dinamis jika akun disuspend atau expired.
+   - Menghubungkan rendering tab pada `frontend/src/components/tabs/TabContentRenderer.tsx` saat `selectedTab === 'Management Bot'`.
+3. Pembangunan Modal Pembuatan Token pada Master Admin (`admin-frontend/src/components/modals/CreateTokenModal.tsx`):
+   - Pilihan cepat preset masa aktif (+1 Jam, +1 Hari, +30 Hari, +3 Bulan).
+   - Kolom input angka durasi yang fleksibel dan dropdown satuan waktu (Menit, Jam, Hari, Bulan).
+   - Pratinjau pola struktur kode token yang akan digenerate secara real-time.
+   - Validasi input durasi kosong atau tidak valid dengan pesan peringatan interaktif.
+4. Pembangunan Modal Popup Token Baru Dibuat (`admin-frontend/src/components/modals/TokenCreatedModal.tsx`):
+   - Kotak token besar monospace tebal yang siap disalin (contoh: 1211-XUEB-30DA-ODHR).
+   - Tombol 1-klik "Salin Kode Token" dengan feedback status checklist hijau.
+   - Ringkasan durasi masa aktif dan petunjuk pemakaian voucher untuk penyewa bot.
+5. Pembangunan Halaman "Management Token" pada Master Admin (`admin-frontend/src/components/dashboard/tabs/TabTokenManagement.tsx`):
+   - Generator kode token terstruktur klien (DDMM-XXXX-XXDA-XXXX) sesuai aturan tanggal/bulan, acak, durasi, dan acak.
+   - Tombol utama "+ Buat Token Baru" yang memicu alur modal pembuatan token.
+   - 3 kartu metrik ringkasan: Total Token, Token Tersedia, dan Token Terpakai.
+   - Kontrol filter status pill (Semua, Tersedia, Terpakai) dan kolom pencarian kode token / ID tenant.
+   - Tabel 5 kolom: Kode Token, Tanggal Pembuatan, Masa Aktif Token, Status Token, dan Aksi Salin Token.
+   - State reaktif lokal yang langsung menyisipkan token baru ke tabel saat selesai digenerate oleh admin.
+6. Pendaftaran Menu Navigasi Master Admin:
+   - Menambahkan 'tokens' pada union type `AdminNavTab` dan menu "Management Token" berikon Ticket pada `admin-frontend/src/components/layout/AdminSidebar.tsx`.
+   - Menambahkan penanganan header judul dan deskripsi tab pada `admin-frontend/src/components/layout/AdminHeader.tsx`.
+   - Mengintegrasikan rendering tab `tokens` pada `admin-frontend/src/App.tsx`.
+7. Verifikasi dan Pengujian:
+   - Validasi kompilasi build menggunakan `compile_applet` (Build succeeded).
+   - Validasi type-checking TypeScript menggunakan `lint_applet` (`tsc --noEmit` lolos 100% tanpa error).
+   - Pengecekan grep memastikan nol (0) karakter em-dash pada seluruh kode baru.
+   - Pengujian HTTP endpoint `/api/health`, `/`, dan `/admin/` (seluruhnya merespon HTTP 200 OK).
+
+File yang Diubah dan Dibuat:
+- "frontend/src/components/tabs/TabBotManagement.tsx" (Baru)
+- "frontend/src/components/layout/DesktopSidebar.tsx" (Update)
+- "frontend/src/components/tabs/TabContentRenderer.tsx" (Update)
+- "admin-frontend/src/types/admin.types.ts" (Update)
+- "admin-frontend/src/components/modals/CreateTokenModal.tsx" (Baru)
+- "admin-frontend/src/components/modals/TokenCreatedModal.tsx" (Baru)
+- "admin-frontend/src/components/dashboard/tabs/TabTokenManagement.tsx" (Baru)
+- "admin-frontend/src/components/layout/AdminSidebar.tsx" (Update)
+- "admin-frontend/src/components/layout/AdminHeader.tsx" (Update)
+- "admin-frontend/src/App.tsx" (Update)
+- "brain/SCHEDULE.md" (Update status [27.0] menjadi In Progress)
+- "brain/LANGKAH_IMPLEMENTASI.md" (Entri [55.0] diselesaikan)
+- "brain/PROGRESS.md" (Entri [36.0] dicatat)
+
+Alasan Perubahan:
+Memenuhi instruksi pengguna untuk membangun antarmuka frontend dari fitur [27.0] terlebih dahulu pada Dashboard Bot (Management Bot) dan Dashboard Master Admin (Management Token) sebelum mengimplementasikan backend dan database token voucher.
+
+Hasil:
+1. Tab "Management Bot" aktif di Dashboard Tenant dengan tampilan lengkap: kartu status bot (aktif/suspend/expired), masa aktif format [sisa]/[total] day, tanggal expired bahasa Indonesia, dan form input token voucher + tombol Gunakan Token.
+2. Tab "Management Token" aktif di Dashboard Master Admin dengan tombol Buat Token Baru, modal pilihan durasi (menit/jam/hari/bulan), popup token dengan tombol salin, dan tabel token lengkap (kode, tanggal, masa aktif, status).
+3. Kode token mengikuti format struktur resmi (DDMM-XXXX-XXDA-XXXX).
+4. Seluruh kode lolos kompilasi dan linting TypeScript dengan 0 error.
+
+Kendala:
+Tidak ada.
+
+---
+
+[37.0] - IMPLEMENTASI BACKEND SISTEM TOKEN LISENSI VOUCHER DAN INTEGRASI REDEEM PERPANJANGAN SEWA
+
+- Tanggal: 2026-11-12 00:34
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 56.0
+
+Pekerjaan yang Dilakukan:
+1. Pembangunan Skema Database SQLite `extension_tokens` (`admin-backend/database/masterSqlite.ts`):
+   - Tabel `extension_tokens` dengan kolom: `id`, `token_code`, `amount`, `unit`, `duration_label`, `status`, `created_at`, `used_by_tenant_id`, `used_at`.
+   - Indeks unik pada kolom `token_code` dan indeks performa pada `status`.
+2. Pembuatan Service Token Lisensi (`admin-backend/services/tokenService.ts`):
+   - Generator kode token 16 karakter terstruktur dengan rumus resmi:
+     * Blok 1 (4 karakter): Tanggal dan Bulan pembuatan token (DDMM, misal 1211).
+     * Blok 2 (4 karakter): Kode acak alfanumerik (misal XUEB).
+     * Blok 3 (4 karakter): 2 digit angka durasi + 2 huruf kode unit resmi:
+       Hari: DA (misal 30DA)
+       Menit: MI (misal 15MI)
+       Jam: HO (misal 02HO)
+       Bulan: MO (misal 01MO)
+     * Blok 4 (4 karakter): Kode acak alfanumerik (misal ODHR).
+     * Format lengkap: DDMM-XXXX-XXDA-XXXX (total 16 karakter alfanumerik).
+   - Method `getAllTokens()`: Mengambil seluruh riwayat token dari database.
+   - Method `createToken(amount, unit)`: Menyimpan token baru dengan status 'available'.
+   - Method `redeemToken(tokenCode, tenantId)`:
+     * Memvalidasi keberadaan token dan memastikan status voucher masih 'available'.
+     * Menolak penukaran jika token sudah pernah digunakan (single-use voucher universal).
+     * Memperpanjang masa sewa unit bot tenant melalui `TenantService.extendDuration` (jika expired/suspended diaktifkan kembali dan flag peringatan di-reset).
+     * Memperbarui status token menjadi 'used' serta mencatat ID tenant dan waktu redeem.
+   - Method `deleteToken(id)`: Menghapus token dari master database.
+3. Pembuatan API Master Admin (`admin-backend/routes/tokenRoutes.ts` & `adminRoutes.ts`):
+   - `GET /api/admin/tokens`: Mengambil daftar seluruh voucher token.
+   - `POST /api/admin/tokens/create`: Membuat voucher token baru berdasarkan amount dan unit.
+   - `DELETE /api/admin/tokens/:id`: Menghapus voucher token.
+4. Pembuatan API Tenant Bot (`backend/routes/tenantTokenRoutes.ts` & `backend/app.ts`):
+   - `POST /api/bot/redeem-token`: Endpoint mandiri bagi tenant toko untuk menukarkan voucher token 16-karakter.
+5. Integrasi Frontend Master Admin (`admin-frontend/src/components/dashboard/tabs/TabTokenManagement.tsx`):
+   - Menghubungkan pengambilan data riil ke endpoint `GET /api/admin/tokens`.
+   - Menghubungkan form modal pembuatan token ke `POST /api/admin/tokens/create`.
+   - Menambahkan tombol aksi hapus token yang terhubung ke `DELETE /api/admin/tokens/:id`.
+6. Integrasi Frontend Tenant Bot (`frontend/src/components/tabs/TabBotManagement.tsx`):
+   - Menghubungkan form submit "Gunakan Token" ke endpoint `POST /api/bot/redeem-token`.
+   - Menampilkan banner hijau sukses redeem dengan informasi durasi tambahan yang didapatkan.
+   - Menampilkan notifikasi error tegas jika token tidak valid atau sudah pernah digunakan.
+7. Pengujian dan Verifikasi:
+   - Uji pembuatan token berbagai unit (Hari: 30DA, Menit: 15MI, Jam: 02HO, Bulan: 01MO) berhasil 100%.
+   - Uji penukaran voucher pertama kali berhasil memperpanjang masa aktif tenant toko.
+   - Uji penukaran kedua pada token yang sama ditolak dengan pesan: "Token voucher ini sudah pernah digunakan dan tidak dapat digunakan kembali".
+   - Uji token fiktif ditolak dengan pesan: "Kode token voucher tidak ditemukan. Pastikan format 16 karakter (XXXX-XXXX-XXXX-XXXX) sudah benar."
+   - Kompilasi `compile_applet` dan linting `lint_applet` lolos 100% tanpa error.
+   - Pengecekan grep memastikan 0 karakter em-dash pada seluruh file.
+
+File yang Diubah dan Dibuat:
+- "admin-backend/database/masterSqlite.ts" (Update skema tabel extension_tokens)
+- "admin-backend/types/admin.types.ts" (Update interface LicenseToken)
+- "admin-backend/services/tokenService.ts" (Baru)
+- "admin-backend/routes/tokenRoutes.ts" (Baru)
+- "admin-backend/routes/adminRoutes.ts" (Mounting router)
+- "backend/routes/tenantTokenRoutes.ts" (Baru)
+- "backend/app.ts" (Mounting tenant token router)
+- "admin-frontend/src/components/dashboard/tabs/TabTokenManagement.tsx" (Integrasi API)
+- "admin-frontend/src/components/modals/CreateTokenModal.tsx" (Pembaruan teks 16 karakter)
+- "frontend/src/components/tabs/TabBotManagement.tsx" (Integrasi API redeem)
+- "brain/SCHEDULE.md" (Status [27.0] Completed)
+- "brain/LANGKAH_IMPLEMENTASI.md" (Status [56.0] Completed)
+- "brain/PROGRESS.md" (Pencatatan [37.0])
+
+Alasan Perubahan:
+Menyelesaikan implementasi backend penuh dari fitur [27.0] sesuai spesifikasi 16 karakter dan format kode unit resmi (DA, MI, HO, MO), sehingga sistem voucher perpanjangan bot siap beroperasi 24/7.
+
+Hasil:
+1. Sistem voucher token 16 karakter beroperasi penuh dari database SQLite hingga antarmuka pengguna.
+2. Format kode unit DA (Hari), MI (Menit), HO (Jam), dan MO (Bulan) diterapkan secara presisi pada blok ke-3 token (misal: 30DA, 15MI, 02HO, 01MO).
+3. Aturan voucher bersifat universal dan single-use ditegakkan secara ketat.
+4. Seluruh pengujian kompilasi dan linting TypeScript berhasil tanpa kendala.
+
+Kendala:
+Tidak ada.
+
+---
+
+[38.0] - PERBAIKAN KALKULASI TOTAL MASA AKTIF BOT DAN SINKRONISASI TOTAL HARI RIIL
+
+- Tanggal: 2026-11-12 10:15
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 57.0
+
+Pekerjaan yang Dilakukan:
+1. Eliminasi Rumus Estimasi Pembulatan di Frontend ("frontend/src/components/tabs/TabBotManagement.tsx"):
+   - Menghapus rumus pembulatan kelipatan 30 hari (Math.ceil(remainingDays / 30) * 30) yang menjadi akar masalah ketidaksesuaian tampilan (misal 431/450 + 5 hari malah menjadi 436/450, atau 450/450 + 3 hari melonjak ke 453/480).
+   - Menggantinya dengan pembacaan langsung data riil `totalDays` dan `daysRemaining` yang disuplai oleh backend.
+   - Menyediakan fallback perhitungan berbasis selisih riil tanggal `expiresAt` dan `createdAt` jika field belum tersedia.
+   - Memperbarui state `totalDays`, `daysRemaining`, dan `expiresAt` secara presisi ketika voucher token berhasil di-redeem sehingga angka bertambah tepat sebesar hari yang ditambahkan (misal 431/450 + 5 hari langsung menjadi 436/455 day, dan 450/450 + 3 hari menjadi 453/453 day).
+2. Penyediaan Data Riil Durasi pada Endpoint Status Bot ("backend/routes/botRoutes.ts"):
+   - Mengambil data record tenant aktif dari master database via `TenantService.getTenantById`.
+   - Menghitung `totalDays` riil (selisih hari antara `expires_at` dan `created_at`).
+   - Menghitung `daysRemaining` riil (selisih hari antara `expires_at` dan waktu sekarang).
+   - Menyertakan field `totalDays`, `daysRemaining`, dan `createdAt` pada respon JSON `GET /api/bot/status`.
+3. Penyertaan `newTotalDays` pada Respon Redeem Token ("admin-backend/services/tokenService.ts" & "backend/routes/tenantTokenRoutes.ts"):
+   - Menghitung durasi total sewa yang baru (`newTotalDays`) setelah penambahan masa aktif via voucher token.
+   - Mengembalikan `newTotalDays` dan `newDaysRemaining` pada fungsi `redeemToken()`.
+   - Meneruskan `newTotalDays` ke respon JSON endpoint `POST /api/bot/redeem-token`.
+4. Pembaruan Interface TypeScript ("frontend/src/types/dashboard.types.ts"):
+   - Menambahkan field opsional `totalDays?: number`, `daysRemaining?: number`, dan `createdAt?: string` pada interface `BotStatusResponse`.
+5. Pengujian dan Verifikasi Fungsional:
+   - Pengujian pembuatan token 5 hari (`05DA`).
+   - Pengujian penukaran token dan verifikasi respon JSON yang mengembalikan `newTotalDays` dan `newDaysRemaining` secara presisi.
+   - Pengecekan grep memastikan nol (0) karakter em-dash pada seluruh file yang diubah.
+   - Kompilasi `compile_applet` dan linting `lint_applet` berhasil 100% tanpa error.
+
+File yang Diubah:
+- "backend/routes/botRoutes.ts" - Menambahkan perhitungan totalDays dan daysRemaining riil.
+- "admin-backend/services/tokenService.ts" - Menghitung newTotalDays pada perpanjangan sewa via token.
+- "backend/routes/tenantTokenRoutes.ts" - Meneruskan newTotalDays pada respon redeem.
+- "frontend/src/types/dashboard.types.ts" - Menambahkan totalDays, daysRemaining, dan createdAt pada BotStatusResponse.
+- "frontend/src/components/tabs/TabBotManagement.tsx" - Menggunakan totalDays riil dan sinkronisasi presisi saat redeem.
+- "brain/LANGKAH_IMPLEMENTASI.md" - Pembaruan status entri [57.0] menjadi Completed.
+- "brain/PROGRESS.md" - Pencatatan entri [38.0].
+
+Alasan Perubahan:
+Memperbaiki bug kalkulasi total hari pada kartu masa aktif di mana penambahan hari dari token tidak menambah total masa aktif secara linear atau melonjak ke angka kelipatan 30 yang membingungkan pengguna.
+
+Hasil:
+1. Rasio sisa hari dan total hari pada halaman Management Bot kini 100% akurat dan linear.
+2. Penambahan token voucher (misal +5 hari pada bot 431/450) langsung mengubah tampilan menjadi 436/455 day.
+3. Penambahan token voucher (misal +3 hari pada bot 450/450) langsung mengubah tampilan menjadi 453/453 day tanpa lonjakan ke 480 day.
+4. Seluruh kode lolos build dan linting TypeScript dengan sempurna.
+
+Kendala:
+Tidak ada.
+
+---
+
+[39.0] - IMPLEMENTASI REST API KOLABORATOR (PARTNER / RESELLER API) & MANAJEMEN PARTNER API DI DASHBOARD MASTER
+
+- Tanggal: 2026-11-12 16:40
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 58.0
+Referensi SCHEDULE: 26.0
+
+Pekerjaan yang Dilakukan:
+1. Skema Database Partner di SQLite Master ("admin-backend/database/masterSqlite.ts" & "admin-backend/types/admin.types.ts"):
+   - Menambahkan tabel `collaborator_api_keys` (id, name, api_key_hash, prefix_key, status, last_used_at, created_at) dan `collaborator_logs` (id, collaborator_id, collaborator_name, action_type, target_id, duration_label, request_ip, created_at) beserta index performa.
+   - Menambahkan tipe `CollaboratorApiKey`, `CreatePartnerKeyResult`, dan `CollaboratorLog`.
+2. Utilitas Keamanan, Rate Limiting, dan Unit Test ("admin-backend/services/partnerApiUtils.ts" & "admin-backend/services/partnerApiUtils.test.ts"):
+   - Generator API Key acak berprefiks `wzp_`, hashing SHA-256 (`hashPartnerApiKey`), ekstraksi header (`x-api-key` atau `Authorization: Bearer <key>`), validasi durasi fleksibel (`parsePartnerDuration`), serta `SlidingWindowRateLimiter` (batas 60 request per menit).
+   - Menambahkan 4 unit test (`node:test`) untuk generator & hash, ekstraksi header, validasi durasi, dan rate limiter (seluruhnya 4/4 lolos).
+3. Service & Router Backend Partner ("admin-backend/services/partnerApiService.ts", "admin-backend/routes/partnerAdminRoutes.ts", "admin-backend/routes/partnerPublicRoutes.ts", "admin-backend/routes/adminRoutes.ts", "backend/app.ts"):
+   - Menyediakan rute Master Admin `/api/admin/partners` (`GET /`, `POST /create`, `PATCH /:id/status`, `DELETE /:id`).
+   - Menyediakan 2 endpoint publik Partner API di `/api/v1/partner` yang di-mount sebelum middleware konteks tenant pada `backend/app.ts`:
+     * `POST /api/v1/partner/tenants/create`: Auto-create akun tenant via `TenantService.createTenant` (mendukung `minutes`, `hours`, `days`, `weeks`, `months`, atau `duration_days`, serta `store_name`, `owner_name`, `owner_phone` opsional).
+     * `POST /api/v1/partner/tokens/create`: Auto-create kode token voucher 16 karakter sekali pakai (`DDMM-XXXX-XXDA-XXXX`) via `TokenService.createToken` (mendukung `minutes`, `hours`, `days`, `months`).
+   - Akses unlimited selama API Key berstatus `active`, menolak key kosong/salah (`401`), key suspend (`403`), durasi invalid (`400`), dan melewati rate limit (`429`).
+4. Antarmuka Dashboard Master Admin ("admin-frontend"):
+   - Menambahkan tab navigasi "Partner API" di `AdminSidebar.tsx`, header di `AdminHeader.tsx`, dan integrasi pada `admin-frontend/src/App.tsx`.
+   - Membangun `TabPartnerApi.tsx` beserta modal in-app (`CreatePartnerKeyModal.tsx`, `PartnerKeyCreatedModal.tsx`, `DeletePartnerKeyModal.tsx`) dengan 3 sub-tampilan: Daftar API Key (filter status, pencarian, toggle Suspend/Aktifkan, hapus), Log Aktivitas, serta Dokumentasi Integrasi Interaktif (cURL, Node.js, PHP, Python).
+   - Memperbaiki tata letak responsif sub-tab pada viewport mobile (`390x844`) dan memisahkan tombol Salin ke top-bar blok kode dokumentasi agar tidak tumpang tindih dengan teks perintah.
+5. Pengujian & Verifikasi Menyeluruh:
+   - Unit test `npx --yes tsx --test admin-backend/services/partnerApiUtils.test.ts` (4 pass, 0 fail).
+   - Verifikasi HTTP end-to-end (401 tanpa key, 200 buat key, 400 durasi invalid, 201 create tenant, 201 create token, 403 key suspend, log tercatat, cleanup data uji).
+   - Verifikasi UI browser headless via `playwright-cli` pada desktop (`1440x900`) dan mobile (`390x844`): validasi input kosong, buat key baru, tampil satu kali, log aktivitas, dokumentasi multi-bahasa, persistensi status setelah reload halaman, hapus key, serta `scrollWidth === innerWidth` (0 overflow).
+   - Kompilasi (`compile_applet`) dan linting (`lint_applet`) bersih tanpa error, serta pengecekan nol karakter em-dash atau en-dash.
+
+File yang Diubah/Dibuat:
+- "admin-backend/database/masterSqlite.ts"
+- "admin-backend/types/admin.types.ts"
+- "admin-backend/services/partnerApiUtils.ts" (Baru)
+- "admin-backend/services/partnerApiUtils.test.ts" (Baru)
+- "admin-backend/services/partnerApiService.ts" (Baru)
+- "admin-backend/routes/partnerAdminRoutes.ts" (Baru)
+- "admin-backend/routes/adminRoutes.ts"
+- "admin-backend/routes/partnerPublicRoutes.ts" (Baru)
+- "backend/app.ts"
+- "admin-frontend/src/types/admin.types.ts"
+- "admin-frontend/src/components/layout/AdminSidebar.tsx"
+- "admin-frontend/src/components/layout/AdminHeader.tsx"
+- "admin-frontend/src/components/modals/CreatePartnerKeyModal.tsx" (Baru)
+- "admin-frontend/src/components/modals/PartnerKeyCreatedModal.tsx" (Baru)
+- "admin-frontend/src/components/modals/DeletePartnerKeyModal.tsx" (Baru)
+- "admin-frontend/src/components/dashboard/tabs/TabPartnerApi.tsx" (Baru)
+- "admin-frontend/src/App.tsx"
+- "brain/SCHEDULE.md", "brain/LANGKAH_IMPLEMENTASI.md", "brain/PROGRESS.md"
+
+Alasan Perubahan:
+Menyelesaikan rencana [26.0] agar partner/reseller dapat mengotomatiskan penjualan pembuatan akun tenant bot WhatsApp dan voucher token perpanjangan 24/7 melalui REST API sambil tetap mengelola platform melalui 1 akun Master Admin bersama.
+
+Hasil:
+1. Fitur REST API Kolaborator (Partner / Reseller API) beroperasi penuh, aman, dan teruji baik dari sisi backend maupun UI Master Admin.
+2. Seluruh unit test, uji endpoint HTTP, verifikasi browser desktop & mobile, build, serta linting TypeScript berhasil tanpa kendala.
+
+Kendala:
+Tidak ada.
+
+---
+
+[40.0] - PEMBARUAN TAMPILAN MASA SEWA REAL-TIME SPESIFIK (HARI, JAM, MENIT, DETIK) PADA DASHBOARD MASTER & DASHBOARD BOT
+
+- Tanggal: 2026-11-12 18:27
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 59.0
+Referensi SCHEDULE: 31.0
+
+Pekerjaan yang Dilakukan:
+1. Utilitas Penghitung Durasi & Unit Test ("admin-frontend/src/utils/durationFormat.ts", "admin-frontend/src/utils/durationFormat.test.ts", "frontend/src/utils/durationFormat.ts"):
+   - Membuat fungsi murni `decomposeMilliseconds` untuk mengurai selisih waktu (`expires_at - now`) menjadi `{ totalMs, days, hours, minutes, seconds, expired }`.
+   - Membuat `formatCompactCountdown` untuk tampilan ringkas di tabel Master Admin (misal `384h 05j 33m 49d` atau `14m 49d`), `formatTotalRentalDuration` untuk label total durasi fleksibel (`15 Menit`, `5 Jam`, `395 Hari`), `calculateRemainingPercentage` untuk persentase progres bar berbasis milidetik riil, dan `formatExpiryDateTimeWIB` untuk tanggal serta jam WIB yang akurat.
+   - Membuat dan menjalankan 4 unit test via `node:test` (`npx --yes tsx --test admin-frontend/src/utils/durationFormat.test.ts`, 4 pass / 0 fail).
+2. Pembaruan Dashboard Master Admin ("admin-frontend"):
+   - `admin-frontend/src/components/dashboard/TenantTable.tsx`: Memasang 1 timer ticker bersama per 1 detik (`nowMs`) dan mengirimkannya ke setiap baris `TenantTableRow`.
+   - `admin-frontend/src/components/dashboard/TenantTableRow.tsx`: Mengganti tampilan hari statis pada kolom Masa Sewa dengan label total durasi spesifik + countdown ringkas live `font-mono tabular-nums` (kode warna adaptif: abu-abu normal, amber `< 24 jam`, rose `< 1 jam` atau habis), serta menambahkan jam kedaluwarsa WIB (`HH:mm WIB`) pada kolom Expired.
+   - `admin-frontend/src/components/modals/AddTenantModal.tsx` & `admin-frontend/src/types/admin.types.ts`: Menampilkan estimasi "Masa Sewa Aktif" secara presisi (menit/jam/hari) menggunakan `formatTotalRentalDuration`.
+   - `admin-frontend/src/App.tsx`: Memperbarui pengurutan `duration_desc` dan `duration_asc` agar membandingkan timestamp `expires_at` riil alih-alih pembulatan hari.
+3. Pembaruan Dashboard Bot Tenant ("frontend/src/components/tabs/TabBotManagement.tsx"):
+   - Menambahkan ticker real-time 1 detik untuk menghitung mundur masa aktif bot secara langsung.
+   - Mengganti format lama `{sisa}/{total} day` pada kartu Masa Aktif menjadi 4 blok hitungan spesifik: **Hari, Jam, Menit, Detik** lengkap dengan `tabular-nums`, label `Total Paket: ...` yang fleksibel, serta persentase progress bar berbasis milidetik.
+   - Menghapus teks statis `Pukul 23:59 WIB (Asia/Jakarta)` pada kartu Tanggal Expired dan menggantinya dengan waktu kedaluwarsa asli dari server (`Pukul HH:mm:ss WIB (Asia/Jakarta)`).
+4. Verifikasi & Pengujian Menyeluruh:
+   - Unit test `durationFormat.test.ts`: 4 pass, 0 fail.
+   - Browser headless (`playwright-cli`) pada Dashboard Master (`/admin/`): verifikasi countdown bergerak live (`MASTER_TICK_CHANGED: true`), uji kasus paket `15 Menit` dan paket multi-hari `395 Hari` beserta jam WIB asli, lalu pembersihan tenant uji sementara.
+   - Browser headless pada Dashboard Bot (`/`, `TabBotManagement`): verifikasi tick live 1 detik (`tickChanged: true`), inspeksi visual screenshot Desktop (`1440x900`) dan Mobile (`390x844`) dengan `scrollWidth === innerWidth` (0 overflow).
+   - Kompilasi (`compile_applet`) dan linting TypeScript (`lint_applet`) bebas error serta pengecekan nol karakter em-dash/en-dash.
+
+File yang Diubah/Dibuat:
+- "admin-frontend/src/utils/durationFormat.ts" (Baru)
+- "admin-frontend/src/utils/durationFormat.test.ts" (Baru)
+- "frontend/src/utils/durationFormat.ts" (Baru)
+- "admin-frontend/src/types/admin.types.ts"
+- "admin-frontend/src/components/modals/AddTenantModal.tsx"
+- "admin-frontend/src/components/dashboard/TenantTable.tsx"
+- "admin-frontend/src/components/dashboard/TenantTableRow.tsx"
+- "admin-frontend/src/App.tsx"
+- "frontend/src/components/tabs/TabBotManagement.tsx"
+- "brain/SCHEDULE.md", "brain/LANGKAH_IMPLEMENTASI.md", "brain/PROGRESS.md"
+
+Alasan Perubahan:
+Memenuhi permintaan pengguna agar tampilan masa sewa dan waktu kedaluwarsa di kedua dashboard tidak terkunci pada satuan hari bulat atau jam statis 23:59, melainkan menyajikan hitung mundur real-time hingga hitungan jam, menit, dan detik beserta jam expired asli.
+
+Hasil:
+1. Dashboard Master menampilkan total durasi fleksibel + hitung mundur ringkas per detik (`Sisa ...h ...j ...m ...d`) dan jam WIB asli.
+2. Dashboard Bot menampilkan hitung mundur spesifik Hari, Jam, Menit, Detik secara real-time beserta jam expired asli server tanpa layout jitter di Desktop maupun Mobile.
+3. Seluruh unit test, uji browser Desktop/Mobile, build, dan lint TypeScript lulus 100%.
+
+Kendala:
+Tidak ada.
+
+---
+
+[41.0] - PERBAIKAN AKURASI TAHAP DAN LABEL PERINGATAN KEDALUWARSA OTOMATIS (EXPIRY WARNING)
+
+- Tanggal: 2026-11-12 18:59
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 60.0
+Referensi SCHEDULE: 32.0
+
+Pekerjaan yang Dilakukan:
+1. Pembuatan Utilitas Evaluasi Tahap & Formatter Sisa Waktu Dinamis ("backend/services/expiryWarningUtils.ts" & "backend/services/expiryWarningUtils.test.ts"):
+   - Memisahkan rentang evaluasi setiap tahap peringatan dengan jendela target khusus plus toleransi polling cron 5 menit (`h_1h`: `<= 1 jam 10 menit`, `h_5h`: `3 jam - 5 jam 10 menit`, `h_1d`: `18 jam - 24 jam 15 menit`, `h_3d`: `48 jam - 72 jam 15 menit`).
+   - Memastikan sisa waktu ~1 jam (termasuk sedikit di atas 1 jam seperti 1 jam 4 menit) tetap masuk tahap `h_1h` (bukan `h_5h`), dan sisa waktu ~1 hari tetap masuk tahap `h_1d` (bukan `h_3d`).
+   - Mengganti label statis batas atas dengan fungsi `formatRemainingWarningLabel(diffMs)` yang menghitung sisa waktu sebenarnya (`1 Jam Lagi`, `15 Menit Lagi`, `5 Jam Lagi`, `24 Jam (1 Hari) Lagi`, `3 Hari Lagi`, atau jam/menit dinamis).
+   - Menambahkan 4 unit test via `node:test` dan seluruhnya lulus (4 pass, 0 fail).
+2. Integrasi pada Service Peringatan Kedaluwarsa ("backend/services/expiryWarningService.ts"):
+   - Mengganti rangkaian kondisi if-else ber rentang lebar di `checkAllTenantsExpiry` dengan pemanggilan `evaluateExpiryWarningStage(diffMs, flags)`.
+3. Presisi Kalkulasi Durasi ("admin-backend/services/tenantService.ts"):
+   - Memperbarui `TenantService.calculateExpirationDate` untuk menggunakan penambahan milidetik pasti pada satuan `minutes`, `hours`, `days`, dan `weeks` sehingga bebas dari pergeseran DST timezone OS server.
+4. Verifikasi & Pengujian:
+   - Unit test `npx --yes tsx --test backend/services/expiryWarningUtils.test.ts` (4 pass, 0 fail).
+   - Pemeriksaan karakter memastikan 0 em-dash dan en-dash pada seluruh file terkait.
+   - Verifikasi `compile_applet` dan `lint_applet` bersih tanpa error serta restart dev server agar scheduler aktif memakai logika terbaru.
+
+File yang Diubah/Dibuat:
+- "backend/services/expiryWarningUtils.ts" (Baru)
+- "backend/services/expiryWarningUtils.test.ts" (Baru)
+- "backend/services/expiryWarningService.ts"
+- "admin-backend/services/tenantService.ts"
+- "brain/SCHEDULE.md", "brain/LANGKAH_IMPLEMENTASI.md", "brain/PROGRESS.md"
+
+Alasan Perubahan:
+Menghilangkan bug saat sisa masa aktif ~1 jam yang salah mengirim peringatan "5 Jam Lagi" dan sisa masa aktif ~1 hari yang salah mengirim peringatan "3 Hari Lagi".
+
+Hasil:
+1. Sisa masa sewa ~1 jam kini selalu mengirim peringatan tahap 1 jam (`h_1h`), bukan 5 jam.
+2. Sisa masa sewa ~1 hari kini selalu mengirim peringatan tahap 1 hari (`h_1d`), bukan 3 hari.
+3. Label sisa waktu `{remainingTime}` di pesan WhatsApp selalu mencerminkan sisa waktu riil.
+
+Kendala:
+Tidak ada.
+
+---
+
+[42.0] - IMPLEMENTASI FITUR HIDE TAG GRUP WHATSAPP (HIDETAG / H / HT)
+
+- Tanggal: 2026-11-13 00:05
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 61.0
+Referensi SCHEDULE: 33.0
+
+Pekerjaan yang Dilakukan:
+1. Utilitas Murni Hide Tag & Dukungan PN/LID (`backend/handlers/hideTagUtils.ts` & `backend/handlers/hideTagUtils.test.ts`):
+   - Menambahkan deteksi command `hidetag`, `h`, dan `ht` (`isHideTagCommand`).
+   - Menambahkan normalisasi JID (`normalizeJidIdentifier`), pengumpulan identitas ganda PN & LID + `fromMe` (`extractSenderIdentifiers`), serta validasi admin grup (`isGroupParticipantAdmin`) terhadap field `id`, `lid`, dan `phoneNumber`.
+   - Menambahkan ekstraksi seluruh JID anggota grup (`extractAllParticipantJids`) untuk payload `mentions`.
+   - Menambahkan `unwrapWaMessage`, `extractTextFromWaMessage`, dan `extractQuotedTarget` untuk membaca pesan langsung maupun pesan/media yang di-reply (`image`, `video`, `audio`, `sticker`, `document`), termasuk yang terbungkus `ephemeralMessage` / `viewOnceMessage`.
+2. Handler Baileys Hide Tag (`backend/handlers/hideTagHandler.ts` & `backend/handlers/hideTagHandler.test.ts`):
+   - Memanfaatkan `sock.groupMetadata` dengan cache TTL 30 detik.
+   - Memverifikasi grup aktif (`@g.us`) dan status admin grup pengirim. Mengabaikan secara senyap (tanpa balasan) bila dipicu di luar grup, oleh non-admin, atau tanpa teks/reply apa pun.
+   - Mengirimkan teks langsung maupun mengunduh ulang media yang di-reply menggunakan `downloadMediaMessage` lalu mengirimkannya dengan `mentions` ke seluruh anggota grup.
+3. Integrasi ke Dispatcher Bot (`backend/handlers/messageDispatcher.ts`):
+   - Memperbarui pembacaan `rawText` menggunakan `extractTextFromWaMessage(m.message)` agar mendukung pesan dalam grup dengan Disappearing Messages.
+   - Menghubungkan command `hidetag`, `ht`, dan `h` ke `handleHideTagCommand` saat di dalam grup whitelist, serta mengabaikannya diam-diam bila di chat pribadi.
+   - Menambahkan `'hidetag'`, `'ht'`, `'h'` ke `reservedWords`.
+4. Verifikasi & Pengujian:
+   - Menjalankan 10 skenario unit test via `npx --yes tsx --test backend/handlers/hideTagUtils.test.ts backend/handlers/hideTagHandler.test.ts` (10 pass, 0 fail).
+   - Memastikan 0 karakter em-dash atau en-dash pada seluruh file terkait.
+   - Menjalankan `compile_applet` dan `lint_applet` dengan hasil bersih tanpa error, lalu restart dev server agar backend bot menggunakan kode terbaru.
+
+File yang Diubah/Dibuat:
+- "backend/handlers/hideTagUtils.ts" (Baru)
+- "backend/handlers/hideTagUtils.test.ts" (Baru)
+- "backend/handlers/hideTagHandler.ts" (Baru)
+- "backend/handlers/hideTagHandler.test.ts" (Baru)
+- "backend/handlers/messageDispatcher.ts"
+- "brain/SCHEDULE.md", "brain/LANGKAH_IMPLEMENTASI.md", "brain/PROGRESS.md"
+
+Alasan Perubahan:
+Memudahkan admin grup mengumumkan informasi ke seluruh anggota grup secara tersembunyi tanpa daftar `@nomor` menggunakan command `.hidetag`, `.h`, atau `.ht` (termasuk reply pesan dan media).
+
+Hasil:
+1. Command `.hidetag`, `.h`, dan `.ht` aktif di grup yang sudah di-whitelist dan hanya merespons admin/superadmin grup (akurat pada mode PN maupun LID).
+2. Mendukung pesan teks langsung serta pengiriman ulang teks dan media yang di-reply.
+3. Non-admin, chat pribadi, dan perintah kosong diabaikan secara senyap tanpa balasan.
+
+Kendala:
+Tidak ada.
+
+---
+
+[43.0] - IMPLEMENTASI TOGGLE GRUP ONLY DI MANAGEMENT GROUP, SESI ORDER 3 MENIT, DAN TOMBOL CTA URL ADMIN INVOICE
+
+- Tanggal: 2026-11-13 00:32
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 62.0
+Referensi SCHEDULE: 34.0
+
+Pekerjaan yang Dilakukan:
+1. Skema & Layanan Pengaturan Per-Tenant ("backend/database/sqlite.ts", "backend/database/tenantDbManager.ts", "backend/services/groupService.ts", "backend/botManager.ts", "backend/routes/botRoutes.ts"):
+   - Menambahkan tabel `bot_settings (setting_key TEXT PRIMARY KEY, setting_value TEXT NOT NULL, updated_at TEXT NOT NULL)` per tenant SQLite.
+   - Menambahkan `loadGroupOnlySetting()` (default `false` / OFF) dan `saveGroupOnlySetting(enabled)`.
+   - Menambahkan `getGroupOnlySetting()` & `setGroupOnlySetting()` di `BotManager`, serta menyertakan status `groupOnly` dalam `getParticipatingGroups()`.
+   - Membuka endpoint `GET /api/bot/groups/group-only` dan `POST /api/bot/groups/group-only`.
+2. Utilitas Gatekeeper DM, Timeout 3 Menit, dan Tombol CTA URL Invoice ("backend/handlers/dmFilterUtils.ts", "backend/handlers/dmFilterUtils.test.ts"):
+   - Menetapkan `CHECKOUT_SESSION_TIMEOUT_MS = 3 * 60 * 1000` (3 menit / 180.000 ms).
+   - Menambahkan `shouldAllowIncomingInDispatcher()` untuk memastikan saat `groupOnly = true`, pesan DM reguler diabaikan total (bot diam tanpa balasan), sementara tombol `checkout_promo`/`checkout_direct` (termasuk notifikasi sesi berakhir jika sudah timeout) dan sesi checkout aktif dari grup tetap dilayani.
+   - Menambahkan `buildInvoiceContactButtons()` untuk tombol `Hubungi Admin` tipe `cta_url` yang mengarah ke `https://wa.me/{nomerAdmin}` (dengan fallback ke `ownerNumber`).
+3. Integrasi Dispatcher & Pembaruan Template 3 Menit ("backend/handlers/messageDispatcher.ts", "backend/config/configManager.ts", "admin-backend/database/masterSqlite.ts", "admin-frontend/src/components/modals/AddEditTemplateModal.tsx", "frontend/src/hooks/useStoreConfig.ts", "frontend/src/components/tabs/TabCommand.tsx"):
+   - Mengintegrasikan filter DM di awal pipeline serta guard tambahan sebelum vCard, product selection, quick reply, `contact_admin`, `order_`, dan blok prefix commands agar sesi checkout aktif tetap tidak membocorkan perintah DM biasa saat `groupOnly = true`.
+   - Memperbarui durasi sesi checkout menjadi `CHECKOUT_SESSION_TIMEOUT_MS` (3 menit) dan seluruh teks/template `90 detik` / `90s` menjadi `3 menit`.
+   - Memperbarui tombol `Hubungi Admin` pada `executeLunasQrisInvoice` menggunakan `buildInvoiceContactButtons()`.
+4. Antarmuka Tab Management Group ("frontend/src/hooks/useWhatsAppGroups.ts", "frontend/src/components/tabs/TabContentRenderer.tsx", "frontend/src/components/tabs/TabGrup.tsx"):
+   - Menambahkan switch ON/OFF **Grup Only** (default OFF) lengkap dengan badge status, chip `"Direkomendasikan Aktif"`, dan kotak peringatan/rekomendasi keamanan mengenai risiko pemblokiran nomor oleh WhatsApp jika beroperasi sebagai bot di chat pribadi.
+   - Memastikan auto-fetch saat membuka tab `'Management group'` bekerja dan perubahan toggle langsung tersimpan.
+5. Verifikasi & Pengujian:
+   - Unit test `npx --yes tsx --test backend/handlers/dmFilterUtils.test.ts backend/handlers/hideTagUtils.test.ts backend/handlers/hideTagHandler.test.ts` (14 pass, 0 fail).
+   - Verifikasi `compile_applet` dan `lint_applet` (`tsc --noEmit`) bersih tanpa error, lalu `restart_dev_server`.
+   - Uji API (`GET`/`POST` `/api/bot/groups/group-only` & `GET /api/bot/groups`) dan inspeksi browser headless (`playwright-cli`) pada Desktop (1440x900) dan Mobile (390x844): verifikasi toggle ON/OFF, persistensi setelah reload halaman, zero overflow mobile (`scrollWidth <= innerWidth`), zero console errors, zero failed requests, serta memastikan status default dikembalikan ke OFF setelah verifikasi.
+
+File yang Diubah/Dibuat:
+- "backend/database/sqlite.ts", "backend/database/tenantDbManager.ts"
+- "backend/services/groupService.ts", "backend/botManager.ts", "backend/routes/botRoutes.ts"
+- "backend/handlers/dmFilterUtils.ts" (Baru), "backend/handlers/dmFilterUtils.test.ts" (Baru)
+- "backend/handlers/messageDispatcher.ts", "backend/config/configManager.ts"
+- "admin-backend/database/masterSqlite.ts", "admin-frontend/src/components/modals/AddEditTemplateModal.tsx"
+- "frontend/src/hooks/useStoreConfig.ts", "frontend/src/components/tabs/TabCommand.tsx"
+- "frontend/src/hooks/useWhatsAppGroups.ts", "frontend/src/components/tabs/TabContentRenderer.tsx", "frontend/src/components/tabs/TabGrup.tsx"
+- "brain/SCHEDULE.md", "brain/LANGKAH_IMPLEMENTASI.md", "brain/PROGRESS.md"
+
+Alasan Perubahan:
+Melindungi nomor WhatsApp bot penyewa dari risiko banned/penangguhan akibat interaksi bot di chat pribadi, memberikan waktu konfirmasi order lebih lega (3 menit), dan mengarahkan tombol Hubungi Admin di invoice ke `wa.me/{nomerAdmin}`.
+
+Hasil:
+1. Switch **Grup Only** (default OFF) hadir di tab Management group beserta peringatan rekomendasi keamanan anti-banned WhatsApp.
+2. Saat **Grup Only = ON**, bot diam total di chat pribadi (DM), sementara sesi order 3 menit dari grup ke DM dan notifikasi sesi berakhir tetap berjalan normal.
+3. Tombol **Hubungi Admin** pada invoice QRIS menggunakan tipe `cta_url` mengarah langsung ke `https://wa.me/{nomerAdmin}`.
+
+Kendala:
+Tidak ada.
+
+---
+
+[44.0] - PENGELOLAAN MULTI MASTER ADMIN, RANGE SLIDER PROBABILITAS, DAN RUJUKAN ACAK BERBOBOT
+
+- Tanggal: 2026-11-13 03:32
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 63.0
+Referensi SCHEDULE: 35.0
+
+Pekerjaan yang Dilakukan:
+1. Skema Database & Utilitas Murni ("admin-backend/database/masterSqlite.ts", "admin-backend/services/masterAdminUtils.ts", "admin-backend/services/masterAdminUtils.test.ts"):
+   - Menambahkan tabel `master_admins (id, name, phone, weight, sort_order, created_at, updated_at)` di `master.db` dengan seed otomatis `Master Admin Utama` (`+6285712439395`, bobot `100`).
+   - Membuat modul murni normalisasi nomor (`+628...` dan `628...`), pemerataan bobot (`equalizeWeights`), penyeimbangan otomatis slider total `100%` yang mendukung `0%` (`rebalanceWeights`), validasi daftar kontak (minimal 1 aktif, anti-duplikat nomor, total wajib 100%), serta pemilih acak berbobot (`pickWeightedMasterAdmin`).
+   - Menambahkan 5 unit test via `node:test` dan seluruhnya lulus.
+2. Service & REST API ("admin-backend/services/masterAdminContactService.ts", "admin-backend/routes/masterSettingsRoutes.ts", "admin-backend/routes/adminRoutes.ts", "backend/routes/authRoutes.ts"):
+   - Membangun CRUD database `MasterAdminContactService` dengan acak berbobot kriptografis (`crypto.randomInt`).
+   - Membuka endpoint `GET /api/admin/master-admins` dan `PUT /api/admin/master-admins`.
+   - Membuka endpoint publik rujukan tenant `GET /api/auth/master-admin-contact`.
+3. Integrasi Rujukan Tenant & Peringatan Expired ("backend/services/expiryWarningService.ts", "frontend/src/config/adminContact.ts", "frontend/src/components/modals/SuspendedAccountModal.tsx"):
+   - Memperbarui pengiriman tombol `Perpanjang Masa Sewa` pada `expiryWarningService.ts` agar memilih kontak Master Admin secara acak berbobot dari database.
+   - Memperbarui `SuspendedAccountModal.tsx` agar memuat 1 kontak acak dari `/api/auth/master-admin-contact` saat modal dipasang (dikunci selama tampilan modal terbuka, dan diacak ulang ketika halaman dimuat ulang).
+4. Antarmuka Tab Pengaturan Master ("admin-frontend/src/types/admin.types.ts", "admin-frontend/src/utils/masterAdminHelpers.ts", "admin-frontend/src/components/dashboard/tabs/TabMasterSettings.tsx", "admin-frontend/src/App.tsx"):
+   - Membangun tab **Pengaturan Master** dengan pengelolaan daftar admin fleksibel (bisa 1, 2, 3, atau lebih beserta nama dan nomor WhatsApp `+62` + `8...`), komponen **Range Slider** (`0%` - `100%`, auto-balance total `100%`, mendukung `0%` nonaktif sementara), tombol **Bagi Rata**, tombol **Tambah Master Admin**, tombol **Hapus** (terkunci jika tersisa 1 admin), bar distribusi visual, dan tombol **Simpan Pengaturan**.
+5. Verifikasi & Pengujian:
+   - Unit test `npx --yes tsx --test admin-backend/services/masterAdminUtils.test.ts backend/handlers/dmFilterUtils.test.ts backend/handlers/hideTagUtils.test.ts backend/handlers/hideTagHandler.test.ts` (19 pass, 0 fail).
+   - Verifikasi `compile_applet` dan `lint_applet` (`tsc --noEmit`) lulus 100% tanpa error, lalu `restart_dev_server`.
+   - Verifikasi live browser (`playwright-cli`) di `/admin/` tab **Pengaturan Master** pada Desktop (`1440x900`) dan Mobile (`390x844`): tambah admin ke-2 (auto 50%/50%), geser slider ke 70%/30%, simpan ke SQLite, reload dan cek persistensi `70/30`, uji set ke `0%`, zero horizontal overflow di mobile, lalu kembalikan ke default awal agar database bersih.
+
+File yang Diubah/Dibuat:
+- "admin-backend/database/masterSqlite.ts"
+- "admin-backend/services/masterAdminUtils.ts" (Baru), "admin-backend/services/masterAdminUtils.test.ts" (Baru)
+- "admin-backend/services/masterAdminContactService.ts" (Baru), "admin-backend/routes/masterSettingsRoutes.ts" (Baru), "admin-backend/routes/adminRoutes.ts"
+- "backend/routes/authRoutes.ts", "backend/services/expiryWarningService.ts"
+- "frontend/src/config/adminContact.ts", "frontend/src/components/modals/SuspendedAccountModal.tsx"
+- "admin-frontend/src/types/admin.types.ts", "admin-frontend/src/utils/masterAdminHelpers.ts" (Baru), "admin-frontend/src/components/dashboard/tabs/TabMasterSettings.tsx" (Baru), "admin-frontend/src/App.tsx"
+- "brain/SCHEDULE.md", "brain/LANGKAH_IMPLEMENTASI.md", "brain/PROGRESS.md"
+
+Alasan Perubahan:
+Memberikan kontrol penuh kepada Master Admin untuk mengubah atau menambah lebih dari 1 kontak WhatsApp pengelola beserta bobot probabilitas rujukan via range slider, sehingga beban pelayanan rujukan tenant dapat dibagi adil (misal 50/50) atau sesuai porsi yang diinginkan.
+
+Hasil:
+1. Tab **Pengaturan Master** dapat mengelola banyak kontak Master Admin secara fleksibel (nama + nomor WhatsApp + bobot range slider) dan menyimpannya dengan tombol **Simpan Pengaturan**.
+2. Sistem otomatis menjaga total probabilitas tetap 100% dan mengizinkan bobot 0% (dengan pengaman minimal 1 admin aktif).
+3. Rujukan pada notifikasi kedaluwarsa WhatsApp dan popup Suspend otomatis mengacak kontak Master Admin sesuai proporsi tersebut.
+
+Kendala:
+Tidak ada.
+
+---
+
+[45.0] - PENYEDERHANAAN DESAIN MINIMALIS TAB PENGATURAN MASTER
+
+- Tanggal: 2026-11-13 03:41
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 64.0
+Referensi SCHEDULE: 35.0
+
+Pekerjaan yang Dilakukan:
+1. Redesain Antarmuka Minimalis ("admin-frontend/src/components/dashboard/tabs/TabMasterSettings.tsx"):
+   - Menghilangkan kartu bersarang, badge berlebih, bar warna terpisah, tombol `wa.me` per baris, serta teks keterangan berulang di bawah setiap slider.
+   - Menyatukan daftar admin dalam satu kartu putih bersih berpemisah garis tipis (`divide-y divide-slate-100`) dengan nomor urut ramping, input Nama & Nomor WhatsApp (`+62`), Range Slider tipis berlabel `Peluang` + angka persentase tabular, dan tombol hapus ikon.
+   - Merapikan tombol aksi menjadi `Bagi Rata` + `Tambah Admin` di header dan tombol `Simpan Pengaturan` yang tetap satu baris di layar mobile sempit.
+   - Menyederhanakan informasi sistem di bawah kartu menjadi satu strip ringkas.
+2. Verifikasi & Pengujian:
+   - Unit test `npx --yes tsx --test admin-backend/services/masterAdminUtils.test.ts` (5 pass, 0 fail).
+   - Verifikasi `compile_applet` dan `lint_applet` (`tsc --noEmit`) lulus tanpa error, lalu restart dev server dan verifikasi tampilan Desktop (`1440x900`) & Mobile (`390x844`) dengan `playwright-cli`.
+
+File yang Diubah:
+- "admin-frontend/src/components/dashboard/tabs/TabMasterSettings.tsx"
+- "brain/LANGKAH_IMPLEMENTASI.md", "brain/PROGRESS.md"
+
+Alasan Perubahan:
+Menjadikan tampilan halaman Pengaturan Master jauh lebih minimalis, tenang, dan mudah dipindai sesuai masukan pengguna.
+
+Hasil:
+Halaman Pengaturan Master tampil bersih dan lapang di Desktop maupun Mobile tanpa mengorbankan satu pun fitur pengelolaan kontak maupun range slider probabilitas.
+
+Kendala:
+Tidak ada.
+
+---
+
+[46.0] - PERBAIKAN STARTUP DEV SERVER, KONFIGURASI VITE WS/HMR, DAN RESOLUSI KONFLIK PORT
+
+- Tanggal: 2026-11-13
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 65.0
+Referensi SCHEDULE: 36.0
+
+Pekerjaan yang Dilakukan:
+1. Perbaikan Resolusi Port & Lazy Startup ("server.ts"):
+   - Memperbarui `resolvePort()` untuk mendukung flag `--port`, memprioritaskan `APP_PORT` / `DEFAULT_APP_PORT` (`3000`), dan mengabaikan `process.env.PORT` saat nilainya sama dengan `NGINX_PORT` (`8080`) sehingga menghindari bentrok `EADDRINUSE: 0.0.0.0:8080`.
+   - Melakukan binding `httpServer.listen` segera di awal dan memuat `express`, `backend/app.ts`, `expiryWarningService.ts`, serta kedua middleware Vite secara paralel melalui `Promise.all`.
+2. Konfigurasi Vite Tanpa Konflik WebSocket ("vite.config.ts", "admin-frontend/vite.config.ts"):
+   - Menambahkan `hmr: false as const`, `ws: false as const`, serta `watch.ignored` untuk `**/database/**`, `**/auth_info_baileys/**`, dan `**/*.log`.
+3. Verifikasi & Pengujian:
+   - Menjalankan `compile_applet`, `lint_applet`, dan `restart_dev_server`.
+   - Memverifikasi respons `200 OK` pada `/api/health`, `/`, `/admin/`, serta proxy port `8080`.
+
+File yang Diubah:
+- "server.ts"
+- "vite.config.ts"
+- "admin-frontend/vite.config.ts"
+- "brain/SCHEDULE.md", "brain/LANGKAH_IMPLEMENTASI.md", "brain/PROGRESS.md"
+
+Alasan Perubahan:
+Menyelesaikan kegagalan startup dev server akibat bentrokan port `8080` dari environment Cloud Run serta potensi gangguan koneksi WebSocket Vite di lingkungan iFrame.
+
+Hasil:
+Dev server berjalan cepat, stabil di port `3000`, dan seluruh endpoint maupun halaman frontend merespons `200 OK`.
+
+Kendala:
+Tidak ada.
+
+---
+
+[47.0] - IMPLEMENTASI POPUP EXPIRED TERKUNCI, FORM REDEEM TOKEN, DAN FORCE DISCONNECT REAL-TIME (SESI DISIMPAN)
+
+- Tanggal: 2026-11-13
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 66.0
+Referensi SCHEDULE: 37.0
+
+Pekerjaan yang Dilakukan:
+1. Utilitas Evaluasi Expired & Format Token ("admin-backend/services/tenantExpiryUtils.ts", "admin-backend/services/tenantExpiryUtils.test.ts", "frontend/src/utils/tokenInputUtils.ts", "frontend/src/utils/tokenInputUtils.test.ts"):
+   - Membuat `isTenantTimestampExpired` dan `resolveEffectiveTenantStatus` untuk mengevaluasi kedaluwarsa berbasis `expires_at` tanpa menimpa status `suspended`.
+   - Membuat `formatVoucherTokenInput` dan `validateVoucherTokenInput` untuk pemformatan otomatis kode voucher `XXXX-XXXX-XXXX-XXXX`.
+   - Menambahkan unit test untuk kedua modul utilitas (4 test, seluruhnya lulus).
+2. Pemutusan Koneksi Bot Real-Time Dengan Sesi Tetap Disimpan ("admin-backend/services/tenantStatusService.ts", "admin-backend/services/tenantService.ts", "admin-backend/services/tokenService.ts", "backend/botManager.ts", "backend/routes/botRoutes.ts", "backend/routes/authRoutes.ts", "backend/services/expiryWarningService.ts"):
+   - Memperbarui `BotManager.forceDisconnect({ clearSession, reason })` agar pemutusan akibat `expired` (`clearSession = false`) memanggil `sock.end` namun mempertahankan folder sesi `auth_info_baileys/{tenantId}` (`creds.json` tetap tersimpan untuk reconnect setelah perpanjangan).
+   - Menambahkan `disconnectBotForStatus`, `enforceRealtimeTenantExpiry`, dan `enforceAllExpiredTenants` pada `TenantStatusService`.
+   - Memasang guard real-time di `BotManager.start()`, `messages.upsert`, endpoint bot (`/api/bot/status`, `/api/bot/start`, `/api/bot/reset`, `/api/bot/save-config`, `/api/bot/groups/group-only`), serta endpoint auth (`/api/auth/login`, `/api/auth/session`, `/api/auth/store-status`).
+   - Menambahkan interval `10 detik` (`realtimeExpiryInterval`) di `expiryWarningService.ts` untuk mendeteksi dan memutus bot tenant expired secara real-time tanpa menunggu jadwal peringatan 5 menit.
+   - Memastikan `TokenService.redeemToken()` mengizinkan tenant `active` dan `expired` memperpanjang masa aktif, namun tetap menolak tenant `suspended`.
+3. Popup Expired Terkunci & Integrasi Dashboard Tenant ("frontend/src/components/modals/ExpiredAccountModal.tsx", "frontend/src/hooks/useBotConnection.ts", "frontend/src/components/dashboard/TenantDashboard.tsx", "frontend/src/components/tabs/TabConnectionDedicated.tsx"):
+   - Membuat `ExpiredAccountModal.tsx` (`role="alertdialog"`, tidak bisa ditutup klik backdrop/Escape) berisi detail waktu kedaluwarsa WIB, form kode token `XXXX-XXXX-XXXX-XXXX` + tombol **Konfirmasi Perpanjang**, tombol **Hubungi Master Admin** (acak berbobot dari `/api/auth/master-admin-contact`), tombol **Keluar / Logout Akun**, serta tombol close sementara khusus tahap development (**Tutup Sementara** dan `X`).
+   - Menambahkan `setTimeout` real-time di `TenantDashboard.tsx` untuk memicu penguncian langsung ketika `expiresAt` tercapai, menahan `MandatoryStoreSetupModal` saat akun tidak `active`, dan otomatis menutup popup + memuat ulang status ketika token berhasil diredeem.
+   - Menambahkan banner peringatan kedaluwarsa serta mengunci tombol Pairing/Reset di `TabConnectionDedicated.tsx` selama status masih `expired`.
+4. Verifikasi & Pengujian:
+   - Unit test `npx --yes tsx --test admin-backend/services/tenantExpiryUtils.test.ts frontend/src/utils/tokenInputUtils.test.ts` (4 pass, 0 fail).
+   - Verifikasi `compile_applet` dan `lint_applet` lulus 100% tanpa error (termasuk perbaikan tipe string pada `formatExpiryDateTimeWIB` di `ExpiredAccountModal.tsx`).
+   - Uji integrasi backend via `tsx` memverifikasi `enforceRealtimeTenantExpiry` memanggil `sock.end()`, menandai bot `closed`, mempertahankan `creds.json`, menolak `bot.start()`, dan memulihkan status menjadi `active` saat `TokenService.redeemToken` dipanggil.
+   - Uji browser Playwright pada Desktop (`1440x900`) dan Mobile (`390x844`): memastikan `ExpiredAccountModal` tampil mengunci tanpa overflow mobile, penolakan token tidak valid, tombol **Tutup Sementara** membuka tampilan sementara dengan tab Koneksi Bot terkunci, reload halaman kembali mengunci popup, serta redeem token valid langsung menutup popup secara otomatis dan mengaktifkan akun kembali (seluruh data uji sementara sudah dibersihkan).
+
+File yang Diubah/Dibuat:
+- "admin-backend/services/tenantExpiryUtils.ts" (Baru)
+- "admin-backend/services/tenantExpiryUtils.test.ts" (Baru)
+- "admin-backend/services/tenantStatusService.ts"
+- "admin-backend/services/tenantService.ts"
+- "admin-backend/services/tokenService.ts"
+- "backend/botManager.ts"
+- "backend/routes/botRoutes.ts"
+- "backend/routes/authRoutes.ts"
+- "backend/services/expiryWarningService.ts"
+- "frontend/src/utils/tokenInputUtils.ts" (Baru)
+- "frontend/src/utils/tokenInputUtils.test.ts" (Baru)
+- "frontend/src/components/modals/ExpiredAccountModal.tsx" (Baru)
+- "frontend/src/hooks/useBotConnection.ts"
+- "frontend/src/components/dashboard/TenantDashboard.tsx"
+- "frontend/src/components/tabs/TabConnectionDedicated.tsx"
+- "brain/SCHEDULE.md", "brain/LANGKAH_IMPLEMENTASI.md", "brain/PROGRESS.md"
+
+Alasan Perubahan:
+Memastikan tenant yang masa sewanya habis langsung terputus koneksi botnya secara real-time tanpa menghapus sesi login QR, dicegah menyambungkan bot sebelum perpanjangan, dan memiliki jalur perpanjangan mandiri melalui form token di popup terkunci.
+
+Hasil:
+1. Saat masa sewa tenant kedaluwarsa, bot terputus secara real-time dalam hitungan detik dengan file sesi tetap utuh dan tidak bisa connect sebelum diperpanjang.
+2. Dashboard Bot Tenant langsung menampilkan popup expired terkunci (dengan tombol close sementara khusus dev), form token perpanjangan, tombol Hubungi Master Admin acak berbobot, dan tombol Logout.
+3. Ketika token valid dikonfirmasi, masa aktif bertambah dan popup langsung tertutup otomatis.
+
+Kendala:
+Tidak ada.
+
+---
+
+[48.0] - IMPLEMENTASI FITUR BROADCAST MASTER ADMIN (WHATSAPP & TELEGRAM PARALEL, JADWAL SEKALI & BERULANG, PLACEHOLDER, DAN LOG 2 TINGKAT)
+
+- Tanggal: 2026-11-14
+- Status: Completed
+Referensi LANGKAH_IMPLEMENTASI: 67.0
+Referensi SCHEDULE: 38.0
+
+Pekerjaan yang Dilakukan:
+1. Skema Database Pusat & Utilitas Logika ("admin-backend/database/masterSqlite.ts", "admin-backend/services/broadcastUtils.ts", "admin-backend/services/broadcastUtils.test.ts", "admin-frontend/src/utils/broadcastFormat.ts", "admin-frontend/src/utils/broadcastFormat.test.ts"):
+   - Menambahkan tabel `broadcast_campaigns` dan `broadcast_logs` beserta index relasional pada `database/master.db`.
+   - Mengimplementasikan fungsi murni `resolveBroadcastPlaceholders` (`{storeName}`, `{ownerName}`, `{tenantId}`, `{ownerPhone}`, `{expiryDate}`, `{daysRemaining}`, `{remainingTime}`), `parseWibDateTimeToUtcIso`, `computeNextRecurringRunUtc` (harian, mingguan, bulanan berbasis WIB `Asia/Jakarta` termasuk penyesuaian akhir bulan), `evaluateCampaignRunStatus`, dan `deriveCampaignTitle`.
+   - Menambahkan 7 unit test backend (`broadcastUtils.test.ts`) dan 3 unit test frontend (`broadcastFormat.test.ts`), seluruh 10 test lulus.
+2. Layanan Pengiriman Paralel WA & Telegram Serta Scheduler ("backend/services/telegramService.ts", "admin-backend/services/broadcastService.ts", "admin-backend/routes/broadcastRoutes.ts", "admin-backend/routes/adminRoutes.ts", "server.ts"):
+   - Memperluas `sendTelegramMessage` agar mendukung `parseMode: 'None'` dan membuat `sendAdminBroadcastToTelegram` sesuai kesepakatan Opsi A (pesan murni apa adanya tanpa header/footer tambahan) serta Opsi B (`isConfigured && !adminDisabled`, mengabaikan saklar `notif_enabled` tenant).
+   - Membangun `BroadcastService` yang secara otomatis menyaring hanya tenant dengan status efektif `active` (melewati tenant `expired` dan `suspended` tanpa pemilihan manual), lalu mengirimkan pesan secara paralel (`Promise.all`) melalui bot WhatsApp masing-masing tenant ke `owner_phone` dan/atau Bot Telegram tenant.
+   - Mencatat hasil sukses serta alasan gagal spesifik per tenant dan per kanal ke `broadcast_logs`, mendukung pengiriman ulang log gagal (`retryFailedLogs`), edit jadwal/pesan (`updateBroadcast`), eksekusi mendadak (`executeCampaign` dengan tombol Kirim Sekarang), pembatalan jadwal (`cancelCampaign`), serta penghapusan riwayat (`deleteCampaign`).
+   - Memasang `startBroadcastScheduler()` di `server.ts` (interval polling 20 detik) untuk mengeksekusi jadwal sekali kirim maupun jadwal berulang otomatis tepat waktu.
+3. Antarmuka Dashboard Master Admin & Modal Interaktif ("admin-frontend/src/components/dashboard/tabs/TabBroadcast.tsx", "admin-frontend/src/components/modals/BroadcastLogModal.tsx", "admin-frontend/src/components/modals/EditBroadcastModal.tsx", "admin-frontend/src/components/modals/ConfirmBroadcastActionModal.tsx", "admin-frontend/src/components/layout/AdminSidebar.tsx", "admin-frontend/src/App.tsx"):
+   - Mengganti placeholder tab `broadcast` dan menghapus lencana "Segera" di sidebar dengan halaman penuh **Pesan Siaran**.
+   - Menyediakan 4 kartu kesiapan target tenant aktif (Total Active, Bot WhatsApp Siap, Bot Telegram Siap, Jadwal Menunggu), form composer lengkap dengan pemilih kanal (`WA & Telegram`, `WhatsApp Saja`, `Telegram Saja`), mode waktu WIB (`Kirim Sekarang`, `Jadwal Sekali`, `Jadwal Berulang` harian/mingguan/bulanan), 7 chip placeholder klik-sisip, serta kotak **Pratinjau Output** menggunakan data sample tenant aktif.
+   - Membangun riwayat 2 tingkat: Tabel Riwayat & Jadwal Kampanye (filter status, pencarian, ringkasan WA & TG sukses/gagal, aksi Edit/Kirim/Batalkan/Hapus/Log) dan `BroadcastLogModal` untuk audit rincian per-tenant per-kanal, pemilih nomor eksekusi pada kampanye berulang, filter kanal/status, dan tombol **Kirim Ulang yang Gagal**.
+   - Menghilangkan `backdrop-blur-xs` pada modal overlay menjadi `bg-slate-900/55` agar rendering modal bersih tanpa hambatan kompositor.
+4. Verifikasi & Pengujian:
+   - Unit test `npx --yes tsx --test admin-backend/services/broadcastUtils.test.ts admin-frontend/src/utils/broadcastFormat.test.ts` (10 pass, 0 fail).
+   - Verifikasi `compile_applet` dan `lint_applet` (`tsc --noEmit`) lulus tanpa error.
+   - Pengujian API `/api/admin/broadcasts` via curl dan pengujian interaktif browser Playwright pada Desktop (`1440x900`) serta Mobile (`390x844` tanpa horizontal overflow, `scrollWidth === innerWidth === 390`): pembuatan jadwal berulang mingguan, pratinjau placeholder, edit jadwal, Kirim Sekarang via modal konfirmasi, inspeksi log 2 tingkat per-tenant & alasan error, Kirim Ulang yang Gagal, Batalkan jadwal, hingga Hapus riwayat uji agar database tetap bersih.
+
+File yang Diubah/Dibuat:
+- "admin-backend/database/masterSqlite.ts"
+- "admin-backend/types/admin.types.ts"
+- "admin-backend/services/broadcastUtils.ts" (Baru)
+- "admin-backend/services/broadcastUtils.test.ts" (Baru)
+- "admin-backend/services/broadcastService.ts" (Baru)
+- "admin-backend/routes/broadcastRoutes.ts" (Baru)
+- "admin-backend/routes/adminRoutes.ts"
+- "backend/services/telegramService.ts"
+- "server.ts"
+- "admin-frontend/src/types/admin.types.ts"
+- "admin-frontend/src/utils/broadcastFormat.ts" (Baru)
+- "admin-frontend/src/utils/broadcastFormat.test.ts" (Baru)
+- "admin-frontend/src/components/modals/BroadcastLogModal.tsx" (Baru)
+- "admin-frontend/src/components/modals/EditBroadcastModal.tsx" (Baru)
+- "admin-frontend/src/components/modals/ConfirmBroadcastActionModal.tsx" (Baru)
+- "admin-frontend/src/components/dashboard/tabs/TabBroadcast.tsx" (Baru)
+- "admin-frontend/src/components/layout/AdminSidebar.tsx"
+- "admin-frontend/src/App.tsx"
+- "brain/SCHEDULE.md", "brain/LANGKAH_IMPLEMENTASI.md", "brain/PROGRESS.md"
+
+Alasan Perubahan:
+Memenuhi permintaan Master Admin untuk mengirimkan pesan broadcast paralel melalui bot WhatsApp dan Telegram tiap tenant aktif ke nomor/chat owner masing-masing, dilengkapi penjadwalan sekali kirim maupun berulang otomatis dan sistem audit log 2 tingkat.
+
+Hasil:
+Fitur Pesan Siaran (Broadcast) Master Admin beroperasi penuh, stabil, responsif di Desktop maupun Mobile, dan lolos seluruh pengujian unit, kompilasi, serta interaksi browser.
+
+Kendala:
+Tidak ada.
 

@@ -8,17 +8,25 @@ import { transactionRouter } from './routes/transactionRoutes.ts';
 import { mediaRouter } from './routes/mediaRoutes.ts';
 import { pricingRouter } from './routes/pricingRoutes.ts';
 import { promoRouter } from './routes/promoRoutes.ts';
-import { apartmentRouter } from './routes/apartmentRoutes.ts';
+import { tenantTemplateRouter } from './routes/tenantTemplateRoutes.ts';
+import { tenantTokenRouter } from './routes/tenantTokenRoutes.ts';
+import { telegramRouter } from './routes/telegramRoutes.ts';
+import { reportRouter } from './routes/reportRoutes.ts';
 import { adminRouter } from '../admin-backend/routes/adminRoutes.ts';
+import { partnerPublicRouter } from '../admin-backend/routes/partnerPublicRoutes.ts';
 import { initMasterDatabase } from '../admin-backend/database/masterSqlite.ts';
 import { initTenantDb } from './database/tenantDbManager.ts';
 import { initDatabase } from './database/sqlite.ts';
 
 import { tenantContextStorage } from './database/tenantContext.ts';
-import { getSession } from './services/authManager.ts';
-import { impersonationTokens } from '../admin-backend/routes/adminRoutes.ts';
+import {
+  requireTenantAuth,
+  resolveAuthenticatedTenant,
+  tenantExistsInMaster,
+} from './middleware/tenantAuth.ts';
 
 import { seedDefaultMedia } from './services/mediaManager.ts';
+import { isCorsOriginAllowed } from './utils/corsSecurity.ts';
 
 export function createServerApp(): Express {
   // Pastikan database SQLite dan media siap
@@ -32,9 +40,47 @@ export function createServerApp(): Express {
   }
 
   const app = express();
+  app.disable('x-powered-by');
+  app.set('trust proxy', 1);
 
-  // Middleware CORS & Body Parser (limit 25mb untuk upload gambar base64)
-  app.use(cors());
+  // Security HTTP Headers dasar
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    const xfProto = String(req.headers['x-forwarded-proto'] || '')
+      .split(',')[0]
+      .trim()
+      .toLowerCase();
+    if (req.secure || xfProto === 'https') {
+      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+    next();
+  });
+
+  // Middleware CORS terkonfigurasi (tanpa wildcard '*') & Body Parser (limit 25mb untuk upload gambar base64)
+  app.use(
+    cors((req, callback) => {
+      const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
+      if (!origin) {
+        return callback(null, { origin: false });
+      }
+      const allowed = isCorsOriginAllowed(origin, {
+        corsOriginsEnv: process.env.CORS_ORIGINS,
+        requestHost: req.get('host'),
+        isProduction: process.env.NODE_ENV === 'production',
+      });
+      if (allowed) {
+        return callback(null, {
+          origin: true,
+          credentials: true,
+          methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+          allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
+        });
+      }
+      return callback(null, { origin: false });
+    })
+  );
   app.use(
     express.json({
       limit: '25mb',
@@ -46,67 +92,37 @@ export function createServerApp(): Express {
   );
   app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
-  // Middleware Identifikasi Tenant (Apartemen Multi-Tenancy)
+  // Mount Partner REST API Publik sebelum middleware identifikasi sesi tenant
+  app.use('/api/v1/partner', partnerPublicRouter);
+
+  // Middleware Identifikasi Tenant (Strict Session-Only Isolation)
   app.use((req: Request, _res: Response, next: NextFunction) => {
-    let tenantId = 't_wanzt';
-    let username = 'admin';
-
-    // 1. Cek query param ?impersonate=... atau ?tenant=...
-    const queryTenant = (req.query.tenant as string) || '';
-    const impToken = (req.query.impersonate as string) || '';
-    if (impToken && impersonationTokens.has(impToken)) {
-      const impData = impersonationTokens.get(impToken);
-      if (impData && Date.now() < impData.expiresAt) {
-        tenantId = impData.tenantId;
+    const session = resolveAuthenticatedTenant(req);
+    if (session) {
+      try {
+        initTenantDb(session.tenantId);
+      } catch (dbErr) {
+        console.error(`[Tenant DB Error] Inisialisasi ${session.tenantId} gagal:`, dbErr);
       }
-    } else if (queryTenant && queryTenant.trim()) {
-      tenantId = queryTenant.trim();
+      (req as any).authSession = session;
+      (req as any).tenantId = session.tenantId;
+      tenantContextStorage.run({ tenantId: session.tenantId, username: session.username }, () => next());
+      return;
     }
 
-    // 2. Cek Header Authorization (Bearer <token>)
-    if (!queryTenant && !impToken) {
-      const authHeader = req.headers.authorization || '';
-      const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-      if (token) {
-        if (impersonationTokens.has(token)) {
-          const impData = impersonationTokens.get(token);
-          if (impData && Date.now() < impData.expiresAt) {
-            tenantId = impData.tenantId;
-          }
-        } else {
-          const session = getSession(token);
-          if (session && session.tenantId) {
-            tenantId = session.tenantId;
-            username = session.username;
-          }
-        }
+    // Khusus webhook callback pembayaran, izinkan ?tenant=<id> hanya jika tenant terdaftar di master.db
+    let fallbackTenantId = 't_wanzt';
+    if (req.path === '/api/lunasqris/webhook') {
+      const candidateTenant = typeof req.query.tenant === 'string' ? req.query.tenant.trim() : '';
+      if (candidateTenant && tenantExistsInMaster(candidateTenant)) {
+        fallbackTenantId = candidateTenant;
+        try {
+          initTenantDb(fallbackTenantId);
+        } catch {}
       }
     }
 
-    // 3. Cek Header X-Tenant-Id
-    const headerTenant = req.headers['x-tenant-id'] as string;
-    if (headerTenant && headerTenant.trim()) {
-      tenantId = headerTenant.trim();
-    }
-
-    // 4. Cek Cookie tenant_id jika belum terdeteksi dari token/header
-    if (tenantId === 't_wanzt') {
-      const cookieHeader = req.headers.cookie || '';
-      const match = cookieHeader.match(/tenant_id=([^;]+)/);
-      if (match && match[1]) {
-        tenantId = decodeURIComponent(match[1].trim());
-      }
-    }
-
-    // Pastikan database unit apartemen tenant siap
-    try {
-      initTenantDb(tenantId);
-    } catch (dbErr) {
-      console.error(`[Tenant DB Error] Inisialisasi ${tenantId} gagal:`, dbErr);
-    }
-
-    (req as any).tenantId = tenantId;
-    tenantContextStorage.run({ tenantId, username }, () => next());
+    tenantContextStorage.run({ tenantId: fallbackTenantId, username: 'anonymous' }, () => next());
   });
 
   // Health check endpoint
@@ -114,16 +130,25 @@ export function createServerApp(): Express {
     res.json({ status: 'ok', service: 'bot-wanzt-backend', timestamp: new Date().toISOString() });
   });
 
-  // Mount API Routers
+  // Mount API Routers (seluruh router operasional tenant wajib melewati requireTenantAuth)
   app.use('/api/auth', authRouter);
-  app.use('/api/bot', botRouter);
-  app.use('/api/pricing', pricingRouter);
-  app.use('/api/promos', promoRouter);
-  app.use('/api/xaviera', xavieraRouter);
+  app.use('/api/bot', requireTenantAuth, botRouter);
+  app.use('/api/bot', requireTenantAuth, tenantTemplateRouter);
+  app.use('/api/bot', requireTenantAuth, tenantTokenRouter);
+  app.use('/api/bot/telegram', requireTenantAuth, telegramRouter);
+  app.use('/api/pricing', requireTenantAuth, pricingRouter);
+  app.use('/api/promos', requireTenantAuth, promoRouter);
+  app.use('/api/xaviera', requireTenantAuth, xavieraRouter);
   app.use('/api/lunasqris', lunasQrisRouter);
-  app.use('/api/transactions', transactionRouter);
-  app.use('/api/media', mediaRouter);
-  app.use('/api/apartment', apartmentRouter);
+  app.use('/api/transactions', requireTenantAuth, transactionRouter);
+  app.use('/api/media', requireTenantAuth, mediaRouter);
+  app.use('/api/reports', requireTenantAuth, reportRouter);
+  app.use('/api/apartment', (_req: Request, res: Response) => {
+    res.status(404).json({
+      success: false,
+      error: 'Endpoint legacy /api/apartment/* telah dinonaktifkan. Gunakan /api/admin/*.',
+    });
+  });
   app.use('/api/admin', adminRouter);
 
   return app;

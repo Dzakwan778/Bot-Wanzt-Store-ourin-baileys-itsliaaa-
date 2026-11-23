@@ -11,6 +11,8 @@ import { TabKoneksiLayanan } from './TabKoneksiLayanan';
 import { TabGrup } from './TabGrup';
 import { TabTransaksi } from './TabTransaksi';
 import { TabAccountSecurity } from './TabAccountSecurity';
+import { TabBotManagement } from './TabBotManagement';
+import { TabLaporan } from './TabLaporan';
 import { useStoreConfig } from '../../hooks/useStoreConfig';
 import { useXavieraData } from '../../hooks/useXavieraData';
 import { useWhatsAppGroups } from '../../hooks/useWhatsAppGroups';
@@ -34,6 +36,7 @@ interface TabContentRendererProps {
   promosState: ReturnType<typeof usePromos>;
   lunasQrisData?: ReturnType<typeof useLunasQrisData>;
   showToast: (msg: string) => void;
+  isStoreInfoCompleteForPairing?: boolean;
   currentUsername?: string;
   onUsernameUpdated?: (newUsername: string) => void;
 }
@@ -51,6 +54,7 @@ export const TabContentRenderer: React.FC<TabContentRendererProps> = ({
   promosState,
   lunasQrisData,
   showToast,
+  isStoreInfoCompleteForPairing = true,
   currentUsername,
   onUsernameUpdated,
 }) => {
@@ -58,13 +62,17 @@ export const TabContentRenderer: React.FC<TabContentRendererProps> = ({
   if (selectedTab === 'Info Profil' || selectedTab === 'Store Info') {
     return (
       <TabStoreInfo
-        storeInfo={storeConfig.storeInfo}
-        setStoreInfo={storeConfig.setStoreInfo}
+        storeInfo={storeConfig.storeInfoDraft}
+        setStoreInfo={storeConfig.setStoreInfoDraft}
         isSavingConfig={storeConfig.isSavingConfig}
-        onSave={(updatedStoreInfo?: any) => {
-          const toSave = updatedStoreInfo || storeConfig.storeInfo;
-          storeConfig.setStoreInfo(toSave);
-          storeConfig.syncConfigToServer({ storeInfo: toSave });
+        onSave={async (updatedStoreInfo?: any) => {
+          const toSave = updatedStoreInfo || storeConfig.storeInfoDraft;
+          const ok = await storeConfig.syncConfigToServer({ storeInfo: toSave });
+          if (ok) {
+            storeConfig.setStoreInfo(toSave);
+            storeConfig.setStoreInfoDraft(toSave);
+          }
+          return ok;
         }}
         showToast={showToast}
       />
@@ -100,6 +108,7 @@ export const TabContentRenderer: React.FC<TabContentRendererProps> = ({
         onStop={botConn.handleStop}
         onReset={botConn.handleReset}
         onCopyCode={botConn.handleCopyCode}
+        isStoreInfoComplete={isStoreInfoCompleteForPairing}
         showToast={showToast}
       />
     );
@@ -151,6 +160,9 @@ export const TabContentRenderer: React.FC<TabContentRendererProps> = ({
         handleToggleGroup={groupsData.handleToggleGroup}
         copyGroupIdToClipboard={groupsData.copyGroupIdToClipboard}
         botStatus={botConn.botData.status}
+        groupOnly={groupsData.groupOnly}
+        isTogglingGroupOnly={groupsData.isTogglingGroupOnly}
+        handleToggleGroupOnly={groupsData.handleToggleGroupOnly}
       />
     );
   }
@@ -250,6 +262,84 @@ export const TabContentRenderer: React.FC<TabContentRendererProps> = ({
           };
           storeConfig.syncConfigToServer(payload);
           showToast('Konfigurasi Konfirmasi & Promo berhasil disimpan!');
+        }}
+        // Transaksi
+        paymentSuccessDmText={storeConfig.paymentSuccessDmText}
+        setPaymentSuccessDmText={storeConfig.setPaymentSuccessDmText}
+        paymentSuccessDmFooter={storeConfig.paymentSuccessDmFooter}
+        setPaymentSuccessDmFooter={storeConfig.setPaymentSuccessDmFooter}
+        paymentSuccessGroupText={storeConfig.paymentSuccessGroupText}
+        setPaymentSuccessGroupText={storeConfig.setPaymentSuccessGroupText}
+        paymentSuccessGroupFooter={storeConfig.paymentSuccessGroupFooter}
+        setPaymentSuccessGroupFooter={storeConfig.setPaymentSuccessGroupFooter}
+        paymentExpiredText={storeConfig.paymentExpiredText}
+        setPaymentExpiredText={storeConfig.setPaymentExpiredText}
+        paymentExpiredFooter={storeConfig.paymentExpiredFooter}
+        setPaymentExpiredFooter={storeConfig.setPaymentExpiredFooter}
+        paymentErrorText={storeConfig.paymentErrorText}
+        setPaymentErrorText={storeConfig.setPaymentErrorText}
+        paymentErrorFooter={storeConfig.paymentErrorFooter}
+        setPaymentErrorFooter={storeConfig.setPaymentErrorFooter}
+        onSaveTransaksi={() => {
+          storeConfig.syncConfigToServer({
+            paymentSuccessDmText: storeConfig.paymentSuccessDmText,
+            paymentSuccessDmFooter: storeConfig.paymentSuccessDmFooter,
+            paymentSuccessGroupText: storeConfig.paymentSuccessGroupText,
+            paymentSuccessGroupFooter: storeConfig.paymentSuccessGroupFooter,
+            paymentExpiredText: storeConfig.paymentExpiredText,
+            paymentExpiredFooter: storeConfig.paymentExpiredFooter,
+            paymentErrorText: storeConfig.paymentErrorText,
+            paymentErrorFooter: storeConfig.paymentErrorFooter,
+          });
+          showToast('Konfigurasi Respon Transaksi berhasil disimpan!');
+        }}
+        // Notifikasi
+        orderGroupNotifText={storeConfig.orderGroupNotifText}
+        setOrderGroupNotifText={storeConfig.setOrderGroupNotifText}
+        orderGroupNotifFooter={storeConfig.orderGroupNotifFooter}
+        setOrderGroupNotifFooter={storeConfig.setOrderGroupNotifFooter}
+        stockEmptyText={storeConfig.stockEmptyText}
+        setStockEmptyText={storeConfig.setStockEmptyText}
+        stockEmptyFooter={storeConfig.stockEmptyFooter}
+        setStockEmptyFooter={storeConfig.setStockEmptyFooter}
+        sessionExpiredText={storeConfig.sessionExpiredText}
+        setSessionExpiredText={storeConfig.setSessionExpiredText}
+        sessionExpiredFooter={storeConfig.sessionExpiredFooter}
+        setSessionExpiredFooter={storeConfig.setSessionExpiredFooter}
+        promoCancelledText={storeConfig.promoCancelledText}
+        setPromoCancelledText={storeConfig.setPromoCancelledText}
+        promoCancelledFooter={storeConfig.promoCancelledFooter}
+        setPromoCancelledFooter={storeConfig.setPromoCancelledFooter}
+        onSaveNotifikasi={() => {
+          storeConfig.syncConfigToServer({
+            orderGroupNotifText: storeConfig.orderGroupNotifText,
+            orderGroupNotifFooter: storeConfig.orderGroupNotifFooter,
+            stockEmptyText: storeConfig.stockEmptyText,
+            stockEmptyFooter: storeConfig.stockEmptyFooter,
+            sessionExpiredText: storeConfig.sessionExpiredText,
+            sessionExpiredFooter: storeConfig.sessionExpiredFooter,
+            promoCancelledText: storeConfig.promoCancelledText,
+            promoCancelledFooter: storeConfig.promoCancelledFooter,
+          });
+          showToast('Konfigurasi Respon Notifikasi berhasil disimpan!');
+        }}
+        // Kontak
+        contactOwnerEmptyText={storeConfig.contactOwnerEmptyText}
+        setContactOwnerEmptyText={storeConfig.setContactOwnerEmptyText}
+        contactAdminEmptyText={storeConfig.contactAdminEmptyText}
+        setContactAdminEmptyText={storeConfig.setContactAdminEmptyText}
+        expiryWarningOwnerText={storeConfig.expiryWarningOwnerText}
+        setExpiryWarningOwnerText={storeConfig.setExpiryWarningOwnerText}
+        expiryWarningOwnerFooter={storeConfig.expiryWarningOwnerFooter}
+        setExpiryWarningOwnerFooter={storeConfig.setExpiryWarningOwnerFooter}
+        onSaveKontak={() => {
+          storeConfig.syncConfigToServer({
+            contactOwnerEmptyText: storeConfig.contactOwnerEmptyText,
+            contactAdminEmptyText: storeConfig.contactAdminEmptyText,
+            expiryWarningOwnerText: storeConfig.expiryWarningOwnerText,
+            expiryWarningOwnerFooter: storeConfig.expiryWarningOwnerFooter,
+          });
+          showToast('Konfigurasi Respon Kontak & Sewa berhasil disimpan!');
         }}
         storeInfo={storeConfig.storeInfo}
         isSavingConfig={storeConfig.isSavingConfig}
@@ -399,6 +489,32 @@ export const TabContentRenderer: React.FC<TabContentRendererProps> = ({
         showToast={showToast}
       />
     );
+  }
+
+  // 12. MANAGEMENT BOT (Status Bot, Masa Aktif, Tanggal Expired, Form Redeem Token)
+  if (
+    selectedTab === 'Management Bot' ||
+    selectedTab === 'Bot Management' ||
+    selectedTab === 'ManagementBot' ||
+    selectedTab === 'Masa Sewa' ||
+    selectedTab === 'Voucher Token'
+  ) {
+    return (
+      <TabBotManagement
+        botData={botConn.botData}
+        showToast={showToast}
+      />
+    );
+  }
+
+  // 13. LAPORAN MASALAH TENANT
+  if (
+    selectedTab === 'Laporan' ||
+    selectedTab === 'Laporan Masalah' ||
+    selectedTab === 'Lapor' ||
+    selectedTab === 'tabLaporan'
+  ) {
+    return <TabLaporan showToast={showToast} />;
   }
 
   return (

@@ -7,10 +7,14 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig(() => {
   return {
     root: path.resolve(import.meta.dirname, 'frontend'),
+    cacheDir: path.resolve(import.meta.dirname, 'node_modules/.vite-frontend'),
     plugins: [
       react(),
       tailwindcss(),
     ],
+    optimizeDeps: {
+      entries: ['index.html'],
+    },
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname, 'frontend', 'src'),
@@ -23,15 +27,21 @@ export default defineConfig(() => {
     server: {
       port: 3000,
       host: '0.0.0.0',
-      hmr: false,
+      allowedHosts: true as const,
+      hmr: false as const,
+      ws: false as const,
       watch: {
         ignored: [
           '**/database/**',
           '**/backend/database/**',
+          '**/storage/**',
+          '**/dist/**',
+          '**/dist-admin/**',
           '**/auth_info_baileys/**',
           '**/backend/auth_info_baileys/**',
           '**/database/*.json',
           '**/*.log',
+          '**/*.test.*',
         ],
       },
       // Proxy untuk skenario pengembangan Frontend & Backend mandiri secara terpisah

@@ -2,15 +2,15 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import { hashScryptPassword, generateBootstrapSecretPassword } from '../utils/passwordCrypto.ts';
 
 const MASTER_DB_PATH = path.resolve(process.cwd(), 'database', 'master.db');
 
 let masterDb: Database.Database | null = null;
 
-// Helper hashing PBKDF2
+// Hash password kuat dengan crypto.scrypt + random 16-byte salt per akun
 export function hashPassword(password: string): string {
-  const salt = 'master_salt_wanzt_2026';
-  return crypto.pbkdf2Sync(password, salt, 1000, 32, 'sha256').toString('hex');
+  return hashScryptPassword(password);
 }
 
 export function initMasterDatabase(): Database.Database {
@@ -42,6 +42,35 @@ export function initMasterDatabase(): Database.Database {
     );
   `);
 
+  // Tabel Sesi Login Master Admin (Persisten 7 Hari)
+  masterDb.exec(`
+    CREATE TABLE IF NOT EXISTS admin_sessions (
+      token TEXT PRIMARY KEY,
+      admin_id INTEGER NOT NULL,
+      username TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON admin_sessions (expires_at);
+    CREATE INDEX IF NOT EXISTS idx_admin_sessions_admin ON admin_sessions (admin_id);
+  `);
+
+  // Tabel Pelacakan Percobaan Login Gagal Berbasis IP & Username (Brute-Force Protection)
+  masterDb.exec(`
+    CREATE TABLE IF NOT EXISTS admin_login_attempts (
+      ip TEXT PRIMARY KEY,
+      failed_count INTEGER NOT NULL DEFAULT 0,
+      locked_until TEXT,
+      last_attempt_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS admin_username_login_attempts (
+      username TEXT PRIMARY KEY,
+      failed_count INTEGER NOT NULL DEFAULT 0,
+      locked_until TEXT,
+      last_attempt_at TEXT NOT NULL
+    );
+  `);
+
   // Tabel Penyewa Toko (Tenants / Apartemen)
   masterDb.exec(`
     CREATE TABLE IF NOT EXISTS tenants (
@@ -57,9 +86,30 @@ export function initMasterDatabase(): Database.Database {
       max_groups INTEGER DEFAULT 10,
       created_at TEXT NOT NULL,
       expires_at TEXT NOT NULL,
-      notes TEXT
+      notes TEXT,
+      warned_3d INTEGER NOT NULL DEFAULT 0,
+      warned_1d INTEGER NOT NULL DEFAULT 0,
+      warned_5h INTEGER NOT NULL DEFAULT 0,
+      warned_1h INTEGER NOT NULL DEFAULT 0
     );
   `);
+
+  // Migrasi kolom flag peringatan sewa pada tabel tenants jika belum ada
+  const tenantColumns = masterDb.prepare("PRAGMA table_info(tenants)").all() as { name: string }[];
+  const colNames = new Set(tenantColumns.map((c) => c.name));
+
+  if (!colNames.has('warned_3d')) {
+    masterDb.exec("ALTER TABLE tenants ADD COLUMN warned_3d INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!colNames.has('warned_1d')) {
+    masterDb.exec("ALTER TABLE tenants ADD COLUMN warned_1d INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!colNames.has('warned_5h')) {
+    masterDb.exec("ALTER TABLE tenants ADD COLUMN warned_5h INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!colNames.has('warned_1h')) {
+    masterDb.exec("ALTER TABLE tenants ADD COLUMN warned_1h INTEGER NOT NULL DEFAULT 0");
+  }
 
   // Tabel Riwayat Perpanjangan Sewa
   masterDb.exec(`
@@ -73,21 +123,189 @@ export function initMasterDatabase(): Database.Database {
     );
   `);
 
-  // Seed default super admin jika kosong
-  const adminCount = (masterDb.prepare('SELECT COUNT(*) as count FROM super_admins').get() as { count: number }).count;
-  if (adminCount === 0) {
-    const defaultHash = hashPassword('adminwanzt888');
+  // Tabel Token Lisensi Voucher Perpanjangan Masa Sewa Bot
+  masterDb.exec(`
+    CREATE TABLE IF NOT EXISTS extension_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token_code TEXT UNIQUE NOT NULL,
+      amount INTEGER NOT NULL,
+      unit TEXT NOT NULL,
+      duration_label TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'available',
+      created_at TEXT NOT NULL,
+      used_by_tenant_id TEXT,
+      used_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_extension_tokens_code ON extension_tokens (token_code);
+    CREATE INDEX IF NOT EXISTS idx_extension_tokens_status ON extension_tokens (status);
+  `);
+
+  // Tabel API Key Kolaborator / Partner Reseller
+  masterDb.exec(`
+    CREATE TABLE IF NOT EXISTS collaborator_api_keys (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      api_key_hash TEXT UNIQUE NOT NULL,
+      prefix_key TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      last_used_at TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_collaborator_keys_hash ON collaborator_api_keys (api_key_hash);
+    CREATE INDEX IF NOT EXISTS idx_collaborator_keys_status ON collaborator_api_keys (status);
+  `);
+
+  // Tabel Log Aktivitas Partner API
+  masterDb.exec(`
+    CREATE TABLE IF NOT EXISTS collaborator_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      collaborator_id INTEGER NOT NULL,
+      collaborator_name TEXT NOT NULL,
+      action_type TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      duration_label TEXT NOT NULL,
+      request_ip TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_collaborator_logs_collab ON collaborator_logs (collaborator_id);
+  `);
+
+  // Tabel Daftar Kontak Master Admin beserta bobot probabilitas rujukan
+  masterDb.exec(`
+    CREATE TABLE IF NOT EXISTS master_admins (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      weight INTEGER NOT NULL DEFAULT 100,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
+  // Tabel Kampanye Broadcast Master Admin (Langsung, Sekali Terjadwal, & Berulang Otomatis)
+  masterDb.exec(`
+    CREATE TABLE IF NOT EXISTS broadcast_campaigns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      channel TEXT NOT NULL DEFAULT 'both',
+      schedule_type TEXT NOT NULL DEFAULT 'immediate',
+      scheduled_at TEXT,
+      recurrence_time TEXT,
+      recurrence_day_of_week INTEGER,
+      recurrence_day_of_month INTEGER,
+      next_run_at TEXT,
+      status TEXT NOT NULL DEFAULT 'scheduled',
+      total_targets INTEGER NOT NULL DEFAULT 0,
+      wa_success INTEGER NOT NULL DEFAULT 0,
+      wa_failed INTEGER NOT NULL DEFAULT 0,
+      tg_success INTEGER NOT NULL DEFAULT 0,
+      tg_failed INTEGER NOT NULL DEFAULT 0,
+      run_count INTEGER NOT NULL DEFAULT 0,
+      last_run_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_broadcast_campaigns_status_next ON broadcast_campaigns (status, next_run_at);
+  `);
+
+  // Tabel Log Detail Pengiriman Broadcast Per-Tenant & Per-Kanal
+  masterDb.exec(`
+    CREATE TABLE IF NOT EXISTS broadcast_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      campaign_id INTEGER NOT NULL,
+      run_number INTEGER NOT NULL DEFAULT 1,
+      tenant_id TEXT NOT NULL,
+      store_name TEXT NOT NULL,
+      owner_name TEXT NOT NULL,
+      channel TEXT NOT NULL,
+      target TEXT NOT NULL,
+      status TEXT NOT NULL,
+      error_message TEXT,
+      rendered_message TEXT,
+      sent_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_broadcast_logs_campaign_run ON broadcast_logs (campaign_id, run_number);
+  `);
+
+  // Tabel Laporan Masalah Tenant (terpusat di master.db agar admin bisa memantau & merespons seluruh tenant)
+  masterDb.exec(`
+    CREATE TABLE IF NOT EXISTS tenant_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      owner_name TEXT NOT NULL DEFAULT '',
+      owner_phone TEXT NOT NULL DEFAULT '',
+      store_name TEXT NOT NULL DEFAULT '',
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'terkirim',
+      reply_enabled INTEGER NOT NULL DEFAULT 0,
+      admin_reply TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_tenant_reports_tenant_created ON tenant_reports (tenant_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_tenant_reports_status_created ON tenant_reports (status, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS tenant_report_media (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_id INTEGER NOT NULL,
+      tenant_id TEXT NOT NULL,
+      media_type TEXT NOT NULL,
+      original_name TEXT NOT NULL,
+      stored_filename TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (report_id) REFERENCES tenant_reports(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_tenant_report_media_report ON tenant_report_media (report_id);
+  `);
+
+  const masterAdminCount = (masterDb.prepare('SELECT COUNT(*) as count FROM master_admins').get() as { count: number }).count;
+  if (masterAdminCount === 0) {
+    const nowIso = new Date().toISOString();
     masterDb.prepare(`
-      INSERT INTO super_admins (username, password_hash, name, created_at)
-      VALUES (?, ?, ?, ?)
-    `).run('adminutama', defaultHash, 'Master Super Admin', new Date().toISOString());
-    console.log('[Master DB] Akun super admin default "adminutama" berhasil dibuat.');
+      INSERT INTO master_admins (name, phone, weight, sort_order, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run('Master Admin Utama', '+6285712439395', 100, 0, nowIso, nowIso);
   }
 
-  // Seed default tenant (Wanzt Store / t_wanzt) jika kosong
+  // Hapus akun super admin lama "adminutama"
+  const deletedOldAdmin = masterDb.prepare("DELETE FROM super_admins WHERE username = 'adminutama'").run();
+  if (deletedOldAdmin.changes > 0) {
+    masterDb.prepare('DELETE FROM admin_sessions WHERE admin_id NOT IN (SELECT id FROM super_admins)').run();
+    console.log('[Master DB] Akun super admin lama "adminutama" telah dihapus.');
+  }
+
+  // Bootstrap akun super admin awal hanya jika tabel super_admins masih kosong
+  const superAdminCount = (masterDb.prepare('SELECT COUNT(*) as count FROM super_admins').get() as { count: number }).count;
+  if (superAdminCount === 0) {
+    const bootUsername = process.env.ADMIN_BOOTSTRAP_USERNAME?.trim() || 'master_admin';
+    const envPass = process.env.ADMIN_BOOTSTRAP_PASSWORD?.trim();
+    const bootPassword = envPass || generateBootstrapSecretPassword(12);
+    const defaultHash = hashPassword(bootPassword);
+    masterDb
+      .prepare(`
+        INSERT INTO super_admins (username, password_hash, name, created_at)
+        VALUES (?, ?, ?, ?)
+      `)
+      .run(bootUsername, defaultHash, 'Master Super Admin', new Date().toISOString());
+    if (envPass) {
+      console.log(`[Master DB] Akun super admin "${bootUsername}" diinisialisasi dari ADMIN_BOOTSTRAP_PASSWORD.`);
+    } else {
+      console.log(`[Master DB] Akun super admin bootstrap dibuat (username: "${bootUsername}", one-time password: "${bootPassword}") - segera ganti setelah login.`);
+    }
+  }
+
+  // Seed tenant struktural default (Wanzt Store / t_wanzt) jika tabel tenants kosong (tanpa password hardcoded)
   const tenantCount = (masterDb.prepare('SELECT COUNT(*) as count FROM tenants').get() as { count: number }).count;
   if (tenantCount === 0) {
-    const tenantHash = hashPassword('wanzt123');
+    const bootTenantUser = process.env.TENANT_BOOTSTRAP_USERNAME?.trim() || 'wanzt';
+    const envTenantPass = process.env.TENANT_BOOTSTRAP_PASSWORD?.trim();
+    const bootTenantPass = envTenantPass || generateBootstrapSecretPassword(12);
+    const tenantHash = hashPassword(bootTenantPass);
     const oneYearLater = new Date();
     oneYearLater.setDate(oneYearLater.getDate() + 365);
 
@@ -99,7 +317,7 @@ export function initMasterDatabase(): Database.Database {
       'Wanzt Store',
       'Dzakwan',
       '6282173515807',
-      'wanzt',
+      bootTenantUser,
       tenantHash,
       'Enterprise',
       'active',
@@ -108,7 +326,287 @@ export function initMasterDatabase(): Database.Database {
       oneYearLater.toISOString(),
       'Unit Utama Wanzt Store (Apartemen Penthouse)'
     );
-    console.log('[Master DB] Tenant default "t_wanzt" berhasil diinisialisasi.');
+    if (envTenantPass) {
+      console.log(`[Master DB] Tenant default "t_wanzt" (${bootTenantUser}) diinisialisasi dari TENANT_BOOTSTRAP_PASSWORD.`);
+    } else {
+      console.log(`[Master DB] Tenant bootstrap "t_wanzt" dibuat (username: "${bootTenantUser}", one-time password: "${bootTenantPass}") - segera reset di Master Admin.`);
+    }
+  }
+
+  // Tabel Template Message
+  masterDb.exec(`
+    CREATE TABLE IF NOT EXISTS message_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL,
+      content TEXT NOT NULL,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
+  // Seed default templates jika kosong
+  const templateCount = (masterDb.prepare('SELECT COUNT(*) as count FROM message_templates').get() as { count: number }).count;
+  if (templateCount === 0) {
+    const now = new Date().toISOString();
+    const insertTemplate = masterDb.prepare(`
+      INSERT INTO message_templates (name, category, content, is_active, created_at, updated_at)
+      VALUES (?, ?, ?, 1, ?, ?)
+    `);
+
+    // 1. Template Menu
+    insertTemplate.run(
+      'Menu Utama Ramah & Ringkas',
+      'menu',
+      'Halo kak {buyerNumber}! 👋\nSelamat datang di *{storeName}*.\n\nBerikut adalah menu utama layanan kami. Silakan pilih produk atau layanan yang Anda inginkan melalui tombol interaktif di bawah.\n\nButuh bantuan? CS kami siap melayani di {ownerNumber}.',
+      now,
+      now
+    );
+
+    // 2. Template List
+    insertTemplate.run(
+      'Katalog Kategori Produk',
+      'list',
+      '📋 *KATALOG PRODUK & LAYANAN - {storeName}*\n\nSilakan pilih salah satu kategori produk yang Anda inginkan pada daftar list berikut.\nSeluruh proses transaksi diproses cepat dan otomatis 24/7.',
+      now,
+      now
+    );
+
+    // 3. Template Carousel
+    insertTemplate.run(
+      'Kartu Produk Unggulan & Order Instan',
+      'carousel',
+      '⭐ *PRODUK TERBAIK - {storeName}*\n\nGeser ke samping untuk melihat varian dan harga produk.\nKlik tombol *Order* pada kartu produk pilihan Anda untuk langsung mendapatkan invoice QRIS otomatis!',
+      now,
+      now
+    );
+
+    // 4. Template Invoice
+    insertTemplate.run(
+      'Invoice QRIS Rincian Lengkap',
+      'invoice',
+      '🧾 *INVOICE PEMBAYARAN - {storeName}*\n----------------------------------------\nNomor Pesanan: #{orderId}\nNomor Pembeli: {buyerNumber}\nMetode Bayar: {paymentMethod}\n\n*Rincian Pesanan:*\n{detailItems}\n\n*TOTAL BAYAR: Rp {totalPrice}*\nBatas Waktu: {paymentExpiry}\n----------------------------------------\nSilakan scan kode QRIS di atas untuk menyelesaikan pesanan Anda. Sistem otomatis memproses pesanan setelah pembayaran terverifikasi!',
+      now,
+      now
+    );
+
+    // 5. Template Konfirmasi: Ringkasan Pesanan
+    insertTemplate.run(
+      'Ringkasan Pesanan Interaktif',
+      'confirm_summary',
+      '🛒 *RINCIAN PESANAN*\nHalo kak, silakan konfirmasi pesanan Anda:\n\n• *Produk:* {produkName}\n• *Varian:* {varian}\n• *Harga Normal:* Rp {price}\n\nPunya kode promo? Silakan pilih tombol di bawah untuk menggunakan diskon atau langsung bayar.',
+      now,
+      now
+    );
+
+    // 6. Template Konfirmasi: Permintaan Input Promo
+    insertTemplate.run(
+      'Instruksi Input Kupon Promo',
+      'confirm_promo_input',
+      '🎟️ *MASUKKAN KODE PROMO*\nSilakan ketik kode promo Anda (contoh: HEMAT10) atau ketik *BATAL* untuk melanjutkan dengan harga normal.\n\n⏱️ _Batas waktu: 3 menit._',
+      now,
+      now
+    );
+
+    // 7. Template Konfirmasi: Pesan Promo Valid
+    insertTemplate.run(
+      'Pemberitahuan Promo Berhasil Diterapkan',
+      'confirm_promo_valid',
+      '🎉 *KODE PROMO BERHASIL DIGUNAKAN!*\n• *Kode Promo:* {promoCode}\n• *Harga Awal:* Rp {price}\n• *Potongan Diskon:* -Rp {discount}\n• *Total Bayar:* Rp {finalPrice}\n\nInvoice pembayaran QRIS sedang diterbitkan...',
+      now,
+      now
+    );
+
+    // 8. Template Konfirmasi: Pesan Promo Invalid
+    insertTemplate.run(
+      'Pemberitahuan Kode Promo Tidak Valid',
+      'confirm_promo_invalid',
+      '⚠️ *KODE PROMO TIDAK DAPAT DIGUNAKAN*\nKode promo *{promoCode}* tidak dapat diterapkan.\nPenyebab: *{reason}*\n\nSilakan ketik kode promo lain, atau ketik *BATAL* untuk lanjut bayar harga normal (Rp {price}).',
+      now,
+      now
+    );
+
+    console.log('[Master DB] 8 template pesan default berhasil diinisialisasi.');
+  } else {
+    // Migrasi data lama dari 'confirmation' menjadi 'confirm_summary'
+    masterDb.prepare("UPDATE message_templates SET category = 'confirm_summary' WHERE category = 'confirmation'").run();
+
+    // Pastikan 3 sub-kategori promo terisi jika belum ada
+    const now = new Date().toISOString();
+    const insertTemplate = masterDb.prepare(`
+      INSERT INTO message_templates (name, category, content, is_active, created_at, updated_at)
+      VALUES (?, ?, ?, 1, ?, ?)
+    `);
+
+    const hasPromoInput = (masterDb.prepare("SELECT COUNT(*) as count FROM message_templates WHERE category = 'confirm_promo_input'").get() as { count: number }).count;
+    if (hasPromoInput === 0) {
+      insertTemplate.run(
+        'Instruksi Input Kupon Promo',
+        'confirm_promo_input',
+        '🎟️ *MASUKKAN KODE PROMO*\nSilakan ketik kode promo Anda (contoh: HEMAT10) atau ketik *BATAL* untuk melanjutkan dengan harga normal.\n\n⏱️ _Batas waktu: 3 menit._',
+        now,
+        now
+      );
+    } else {
+      masterDb
+        .prepare("UPDATE message_templates SET content = REPLACE(content, '90 detik', '3 menit') WHERE category = 'confirm_promo_input' AND content LIKE '%90 detik%'")
+        .run();
+    }
+
+    const hasPromoValid = (masterDb.prepare("SELECT COUNT(*) as count FROM message_templates WHERE category = 'confirm_promo_valid'").get() as { count: number }).count;
+    if (hasPromoValid === 0) {
+      insertTemplate.run(
+        'Pemberitahuan Promo Berhasil Diterapkan',
+        'confirm_promo_valid',
+        '🎉 *KODE PROMO BERHASIL DIGUNAKAN!*\n• *Kode Promo:* {promoCode}\n• *Harga Awal:* Rp {price}\n• *Potongan Diskon:* -Rp {discount}\n• *Total Bayar:* Rp {finalPrice}\n\nInvoice pembayaran QRIS sedang diterbitkan...',
+        now,
+        now
+      );
+    }
+
+    const hasPromoInvalid = (masterDb.prepare("SELECT COUNT(*) as count FROM message_templates WHERE category = 'confirm_promo_invalid'").get() as { count: number }).count;
+    if (hasPromoInvalid === 0) {
+      insertTemplate.run(
+        'Pemberitahuan Kode Promo Tidak Valid',
+        'confirm_promo_invalid',
+        '⚠️ *KODE PROMO TIDAK DAPAT DIGUNAKAN*\nKode promo *{promoCode}* tidak dapat diterapkan.\nPenyebab: *{reason}*\n\nSilakan ketik kode promo lain, atau ketik *BATAL* untuk lanjut bayar harga normal (Rp {price}).',
+        now,
+        now
+      );
+    }
+
+    // 9. Template Pembayaran Sukses (DM)
+    const hasPayDm = (masterDb.prepare("SELECT COUNT(*) as count FROM message_templates WHERE category = 'payment_success_dm'").get() as { count: number }).count;
+    if (hasPayDm === 0) {
+      insertTemplate.run(
+        'Pembayaran Lunas & Verifikasi Sukses (DM)',
+        'payment_success_dm',
+        '🎉 *PEMBAYARAN DITERIMA & LUNAS!*\n\nTerima kasih Kak *{customerName}*, pembayaran untuk pesanan *{produkName} ({varian})* sebesar *Rp {total}* (Order ID: #{orderId}) telah diverifikasi lunas oleh sistem LunasQRIS.\n\nPesanan Anda akan segera diproses oleh sistem atau admin kami.',
+        now,
+        now
+      );
+    }
+
+    // 10. Template Pembayaran Sukses (Grup)
+    const hasPayGrp = (masterDb.prepare("SELECT COUNT(*) as count FROM message_templates WHERE category = 'payment_success_group'").get() as { count: number }).count;
+    if (hasPayGrp === 0) {
+      insertTemplate.run(
+        'Notifikasi Pembayaran Lunas di Grup',
+        'payment_success_group',
+        '✅ Pembayaran untuk *{produkName} ({varian})* oleh @{customerNumber} telah *LUNAS*! Pesanan sedang diproses.',
+        now,
+        now
+      );
+    }
+
+    // 11. Template Pembayaran Kedaluwarsa
+    const hasPayExp = (masterDb.prepare("SELECT COUNT(*) as count FROM message_templates WHERE category = 'payment_expired'").get() as { count: number }).count;
+    if (hasPayExp === 0) {
+      insertTemplate.run(
+        'Pembayaran Kedaluwarsa / Timeout',
+        'payment_expired',
+        '⏰ Waktu pembayaran pesanan *{produkName} ({varian})* (Order: #{orderId}) telah berakhir atau dibatalkan. Silakan pesan kembali jika masih berminat.',
+        now,
+        now
+      );
+    }
+
+    // 12. Template Gateway Error
+    const hasPayErr = (masterDb.prepare("SELECT COUNT(*) as count FROM message_templates WHERE category = 'payment_error'").get() as { count: number }).count;
+    if (hasPayErr === 0) {
+      insertTemplate.run(
+        'Kendala Gateway / Error QRIS',
+        'payment_error',
+        '⚠️ Terjadi kendala saat menerbitkan kode QRIS: {errorMessage}. Silakan coba beberapa saat lagi atau hubungi admin toko.',
+        now,
+        now
+      );
+    }
+
+    // 13. Template Notifikasi Grup Order (Arahkan ke DM)
+    const hasOrderGrp = (masterDb.prepare("SELECT COUNT(*) as count FROM message_templates WHERE category = 'order_group_notif'").get() as { count: number }).count;
+    if (hasOrderGrp === 0) {
+      insertTemplate.run(
+        'Notifikasi Alur Order Grup ke DM',
+        'order_group_notif',
+        'Halo @{customerNumber}, rincian pesanan untuk *{produkName} ({varian})* telah kami kirimkan ke *chat pribadi (DM)* Anda. 💬\n\nSilakan buka chat pribadi untuk memilih menggunakan kupon promo atau langsung melanjutkan pembayaran.',
+        now,
+        now
+      );
+    }
+
+    // 14. Template Stok Kosong
+    const hasStockEmp = (masterDb.prepare("SELECT COUNT(*) as count FROM message_templates WHERE category = 'stock_empty'").get() as { count: number }).count;
+    if (hasStockEmp === 0) {
+      insertTemplate.run(
+        'Pemberitahuan Stok Kosong / Restock',
+        'stock_empty',
+        'Maaf kak @{customerNumber}, saat ini stok atau saldo produk *{produkName} ({varian})* sedang dalam proses restock oleh supplier. Silakan coba kembali nanti atau hubungi admin.',
+        now,
+        now
+      );
+    }
+
+    // 15. Template Sesi Checkout Kedaluwarsa (90 Detik)
+    const hasSessExp = (masterDb.prepare("SELECT COUNT(*) as count FROM message_templates WHERE category = 'checkout_session_expired'").get() as { count: number }).count;
+    if (hasSessExp === 0) {
+      insertTemplate.run(
+        'Sesi Checkout Kedaluwarsa (90 Detik)',
+        'checkout_session_expired',
+        '⏰ Sesi pesanan Anda telah berakhir (melebihi batas waktu). Silakan pilih varian kembali di grup atau katalog toko {storeName}.',
+        now,
+        now
+      );
+    }
+
+    // 16. Template Pembatalan Kupon Promo
+    const hasPromoCancel = (masterDb.prepare("SELECT COUNT(*) as count FROM message_templates WHERE category = 'promo_cancelled'").get() as { count: number }).count;
+    if (hasPromoCancel === 0) {
+      insertTemplate.run(
+        'Pembatalan Kupon Promo (Ketik BATAL)',
+        'promo_cancelled',
+        'Penggunaan kode promo dibatalkan. Menyiapkan invoice pembayaran QRIS dengan harga normal (Rp {price})...',
+        now,
+        now
+      );
+    }
+
+    // 17. Template Kontak Owner Belum Diatur
+    const hasOwnerEmpty = (masterDb.prepare("SELECT COUNT(*) as count FROM message_templates WHERE category = 'contact_owner_empty'").get() as { count: number }).count;
+    if (hasOwnerEmpty === 0) {
+      insertTemplate.run(
+        'Informasi Kontak Owner Belum Diatur',
+        'contact_owner_empty',
+        'Informasi tentang owner belum di set pada toko ini',
+        now,
+        now
+      );
+    }
+
+    // 18. Template Kontak Admin Belum Diatur
+    const hasAdminEmpty = (masterDb.prepare("SELECT COUNT(*) as count FROM message_templates WHERE category = 'contact_admin_empty'").get() as { count: number }).count;
+    if (hasAdminEmpty === 0) {
+      insertTemplate.run(
+        'Informasi Kontak Admin Belum Diatur',
+        'contact_admin_empty',
+        'Informasi tentang admin belum di set pada toko ini',
+        now,
+        now
+      );
+    }
+
+    // 19. Template Peringatan Masa Sewa Kedaluwarsa ke Owner
+    const hasExpiryWarn = (masterDb.prepare("SELECT COUNT(*) as count FROM message_templates WHERE category = 'expiry_warning_owner'").get() as { count: number }).count;
+    if (hasExpiryWarn === 0) {
+      insertTemplate.run(
+        'Peringatan Masa Sewa Bot Kedaluwarsa',
+        'expiry_warning_owner',
+        '⚠️ *PERINGATAN MASA SEWA BOT WHATSAPP*\n\nHalo kak *{ownerName}* (*{storeName}*),\nMasa aktif sewa bot WhatsApp toko Anda akan segera berakhir dalam *{remainingTime}*.\n\n📋 *Rincian Unit Bot:*\n• Nama Toko: *{storeName}*\n• ID Unit: `{tenantId}`\n• Sisa Waktu: *{remainingTime}*\n• Waktu Kedaluwarsa: *{expiryDate} WIB*\n\nAgar operasional pesanan otomatis dan transaksi pelanggan di WhatsApp tidak terputus, silakan lakukan perpanjangan masa sewa ke Master Admin sebelum batas waktu berakhir.',
+        now,
+        now
+      );
+    }
   }
 
   return masterDb;

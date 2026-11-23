@@ -132,6 +132,11 @@ export const TabAccountSecurity: React.FC<TabAccountSecurityProps> = ({
 
       const data = await res.json();
       if (data.success) {
+        if (data.token) {
+          try {
+            localStorage.setItem('wanzt_bot_auth_token', data.token);
+          } catch {}
+        }
         setPasswordMessage({
           type: 'success',
           text: data.message || 'Password berhasil diperbarui! Gunakan password baru ini untuk login berikutnya.',

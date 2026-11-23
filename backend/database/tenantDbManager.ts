@@ -158,7 +158,42 @@ export function migrateTenantDb(db: Database.Database): void {
     if (!trxCols.includes('trx_id')) {
       try { db.exec("ALTER TABLE transactions ADD COLUMN trx_id TEXT"); } catch {}
     }
+    if (!trxCols.includes('promo_id')) {
+      try { db.exec("ALTER TABLE transactions ADD COLUMN promo_id INTEGER DEFAULT NULL"); } catch {}
+    }
   }
+
+  // 7. Migrasi telegram_config
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS telegram_config (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        bot_token TEXT DEFAULT '',
+        chat_id TEXT DEFAULT '',
+        notif_enabled INTEGER DEFAULT 0,
+        admin_disabled INTEGER DEFAULT 0,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    const teleRow = db.prepare('SELECT id FROM telegram_config WHERE id = 1').get();
+    if (!teleRow) {
+      db.prepare(`
+        INSERT INTO telegram_config (id, bot_token, chat_id, notif_enabled, admin_disabled, updated_at)
+        VALUES (1, '', '', 0, 0, datetime('now'))
+      `).run();
+    }
+  } catch {}
+
+  // 8. Migrasi tabel bot_settings (untuk group_only)
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS bot_settings (
+        setting_key TEXT PRIMARY KEY,
+        setting_value TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+  } catch {}
 }
 
 /**
@@ -232,6 +267,15 @@ export function initTenantDbTables(db: Database.Database, tenantId: string): voi
     );
   `);
 
+  // 5b. Tabel Pengaturan Bot Umum (contoh: group_only)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS bot_settings (
+      setting_key TEXT PRIMARY KEY,
+      setting_value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
   // 6. Tabel Riwayat Transaksi (ACID, Indexed)
   db.exec(`
     CREATE TABLE IF NOT EXISTS transactions (
@@ -247,6 +291,7 @@ export function initTenantDbTables(db: Database.Database, tenantId: string): voi
       total INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
       payment_url TEXT,
+      promo_id INTEGER DEFAULT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -343,6 +388,52 @@ export function initTenantDbTables(db: Database.Database, tenantId: string): voi
     CREATE INDEX IF NOT EXISTS idx_promo_variants ON promo_code_variants(promo_id);
   `);
 
+  // 10. Tabel Konfigurasi Notifikasi Telegram Bot
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS telegram_config (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      bot_token TEXT DEFAULT '',
+      chat_id TEXT DEFAULT '',
+      notif_enabled INTEGER DEFAULT 0,
+      admin_disabled INTEGER DEFAULT 0,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
+  try {
+    const teleRow = db.prepare('SELECT id FROM telegram_config WHERE id = 1').get();
+    if (!teleRow) {
+      db.prepare(`
+        INSERT INTO telegram_config (id, bot_token, chat_id, notif_enabled, admin_disabled, updated_at)
+        VALUES (1, '', '', 0, 0, ?)
+      `).run(now);
+    }
+  } catch (err) {
+    console.error('[Tenant DB] Error inisialisasi telegram_config:', err);
+  }
+
+  // 11. Tabel Statistik Pesan Bot (WhatsApp vs Telegram)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS message_stats (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      whatsapp_messages INTEGER NOT NULL DEFAULT 0,
+      telegram_messages INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
+  try {
+    const msgStatRow = db.prepare('SELECT id FROM message_stats WHERE id = 1').get();
+    if (!msgStatRow) {
+      db.prepare(`
+        INSERT INTO message_stats (id, whatsapp_messages, telegram_messages, updated_at)
+        VALUES (1, 0, 0, ?)
+      `).run(now);
+    }
+  } catch (err) {
+    console.error('[Tenant DB] Error inisialisasi message_stats:', err);
+  }
+
   // Seed data awal dari master.db jika ada data penyewa unit apartemen
   try {
     const storeRow = db.prepare('SELECT id FROM store_info WHERE id = 1').get();
@@ -369,15 +460,47 @@ export function initTenantDbTables(db: Database.Database, tenantId: string): voi
   } catch {}
 }
 
+export function incrementMessageStat(tenantId: string, platform: 'whatsapp' | 'telegram'): void {
+  try {
+    const cleanId = (tenantId || 't_wanzt').trim();
+    const db = getTenantDb(cleanId);
+    const col = platform === 'whatsapp' ? 'whatsapp_messages' : 'telegram_messages';
+    db.prepare(`
+      INSERT INTO message_stats (id, whatsapp_messages, telegram_messages, updated_at)
+      VALUES (1, ${platform === 'whatsapp' ? 1 : 0}, ${platform === 'telegram' ? 1 : 0}, datetime('now'))
+      ON CONFLICT(id) DO UPDATE SET
+        ${col} = ${col} + 1,
+        updated_at = datetime('now')
+    `).run();
+  } catch (err) {
+    console.error(`[MessageStats] Gagal mencatat statistik pesan untuk tenant ${tenantId}:`, err);
+  }
+}
+
+
 export function initTenantDb(tenantId: string): Database.Database {
-  if (tenantConnections.has(tenantId)) {
-    return tenantConnections.get(tenantId)!;
+  const cleanId = (tenantId || '').trim().replace(/[^a-zA-Z0-9_-]/g, '');
+  if (!cleanId) {
+    throw new Error('Tenant ID tidak valid.');
   }
 
-  const dbPath = getTenantDbPath(tenantId);
+  if (tenantConnections.has(cleanId)) {
+    return tenantConnections.get(cleanId)!;
+  }
+
+  // Tolak pembuatan/inisialisasi file DB untuk tenant yang tidak terdaftar di master.db
+  if (cleanId !== 't_wanzt') {
+    const masterDb = getMasterDb();
+    const exists = masterDb.prepare('SELECT 1 FROM tenants WHERE tenant_id = ?').get(cleanId);
+    if (!exists) {
+      throw new Error(`Tenant "${cleanId}" tidak terdaftar di master.db.`);
+    }
+  }
+
+  const dbPath = getTenantDbPath(cleanId);
 
   // Jika ini t_wanzt dan file belum ada, namun bot.db lama ada di root database, salin datanya
-  if (tenantId === 't_wanzt' && !fs.existsSync(dbPath) && fs.existsSync(DEFAULT_BOT_DB)) {
+  if (cleanId === 't_wanzt' && !fs.existsSync(dbPath) && fs.existsSync(DEFAULT_BOT_DB)) {
     try {
       fs.copyFileSync(DEFAULT_BOT_DB, dbPath);
       console.log(`[Tenant DB] Berhasil menyalin data bot.db ke ${dbPath}`);
@@ -392,9 +515,9 @@ export function initTenantDb(tenantId: string): Database.Database {
   db.pragma('foreign_keys = ON');
 
   // Jalankan skema tabel lengkap
-  initTenantDbTables(db, tenantId);
+  initTenantDbTables(db, cleanId);
 
-  tenantConnections.set(tenantId, db);
+  tenantConnections.set(cleanId, db);
   return db;
 }
 

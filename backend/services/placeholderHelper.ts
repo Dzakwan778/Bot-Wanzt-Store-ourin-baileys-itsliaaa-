@@ -13,6 +13,14 @@ export interface VariantPlaceholderContext {
   discount?: number | string;
   finalPrice?: number | string;
   reason?: string;
+  customerName?: string;
+  customerNumber?: string;
+  senderName?: string;
+  senderNumber?: string;
+  errorMessage?: string;
+  tenantId?: string;
+  remainingTime?: string;
+  expiryDate?: string;
 }
 
 /**
@@ -28,6 +36,14 @@ export function normalizeIndonesianPhone(raw: string | number | undefined | null
     clean = '62' + clean;
   }
   return clean;
+}
+
+/**
+ * Normalisasi nomor telepon Indonesia menjadi format resmi negara berawalan '+' (contoh: +6282173515807)
+ */
+export function toOfficialIndonesianPhone(raw: string | number | undefined | null): string {
+  const clean = normalizeIndonesianPhone(raw);
+  return clean ? `+${clean}` : '';
 }
 
 /**
@@ -130,7 +146,35 @@ export function resolvePlaceholders(
     }
 
     if (variant.reason !== undefined) {
-      res = res.replace(/\{reason\}|\{alasan\}/gi, variant.reason);
+      res = res.replace(/\{reason\}|\{alasan\}|\{alasanBatal\}/gi, variant.reason);
+    }
+
+    // 4. Placeholder Pembeli, Kendala, & Status Sesi
+    const custName = variant.customerName || variant.senderName || '';
+    if (custName) {
+      res = res.replace(/\{customerName\}|\{senderName\}|\{namaPembeli\}/gi, custName);
+    }
+
+    const custNum = variant.customerNumber || variant.senderNumber || '';
+    if (custNum) {
+      res = res.replace(/\{customerNumber\}|\{senderNumber\}|\{nomorPembeli\}|\{buyerNumber\}/gi, custNum);
+    }
+
+    const errMsg = variant.errorMessage || variant.reason || '';
+    if (errMsg) {
+      res = res.replace(/\{errorMessage\}|\{pesanError\}|\{kendala\}/gi, errMsg);
+    }
+
+    if (variant.tenantId !== undefined) {
+      res = res.replace(/\{tenantId\}|\{idBot\}|\{idUnit\}/gi, variant.tenantId);
+    }
+
+    if (variant.remainingTime !== undefined) {
+      res = res.replace(/\{remainingTime\}|\{sisaWaktu\}|\{sisaHari\}/gi, variant.remainingTime);
+    }
+
+    if (variant.expiryDate !== undefined) {
+      res = res.replace(/\{expiryDate\}|\{waktuKedaluwarsa\}|\{tanggalExpired\}|\{paymentExpiry\}/gi, variant.expiryDate);
     }
   }
 

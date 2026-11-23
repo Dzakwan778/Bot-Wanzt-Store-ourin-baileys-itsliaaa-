@@ -104,17 +104,10 @@ export const TabConnection: React.FC<TabConnectionProps> = ({
       showToast('Silakan masukkan API Key LunasQRIS terlebih dahulu.');
       return;
     }
-    const rawBase = lunasQrisBaseUrl?.trim() || 'https://lunasqris.com';
-    const cleanBase = rawBase
-      .replace(/\/+$/, '')
-      .replace(/\/api\/v1\/?$/, '')
-      .replace(/\/api\/?$/, '');
 
     try {
       const res = await fetch(
-        `/api/lunasqris/balance?apikey=${encodeURIComponent(lunasQrisApiKey.trim())}&baseurl=${encodeURIComponent(
-          cleanBase
-        )}`
+        `/api/lunasqris/balance?apikey=${encodeURIComponent(lunasQrisApiKey.trim())}`
       );
       const data = await res.json();
       if (data.success) {

@@ -1,7 +1,7 @@
 import { serverApp } from './app.ts';
 
 const PORT = parseInt(process.env.PORT || process.env.BACKEND_PORT || '5000', 10);
-const HOST = process.env.HOST || '0.0.0.0';
+const HOST = process.env.HOST || '127.0.0.1';
 
 serverApp.listen(PORT, HOST, () => {
   console.log(`[Wanzt Store Backend] Berjalan di http://${HOST}:${PORT}`);

@@ -1101,3 +1101,421 @@ Potensi Penerapan:
 
 Catatan Tambahan:
 - Pastikan ada validasi kesamaan password baru dan konfirmasi password di frontend dan backend sebelum disimpan ke database.
+
+---
+
+[16.0] - ARSITEKTUR REST API KOLABORATOR UNTUK PENJUALAN OTOMATIS SEWA BOT (PARTNER/RESELLER API)
+
+- Tanggal: 2026-11-07 05:45
+- Sumber: Diskusi dan Permintaan Pengguna
+
+Informasi yang Dipelajari:
+1. Tujuan dan Model Bisnis Kolaborasi (Affiliate / Reseller / Partner Integration):
+   - Pengguna berniat membuka peluang kemitraan/kolaborasi di mana pihak ketiga (kolaborator/reseller/website affiliate) dapat menjual jasa sewa bot WhatsApp secara otomatis.
+   - Pihak kolaborator menembak endpoint REST API khusus saat ada transaksi/pembelian dari pelanggan mereka.
+   - Server merespon balik secara otomatis dengan membuat unit tenant baru dan memberikan kredensial lengkap yang siap diserahkan ke pembeli.
+
+2. Kebutuhan Data Input dan Output API:
+   - Data Input yang Diterima dari Kolaborator:
+     * API Key / Secret Token Kolaborator (identifikasi otorisasi mitra resmi).
+     * Durasi sewa dalam hari (misal 30, 60, 90, 365 hari).
+     * Data opsional profil pembeli: Nama Toko, Nama Pemilik, dan Nomor WhatsApp pembeli. Jika dikosongkan, sistem tetap dapat menggunakan mode instan otomatis.
+   - Data Respon Output yang Diberikan ke Kolaborator:
+     * ID Tenant unik (misal `t_kolaborator_8492` atau `t_tenant_9312`).
+     * Username login dashboard toko bot.
+     * Password login acak yang aman.
+     * Masa aktif (durasi hari, tanggal mulai aktif, dan tanggal kedaluwarsa).
+     * URL tautan login dashboard bot (misal `https://dashboard.domain.com/`).
+     * Status akun (`active`).
+
+3. Persyaratan Keamanan dan Tata Kelola API:
+   - Autentikasi API Key terenkripsi (misal `x-api-key` atau Bearer Token mitra).
+   - Validasi saldo/kuota kolaborator atau otorisasi mitra aktif di tabel `master.db` (misal tabel `collaborators` / `api_keys`).
+   - Rate limiting untuk mencegah abuse / spam pembuatan akun.
+   - Logging riwayat pembuatan akun per kolaborator untuk rekonsiliasi komisi / pembayaran.
+
+Pemahaman:
+- Konsep ini sangat realistis dan sangat mudah diintegrasikan karena fondasi pembuatan tenant otomatis (auto-generation ID, username, password, dan isolasi database-per-tenant) sudah selesai dibangun pada `admin-backend/services/tenantService.ts` dan `admin-backend/utils/generatorUtils.ts`.
+- Endpoint publik berotentikasi API Key dapat dipasang di `admin-backend` (misal `POST /api/partner/v1/create-tenant`) tanpa mengganggu alur operasional dashboard Master Admin yang sudah ada.
+
+Potensi Penerapan:
+1. Pembuatan tabel `collaborator_keys` pada `database/master.db` untuk mencatat daftar mitra resmi, status keaktifan, dan saldo/kuota.
+2. Pembuatan middleware otentikasi `collaboratorAuthMiddleware.ts`.
+3. Pembuatan controller `collaboratorApiController.ts` yang memanfaatkan fungsi yang sudah ada (`TenantService.createTenantAuto()` atau `TenantManager.createTenant()`).
+4. Penyediaan dokumentasi endpoint API (API Docs / Swagger / cURL example) untuk dibagikan ke mitra kolaborasi.
+
+Catatan Tambahan:
+- Ini merupakan tahap perencanaan awal. Tidak ada perubahan kode yang dilakukan sebelum disetujui pengguna.
+
+---
+
+[17.0] - SISTEM TOKEN VOUCHER PERPANJANGAN MASA SEWA BOT (SINGLE-USE EXTENSION TOKENS)
+
+- Tanggal: 2026-11-07 05:58
+- Sumber: Diskusi dan Penjelasan Kebutuhan Pengguna
+
+Informasi yang Dipelajari:
+1. Konteks Kemitraan Tunggal (Single Exclusive Collaborator):
+   - Bot ini dirancang untuk bekerja sama secara eksklusif dengan satu mitra/kolaborator utama.
+   - Kolaborator dapat menjual masa sewa awal maupun token perpanjangan masa sewa ke pembeli.
+
+2. Mekanisme Token Perpanjangan Sekali Pakai (One-Time License Token):
+   - Admin Utama dapat membuat kode unik token langsung melalui Dashboard Master Admin atau mitra dapat memintanya melalui API khusus.
+   - Input pembuatan token: Durasi hari perpanjangan sewa (misal 30 hari, 60 hari, 90 hari, 365 hari).
+   - Sistem secara otomatis membuat kode acak unik (misal `EXT-89FA-21K9` atau `WANZT-30D-K821A`).
+   - Sifat Token:
+     * Universal: Berlaku untuk seluruh akun tenant bot mana pun tanpa terikat ke ID bot tertentu di awal.
+     * Sekali Pakai (Single-Use): Hanya dapat digunakan 1 kali saja. Begitu digunakan oleh salah satu tenant, status token berubah menjadi 'used' dan dicatat riwayat penggunaannya (tenant ID, tanggal redeem).
+
+3. Halaman Redeem Token di Dashboard Bot Tenant:
+   - Menyediakan halaman atau sub-tab khusus di dashboard bot (misal tab 'Perpanjang Masa Aktif').
+   - Halaman dirancang minimalis dan mudah: hanya terdapat 1 kolom input kode token dan tombol verifikasi 'Perpanjang Bot Sekarang'.
+   - Ketika tenant memasukkan kode unik dan submit:
+     * Sistem memverifikasi validitas token di tabel database `master.db`.
+     * Jika valid dan belum terpakai, masa aktif bot tenant tersebut langsung bertambah sesuai durasi token.
+     * Jika bot berstatus suspended atau expired karena masa sewa habis, penukaran token otomatis mengaktifkan kembali bot dan membuka gembok suspensi.
+     * Tampilkan notifikasi sukses yang jelas beserta tanggal kedaluwarsa baru.
+
+Pemahaman:
+- Model token lisensi ini sangat fleksibel dan aman karena:
+  1. Mitra kolaborator dapat menjual token voucher seperti produk voucher fisik/digital (voucher 30 hari, 60 hari).
+  2. Tenant memiliki kendali penuh untuk memperpanjang bot mereka kapan saja tanpa perlu menunggu konfirmasi manual dari admin.
+  3. Mengurangi beban administrasi Master Admin dalam mengurus perpanjangan sewa harian.
+
+Potensi Penerapan:
+1. Skema Database SQLite di `database/master.db`:
+   - Tabel `extension_tokens`: `id`, `token_code` (unique), `duration_days`, `status` ('available' / 'used' / 'revoked'), `created_by` ('admin' / 'api_partner'), `used_by_tenant_id`, `used_at`, `created_at`.
+2. Backend Endpoint:
+   - Master Admin: `POST /api/admin/tokens/create` dan `GET /api/admin/tokens` (generate dan monitoring token).
+   - Partner API: `POST /api/v1/partner/tokens/create` (generate token via API mitra tunggal).
+   - Tenant Dashboard: `POST /api/tenant/redeem-token` (klaim token dan auto-extend masa sewa).
+3. Frontend Antarmuka:
+   - Dashboard Bot: Halaman/Tab 'Perpanjang Masa Aktif' dengan form penukaran kode unik.
+   - Dashboard Master Admin: Panel Manajemen Token di sidebar (buat token satuan/massal, pantau token aktif dan riwayat token terpakai).
+
+Catatan Tambahan:
+- Ini adalah tahap perencanaan dan kesepakatan konsep. Kode belum diubah.
+
+---
+
+[18.0] - ARSITEKTUR SISTEM MANAJEMEN TEMPLATE MESSAGE TERISOLASI BERBASIS KATEGORI (MASTER ADMIN & BOT DASHBOARD)
+
+- Tanggal: 2026-11-09 14:12
+- Sumber: Diskusi dan Permintaan Pengguna
+
+Informasi yang Dipelajari:
+1. Kebutuhan Manajemen Template Message Terpusat di Dashboard Master Admin:
+   - Admin Utama membutuhkan halaman khusus 'Template Message' di Dashboard Master untuk mengelola seluruh template pesan respon bot secara dinamis.
+   - Fitur-fitur utama di sisi Master Admin:
+     * Menampilkan daftar seluruh template yang tersedia beserta kategori fungsinya.
+     * Filter berdasarkan kategori fungsi template (Semua, Menu, List, Carousel, Invoice, Konfirmasi).
+     * Tambah Template Baru: Modal dialog form input yang berisi:
+       - Nama Template (misal 'Menu Elegan Ringkas', 'Invoice QRIS Lengkap').
+       - Fungsi / Kategori Template (dropdown pilihan: 'menu', 'list', 'carousel', 'invoice', 'confirmation').
+       - Isi Pesan Template (textarea teks dengan dukungan placeholder bot).
+       - Status awal (Aktif / Nonaktif).
+     * Edit Template: Mengubah nama, kategori, isi teks, dan status keaktifan.
+     * Toggle Aktif / Nonaktif: Tombol sakelar untuk menonaktifkan template tanpa menghapusnya dari database.
+     * Hapus Template: Menghapus template secara permanen dengan modal dialog konfirmasi in-app.
+
+2. Kebutuhan Integrasi di Sisi Dashboard Bot (Tenant):
+   - Di halaman 'Respon Bot' (TabCommand.tsx), pada masing-masing sub-tab editor respon bot (Menu, List, Carousel, Invoice, Konfirmasi), disediakan tombol aksi: 'Pilih Template'.
+   - Aturan Pemisahan Ketat (Strict Category Isolation):
+     * Template tidak boleh saling bercampur antar-kategori.
+     * Di sub-tab Menu: HANYA menampilkan template yang memiliki fungsi 'menu'.
+     * Di sub-tab List: HANYA menampilkan template yang memiliki fungsi 'list'.
+     * Di sub-tab Carousel: HANYA menampilkan template yang memiliki fungsi 'carousel'.
+     * Di sub-tab Invoice: HANYA menampilkan template yang memiliki fungsi 'invoice'.
+     * Di sub-tab Konfirmasi: HANYA menampilkan template yang memiliki fungsi 'confirmation'.
+     * Template yang berstatus nonaktif di Master Admin otomatis disembunyikan dari dashboard bot.
+   - Mekanisme Pengisian Otomatis:
+     * Ketika tenant memilih salah satu template dari modal galeri template, form textarea respon bot di sub-tab tersebut seketika terisi otomatis dengan teks template yang dipilih.
+     * Memberikan dialog konfirmasi ramah sebelum menimpa isi teks yang sudah diketik tenant sebelumnya.
+
+3. Skema Data & Endpoint Backend:
+   - Database Pusat (`database/master.db`):
+     * Tabel `message_templates`: `id`, `name`, `category`, `content`, `is_active` (1/0), `created_at`, `updated_at`.
+   - Endpoint Master Admin:
+     * `GET /api/admin/templates`: Mengambil seluruh template (aktif maupun nonaktif).
+     * `POST /api/admin/templates`: Membuat template baru.
+     * `PUT /api/admin/templates/:id`: Mengupdate nama, kategori, isi, dan status template.
+     * `PATCH /api/admin/templates/:id/status`: Toggle status aktif/nonaktif.
+     * `DELETE /api/admin/templates/:id`: Menghapus template.
+   - Endpoint Publik/Tenant:
+     * `GET /api/bot/templates?category=<category>`: Mengambil daftar template aktif untuk kategori tertentu.
+
+Pemahaman:
+- Sistem ini memberikan efisiensi tinggi bagi Master Admin untuk mendistribusikan format teks promosi dan respon bot terbaik kepada seluruh penyewa, sekaligus memudahkan penyewa menyusun respon bot tanpa harus mengetik dari nol atau salah menggunakan placeholder.
+- Pemisahan kategori menjamin pesan untuk invoice tidak akan pernah muncul saat penyewa sedang mengatur respon menu atau carousel.
+
+Potensi Penerapan:
+- Menambahkan tab 'Template Message' di `AdminSidebar.tsx` Master Admin.
+- Membuat komponen halaman `TabTemplates.tsx` di `admin-frontend/src/components/dashboard/tabs/TabTemplates.tsx`.
+- Membuat modal popup `AddEditTemplateModal.tsx` dan `DeleteTemplateModal.tsx`.
+- Membuat komponen picker `TemplatePickerModal.tsx` di `frontend/src/components/modals/TemplatePickerModal.tsx`.
+- Menghubungkan picker ke `TabCommand.tsx` di masing-masing sub-tab respon bot.
+
+Catatan Tambahan:
+- Kode belum diubah. Menjelaskan pemahaman ulang kepada pengguna sebelum implementasi.
+
+---
+
+[19.0] - SPESIFIKASI DAN ISOLASI 4 SUB-KATEGORI TEMPLATE PESAN PADA FITUR KONFIRMASI CHECKOUT
+
+- Tanggal: 2026-11-09 15:58
+- Sumber: Permintaan Pengguna
+
+Informasi yang Dipelajari:
+1. Struktur Respon Bot Sub-Tab Konfirmasi:
+   - Pada halaman Respon Bot (TabCommand.tsx) sub-tab 'Confirmation', terdapat 4 jenis respon bot mandiri yang masing-masing mengontrol alur checkout yang berbeda:
+     1. Ringkasan Pesan Order (Order Summary) - Pesan DM saat pembeli memilih varian produk di Carousel.
+     2. Permintaan Kode Input Promo - Pesan instruksi saat pembeli meminta memasukkan voucher/kupon promo (waktu tunggu 90 detik).
+     3. Pesan Jika Kode Promo Valid - Pesan sukses potongan diskon harga sebelum penerbitan invoice QRIS.
+     4. Pesan Jika Kode Promo Invalid - Pesan penolakan dengan alasan mengapa voucher promo tidak dapat digunakan.
+2. Kebutuhan Template Khusus untuk Masing-Masing Sub-Jenis:
+   - Template pesan tidak boleh digabung menjadi satu kategori 'confirmation' umum, karena konteks teks dan variabel placeholder-nya berbeda drastis.
+   - Keempat jenis respon tersebut harus memiliki template khusus terpisah:
+     * `confirm_summary`: Konfirmasi - Ringkasan Pesanan
+     * `confirm_promo_input`: Konfirmasi - Permintaan Input Promo
+     * `confirm_promo_valid`: Konfirmasi - Pesan Promo Valid
+     * `confirm_promo_invalid`: Konfirmasi - Pesan Promo Invalid
+3. Aturan Isolasi Ketat (Anti-Campur):
+   - Tombol 'Pilih Template' pada form Ringkasan Order HANYA memunculkan template ber-kategori `confirm_summary`.
+   - Tombol 'Pilih Template' pada form Input Promo HANYA memunculkan template ber-kategori `confirm_promo_input`.
+   - Tombol 'Pilih Template' pada form Promo Valid HANYA memunculkan template ber-kategori `confirm_promo_valid`.
+   - Tombol 'Pilih Template' pada form Promo Invalid HANYA memunculkan template ber-kategori `confirm_promo_invalid`.
+   - Di Dashboard Master Admin, admin dapat membuat, mengedit, menonaktifkan, atau menghapus template untuk masing-masing dari ke-4 sub-kategori ini secara independen.
+
+Potensi Penerapan:
+- Memperluas enum `TemplateCategory` pada `admin.types.ts` dan backend service.
+- Melakukan auto-migrasi kategori 'confirmation' lama ke 'confirm_summary' dan auto-seeding untuk 3 sub-kategori promo baru di `masterSqlite.ts`.
+- Menyesuaikan filter kategori dan dropdown formulir tambah/edit di Master Admin (`TabTemplates.tsx` & `AddEditTemplateModal.tsx`).
+- Menambahkan tombol 'Pilih Template' di 3 form promo konfirmasi lainnya pada `TabCommand.tsx`.
+
+Catatan Tambahan:
+- Wajib mematuhi larangan em-dash (-) dan en-dash (-).
+
+---
+
+[20.0] - ARSITEKTUR PERINGATAN DINI KEDALUWARSA SEWA BOT BERTAHAP DENGAN WHATSAPP NATIVE FLOW CTA_URL
+
+- Tanggal: 2026-11-09 17:54
+- Sumber: Diskusi dan Rencana Produk
+
+Informasi yang Dipelajari:
+1. Tahapan Peringatan Dini Multi-Interval (H-3, H-1, H-5 Jam, H-1 Jam):
+   - Memberitahukan tenant pemilik toko bot secara bertahap sebelum masa sewa berakhir agar bot tidak mendadak mati di tengah transaksi pembeli.
+   - 4 Interval waktu pengiriman:
+     * H-3 Hari (selisih <= 72 jam dan > 24 jam)
+     * H-1 Hari / 24 Jam (selisih <= 24 jam dan > 5 jam)
+     * H-5 Jam (selisih <= 5 jam dan > 1 jam)
+     * H-1 Jam (selisih <= 1 jam dan > 0)
+2. Mekanisme Anti-Spam Berbasis Kolom Flag Database:
+   - Kolom `warned_3d`, `warned_1d`, `warned_5h`, dan `warned_1h` bertipe integer/boolean (default 0) pada tabel `tenants` di `database/master.db`.
+   - Menjamin setiap tahapan hanya dikirim tepat 1 kali per interval sewa.
+   - Reset flag otomatis menjadi 0 saat Master Admin memperpanjang masa sewa tenant.
+3. Konstruksi Pesan Interaktif Tombol Native WhatsApp:
+   - Format pesan memuat: Nama Toko, ID Unit Bot, Waktu Tepat Kedaluwarsa, dan Status Sisa Waktu.
+   - Tombol interaktif Baileys WhatsApp bertipe `cta_url`:
+     * Label: 'Perpanjang Masa Sewa'
+     * Link URL: Direct link WhatsApp ke nomor Master Admin (`6285712439395`) dengan pesan pembuka otomatis yang memuat nama toko dan ID bot.
+   - Fallback otomatis teks biasa jika nomor penerima tidak mendukung tombol native.
+4. Engine Pengiriman & Background Scheduler:
+   - Cron service berjalan otomatis di background backend setiap 5 menit.
+   - Pesan dikirimkan melalui instance bot WhatsApp milik tenant itu sendiri ke nomor WhatsApp `owner_phone`. Jika bot tenant offline, sistem menggunakan bot master cadangan yang online.
+
+Potensi Penerapan:
+- Memodifikasi `admin-backend/database/masterSqlite.ts` untuk migrasi kolom flag peringatan.
+- Membuat service `backend/services/expiryWarningService.ts` untuk logika pengecekan, penyusunan pesan tombol, dan pengiriman.
+- Memanggil `initExpiryWarningScheduler()` saat server berjalan.
+- Menambahkan reset flag di `admin-backend/services/tenantService.ts`.
+
+Catatan Tambahan:
+- Wajib mematuhi larangan karakter em-dash (-) dan en-dash (-).
+
+---
+
+[21.0] - ARSITEKTUR SISTEM MASA SEWA FLEKSIBEL (MULTI-UNIT TIME DURATION)
+
+- Tanggal: 2026-11-09 21:14
+- Sumber: Permintaan Pengguna
+
+Informasi yang Dipelajari:
+1. Kebutuhan Masa Sewa Presisi:
+   - Admin memerlukan fleksibilitas tinggi dalam menetapkan masa aktif tenant, tidak terbatas pada satuan hari saja.
+   - Satuan waktu yang dibutuhkan: Menit, Jam, Hari, Minggu, dan Bulan.
+   - Contoh skenario: Pemberian trial 10 menit, sewa premium 1 jam 21 menit (dikonversi ke menit), atau langganan standar bulanan.
+2. Mekanisme Perhitungan di Backend:
+   - Backend akan menerima `duration_value` (angka) dan `duration_unit` ('minutes', 'hours', 'days', 'weeks', 'months').
+   - Tanggal kedaluwarsa (`expires_at`) dihitung secara dinamis dari waktu saat ini (untuk tenant baru) atau dari sisa waktu aktif (untuk perpanjangan).
+   - Logika konversi:
+     * minutes: +N menit
+     * hours: +N jam
+     * days: +N hari
+     * weeks: +N * 7 hari
+     * months: +N bulan (menggunakan objek Date untuk penanganan jumlah hari berbeda dalam bulan)
+3. Antarmuka Pengguna (UX):
+   - Menggantikan pilihan statis [30, 60, 90, 365] dengan input angka dan dropdown satuan waktu.
+   - Memberikan ringkasan keterangan (preview) tanggal kedaluwarsa sebelum admin menekan tombol simpan/daftar.
+
+Potensi Penerapan:
+- Menambahkan field `duration_value` dan `duration_unit` pada `CreateTenantInput` di `admin.types.ts`.
+- Memperbarui `TenantService.createTenant` dan `TenantService.extendDuration` untuk menangani satuan waktu tersebut.
+- Memperbarui `AddTenantModal.tsx` dan `ExtendTenantModal.tsx` dengan UI yang lebih fleksibel.
+
+Catatan Tambahan:
+- Seluruh perhitungan waktu harus menggunakan zona waktu Asia/Jakarta (WIB) agar konsisten dengan notifikasi WhatsApp.
+- Wajib mematuhi larangan karakter em-dash (-) dan en-dash (-).
+
+---
+
+[22.0] - ARSITEKTUR KUSTOMISASI RESPON BOT MENYELURUH, KATEGORI TEMPLATE BARU, DAN PLACEHOLDER DINAMIS
+
+- Tanggal: 2026-11-10 12:55
+- Sumber: Permintaan Pengguna & Audit Komprehensif Respon Bot
+
+Informasi yang Dipelajari:
+1. Kebutuhan Kustomisasi Total Pesan Bot:
+   Sebelumnya, sebagian respon bot (seperti notifikasi pembayaran lunas via DM dan grup, pesan pembayaran expired, pesan error gateway, pengalihan pesanan grup ke DM, pesan stok habis, sesi checkout berakhir, pembatalan promo, pesan kontak owner/admin belum diatur, dan pengingat kedaluwarsa sewa) masih berstatus hardcoded di dalam kode backend. Pengguna menginginkan seluruh pesan tersebut dapat diedit secara bebas baik dari Dashboard Bot (oleh masing-masing tenant) maupun dari Dashboard Master (disediakan template bawaan yang dapat dikelola oleh Master Admin).
+
+2. Pemisahan Kategori Template Pesan (Anti-Campur):
+   Agar tidak membingungkan pengguna dan menjaga isolasi fungsi template, ditambahkan kategori-kategori resmi baru:
+   - Kategori Transaksi:
+     * payment_success_dm: Notifikasi pembayaran lunas ke DM pembeli.
+     * payment_success_group: Notifikasi pembayaran lunas ke grup WhatsApp.
+     * payment_expired: Pemberitahuan batas waktu pembayaran habis / transaksi batal.
+     * payment_error: Pemberitahuan kendala teknis gateway pembayaran.
+   - Kategori Alur Pesanan:
+     * order_group_notif: Pemberitahuan pengalihan rincian pesanan dari grup ke DM.
+     * stock_empty: Pemberitahuan stok habis atau saldo supplier sedang kosong.
+     * checkout_session_expired: Pemberitahuan sesi checkout 90 detik telah berakhir.
+     * promo_cancelled: Pemberitahuan pembatalan kupon saat pembeli mengetik BATAL.
+   - Kategori Kontak & Status Toko:
+     * contact_owner_empty: Pemberitahuan jika nomor kontak owner belum disetel.
+     * contact_admin_empty: Pemberitahuan jika nomor kontak admin belum disetel.
+     * expiry_warning_owner: Pesan peringatan masa aktif sewa bot ke owner tenant.
+
+3. Sistem Placeholder Dinamis Baru dan Perluasannya:
+   Untuk mendukung template yang kaya informasi, diperluas dukungan placeholder dinamis pada placeholderHelper:
+   - {customerName} / {senderName}: Nama profil WhatsApp pembeli.
+   - {customerNumber} / {senderNumber}: Nomor WhatsApp pembeli.
+   - {orderId}: ID transaksi unik pesanan.
+   - {produkName} / {productName}: Nama produk.
+   - {varian} / {variant}: Varian produk terpilih.
+   - {price}: Harga satuan produk.
+   - {total} / {totalPrice}: Total nominal pembayaran.
+   - {reason} / {errorMessage}: Alasan penolakan promo atau detail error gateway.
+   - {storeName}: Nama toko bot tenant.
+   - {ownerName}: Nama pemilik toko.
+   - {ownerNumber}: Nomor WhatsApp pemilik toko.
+   - {adminNumber}: Nomor WhatsApp admin/CS toko.
+   - {webLink}: Tautan website toko.
+   - {tenantId}: ID unit bot tenant.
+   - {remainingTime} / {sisaWaktu}: Sisa masa aktif sewa bot.
+   - {expiryDate} / {waktuKedaluwarsa}: Tanggal dan jam kedaluwarsa lengkap.
+
+Pemahaman:
+- Dengan memetakan setiap jenis respon ke kolom konfigurasi di tabel commands_config pada database SQLite per-tenant, setiap tenant dapat menentukan gaya bahasa toko mereka sendiri.
+- Master Admin tetap memegang kendali atas template bawaan di master.db (tabel message_templates) untuk memudahkan tenant memilih template profesional dengan 1 kali klik.
+
+Potensi Penerapan:
+1. Memperluas interface CommandsConfig di backend dan frontend.
+2. Memperbarui placeholderHelper.ts untuk memproses placeholder baru.
+3. Menambahkan template default untuk seluruh 11 kategori baru di masterSqlite.ts.
+4. Menambahkan sub-tab Transaksi, Notifikasi, dan Kontak pada TabCommand.tsx di Dashboard Bot lengkap dengan tombol Pilih Template.
+5. Memperbarui TabTemplates.tsx dan AddEditTemplateModal.tsx di Dashboard Master Admin.
+
+Catatan Tambahan:
+- Wajib mematuhi larangan karakter em-dash (-) dan en-dash (-).
+
+---
+
+[23.0] - ANALISIS @ITSLIAAA/BAILEYS & REPOSITORY STARSEED UNTUK IMPLEMENTASI FITUR HIDE TAG
+
+- Tanggal: 2026-11-12 22:03
+- Sumber:
+  * Package terpasang: `@itsliaaa/baileys` (`v0.3.18-final`, `node_modules/@itsliaaa/baileys/`)
+  * Repository referensi: `https://github.com/itsliaaa/starseed` (`plugins/admin tools/mentions.js`, `lib/Listener.js`, `lib/Serialize.js`)
+
+Informasi yang Dipelajari:
+1. Cara Kerja Mention & Hide Tag di `@itsliaaa/baileys`:
+   - Pada `lib/Utils/messages.js` (baris 1281-1300), `sock.sendMessage(jid, content)` mendukung dua mekanisme mention:
+     a) `mentions: string[]`: Mengisi `contextInfo.mentionedJid`. Jika daftar JID seluruh anggota grup dimasukkan ke `mentions` tanpa menulis `@nomor` di dalam `text`/`caption`, pesan tampil bersih tanpa teks tag namun memicu notifikasi mention tersembunyi ke seluruh anggota grup (teknik standar Hide Tag). Mendukung pesan teks biasa maupun media (`image`, `video`, `document`, dll.).
+     b) `mentionAll: true`: Fitur tambahan di fork `@itsliaaa/baileys` yang mengisi `contextInfo.nonJidMentions = 1` (digunakan untuk sintaks `@all` native WhatsApp).
+   - Catatan keandalan: `mentions: participantJids` via `groupMetadata` bekerja konsisten di seluruh versi client WhatsApp (Android, iOS, Desktop/Web) untuk keperluan Hide Tag murni tanpa mengharuskan teks `@all`, sementara `nonJidMentions` bergantung pada dukungan client penerima terhadap fitur `@all`.
+2. Struktur `groupMetadata` dan Addressing Mode (PN vs LID) di `@itsliaaa/baileys`:
+   - Pada `lib/Socket/groups.js` (`extractGroupMetadata`, baris 334-343), setiap item `participant` dalam `await sock.groupMetadata(groupJid)` memiliki properti:
+     * `id`: JID utama (bisa berformat `@lid` jika `addressingMode === 'lid'`, atau `@s.whatsapp.net`)
+     * `phoneNumber`: JID nomor telepon `@s.whatsapp.net` (tersedia bila `id` berformat `@lid`)
+     * `lid`: JID LID `@lid` (tersedia bila `id` berformat `@s.whatsapp.net`)
+     * `admin`: `'admin' | 'superadmin' | null`
+   - Pada pesan masuk (`m.key`), pengirim di grup mode LID sering muncul dengan `m.key.participant` berformat `@lid` dan `m.key.participantAlt` berformat `@s.whatsapp.net`. Oleh karena itu, validasi apakah pengirim adalah Admin Grup wajib mencocokkan ID pengirim (`participant` maupun `participantAlt`) terhadap ketiga field (`p.id`, `p.lid`, `p.phoneNumber`), bukan hanya `p.id` saja.
+3. Implementasi di Repository `itsliaaa/starseed`:
+   - File `plugins/admin tools/mentions.js` mendaftarkan command `['everyone', 'hidetag', 'tagall', 'totag']` dengan guard `group: true` dan `admin: true`.
+   - Mengambil pesan target dari argumen setelah command (`text`) atau fallback ke pesan yang di-reply (`m.quoted`), serta mendukung pengiriman ulang media (gambar, video, audio, stiker) jika pesan target mengandung `mimetype`.
+   - File `lib/Listener.js` (baris 220-265) melakukan cache `groupMetadata` dan memeriksa flag `participant.admin` terhadap `m.sender` dan `m.senderLid`.
+4. Kondisi Kode Saat Ini di `backend/handlers/messageDispatcher.ts`:
+   - Command grup sudah terfilter whitelist (`loadGroupsConfig()`) di baris 415-423 dan sudah memisahkan prefix (`ALLOWED_PREFIXES`) serta `commandName` dan `commandArg` di baris 1251-1265.
+   - Daftar `reservedWords` di baris 1353 belum mencakup `hidetag`, `ht`, `h`. Akibatnya, command tersebut saat ini akan dianggap sebagai nama produk dan memicu pencarian carousel produk.
+
+Pemahaman:
+- Untuk membangun fitur Hide Tag (`hidetag`, `h`, `ht`) yang handal di proyek ini, kita dapat langsung memanfaatkan `sock.groupMetadata(remoteJid)` dan `sock.sendMessage(remoteJid, { text, mentions })` bawaan `@itsliaaa/baileys`, tanpa perlu memasang library tambahan.
+- Validasi `isGroupAdmin` wajib mendukung pencocokan ganda (`@lid` dan `@s.whatsapp.net`) agar tidak gagal menolak admin asli pada grup WhatsApp yang sudah memakai mode LID.
+- Menolak command jika dikirim di chat pribadi (DM) atau oleh anggota non-admin grup, dan memastikan kata kunci `hidetag`, `ht`, `h` didaftarkan ke handler khusus serta `reservedWords` agar tidak salah dianggap sebagai permintaan katalog produk.
+
+Potensi Penerapan:
+1. Menambahkan helper `isGroupAdmin` & `extractGroupParticipantJids` berbasis `sock.groupMetadata` (dengan cache ringan dan penanganan PN/LID).
+2. Menambahkan handler command `hidetag`, `h`, `ht` di `backend/handlers/messageDispatcher.ts` (mendukung teks langsung maupun pesan/media yang di-reply, khusus grup, khusus admin grup).
+3. Opsional untuk didiskusikan dengan pengguna: apakah perlu tombol toggle/pengaturan fitur Hide Tag di Dashboard Bot serta teks balasan jika bukan admin atau pesan kosong.
+
+---
+
+[24.0] - ANALISIS DOKUMENTASI API TOKO XAVIERA ({urlweb}/api/toko/v1) UNTUK SINKRONISASI HARGA OTOMATIS TENANT
+
+- Tanggal: 2026-11-14
+- Sumber:
+  * Dokumentasi API Toko: `https://wanztstore.web.id/api-toko`
+  * Masukan pengguna terkait struktur Base URL dinamis `{urlweb}/api/toko/v1` dan rencana dukungan 2 metode koneksi Xaviera
+
+Informasi yang Dipelajari:
+1. Konsep Dasar API Toko (`/api/toko/v1`):
+   - Penyedia Xaviera merilis API khusus per website toko milik tenant agar harga jual yang diambil oleh API otomatis sama dengan harga jual di website masing-masing tenant ("Harga = harga toko").
+   - Tenant tidak perlu lagi mengatur margin keuntungan manual di bot (harga modal + markup Rp/%) karena harga jual dari API sudah berupa harga final toko tenant.
+   - Pembayaran order melalui API ini tetap memotong saldo akun API milik pengguna/tenant pada website toko tersebut.
+2. Base URL Dinamis:
+   - Base URL tidak bersifat statis, melainkan mengikuti domain website masing-masing tenant dengan pola `{urlweb}/api/toko/v1` (contoh untuk `wanztstore.web.id`: `https://wanztstore.web.id/api/toko/v1`).
+3. Autentikasi & Batasan Rate Limit:
+   - Menggunakan kunci API (`xvs_...`) yang dibuat dari menu Akun -> API Developer di website toko tenant.
+   - Dikirim melalui HTTP header: `Authorization: Bearer xvs_kunci_api_kamu`.
+   - Rate limit: daftar produk maksimal 60x/menit dan pembelian maksimal 20x/menit per kunci.
+   - Error dikembalikan dalam format `{"error": "..."}` dengan status HTTP 4xx.
+4. Daftar Endpoint Tersedia pada `/api/toko/v1`:
+   - `GET /me`: Mengambil informasi akun & saldo.
+   - `GET /products`: Mengambil daftar produk Akun Premium (harga toko & stok).
+   - `POST /products/order`: Eksekusi pembelian produk Akun Premium dengan body `{"productId", "variantId"?, "qty"?, "couponCode"?}`.
+   - `GET /own-products`: Mengambil daftar produk khusus milik toko tenant sendiri.
+   - `POST /own-products/order`: Eksekusi pembelian produk khusus toko dengan body `{"productId", "variantId"?, "qty"?, "couponCode"?}`.
+   - `GET /orders/:id`: Mengambil detail pesanan termasuk data akun yang dibeli.
+5. Perbandingan dengan Metode Lama (`xavierastore.com/api/v1`):
+   - Endpoint SMM (`/smm/services`) dan Game Topup (`/games`) tidak tercantum di dokumentasi `/api/toko/v1`.
+   - API Toko menambahkan kategori baru `/own-products` (produk khusus toko) dan endpoint cek detail order `/orders/:id`.
+6. Analisis Parameter Opsional `couponCode?`:
+   - Field `couponCode` bersifat opsional (`?`) dan hanya tersedia pada endpoint eksekusi pembelian (`POST /products/order` dan `POST /own-products/order`), yang langsung membuat pesanan dan memotong saldo akun.
+   - Dokumentasi `/api/toko/v1` belum menyediakan endpoint validasi/cek kupon (seperti `/coupons/validate`) untuk memeriksa validitas kupon dan nominal diskon sebelum order dijalankan.
+   - Akibatnya, kode kupon website tenant belum dapat otomatis memotong nominal tagihan QRIS LunasQRIS di bot sebelum pembeli membayar (karena alur bot membutuhkan total harga akhir sebelum menerbitkan QRIS). Untuk saat ini, kupon yang memotong tagihan QRIS pembeli di bot tetap mengandalkan tabel lokal `promo_codes` di dashboard bot, kecuali pihak penyedia API nantinya menambahkan endpoint validasi kupon.
+
+Pemahaman:
+- Sistem perlu mendukung 2 metode koneksi ke Xaviera secara berdampingan tanpa merusak metode lama yang sudah berjalan:
+  1. Metode 1 (Xaviera Pusat / Harga Modal + Margin Lokal): Menggunakan `https://xavierastore.com/api/v1` dan kalkulasi margin `pricing_config`, `category_pricing`, `variant_pricing`.
+  2. Metode 2 (API Toko / Sinkronisasi Harga Website Tenant): Menggunakan `{urlweb}/api/toko/v1` dengan harga jual langsung dari API tanpa markup margin tambahan, serta mendukung `/products` dan `/own-products`.
+- Pengaturan kupon promo di bot tetap terisolasi pada `promo_codes` selama endpoint validasi kupon belum tersedia dari pihak API Toko.
+
+Potensi Penerapan:
+1. Menambahkan pemilihan metode koneksi Xaviera (Metode 1 vs Metode 2) dan input domain toko (`urlweb`) pada Tab Koneksi Layanan dan `api_config`.
+2. Melewati perhitungan markup margin di `calculateSellingPriceForVariant` saat Metode 2 aktif, serta menyesuaikan UI Tab Produk agar menampilkan status sinkronisasi harga otomatis.
+3. Menambahkan adapter parser untuk `/products`, `/own-products`, dan `/orders/:id` pada `xavieraService.ts` dan `xavieraRoutes.ts`.
+
+Catatan Tambahan:
+- Pastikan penulisan di seluruh dokumen dan kode mematuhi larangan em-dash dan en-dash.
+
+

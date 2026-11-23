@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { ALLOWED_PREFIXES, CommandsConfig, SESSION_DIR } from '../types/bot.types.ts';
@@ -7,19 +8,35 @@ import { sendProductVariantsCarousel } from '../messages/carouselMessage.ts';
 import { sendAdminContactMessage, sendOwnerContactMessage, sendInvoiceAdminContactMessage } from '../messages/adminContactMessage.ts';
 import { isKnownProduct, checkXavieraBalance, DEFAULT_CATALOG } from '../services/xavieraService.ts';
 import { resolvePlaceholders, normalizeIndonesianPhone } from '../services/placeholderHelper.ts';
-import { loadGroupsConfig } from '../services/groupService.ts';
+import { loadGroupsConfig, loadGroupOnlySetting } from '../services/groupService.ts';
 import { createLunasQrisTransaction, startLunasQrisPolling } from '../services/lunasQrisService.ts';
 import { recordTransaction, updateTransactionStatus } from '../services/transactionManager.ts';
+import { resolveAuthoritativeOrderItem } from './orderPricingUtils.ts';
 import {
   DEFAULT_INVOICE_TEMPLATE,
   DEFAULT_CONFIRM_SUMMARY_TEMPLATE,
   DEFAULT_CONFIRM_INPUT_PROMO_TEMPLATE,
   DEFAULT_CONFIRM_PROMO_SUCCESS_TEMPLATE,
   DEFAULT_CONFIRM_PROMO_INVALID_TEMPLATE,
+  DEFAULT_PAYMENT_SUCCESS_DM_TEMPLATE,
+  DEFAULT_PAYMENT_SUCCESS_GROUP_TEMPLATE,
+  DEFAULT_PAYMENT_EXPIRED_TEMPLATE,
+  DEFAULT_PAYMENT_ERROR_TEMPLATE,
+  DEFAULT_ORDER_GROUP_NOTIF_TEMPLATE,
+  DEFAULT_STOCK_EMPTY_TEMPLATE,
+  DEFAULT_SESSION_EXPIRED_TEMPLATE,
+  DEFAULT_PROMO_CANCELLED_TEMPLATE,
 } from '../config/configManager.ts';
-import { getPricingConfig, validateAndApplyPromo, db } from '../database/sqlite.ts';
+import { getPricingConfig, validateAndApplyPromo, reservePromoQuota, releasePromoQuota } from '../database/sqlite.ts';
 import QRCode from 'qrcode';
 import axios from 'axios';
+import { handleHideTagCommand } from './hideTagHandler.ts';
+import { extractTextFromWaMessage, isHideTagCommand } from './hideTagUtils.ts';
+import {
+  CHECKOUT_SESSION_TIMEOUT_MS,
+  shouldAllowIncomingInDispatcher,
+  buildInvoiceContactButtons,
+} from './dmFilterUtils.ts';
 
 export interface DispatcherDeps {
   addLog: (type: 'info' | 'success' | 'warning' | 'error' | 'code', msg: string) => void;
@@ -41,11 +58,11 @@ export interface CheckoutSession {
   initialMargin: number;
   variantId?: string;
   createdAt: number;
-  expiresAt: number; // 90 detik
+  expiresAt: number; // 3 menit
   waitingForPromo: boolean;
 }
 
-// Map untuk melacak sesi checkout aktif berbasis JID pembeli (timeout 90 detik)
+// Map untuk melacak sesi checkout aktif berbasis JID pembeli (timeout 3 menit)
 export const activeCheckoutSessions = new Map<string, CheckoutSession>();
 
 export interface ExecuteInvoiceParams {
@@ -63,6 +80,7 @@ export interface ExecuteInvoiceParams {
   promoCode?: string;
   discountAmount?: number;
   promoId?: number;
+  promoReserved?: boolean;
   quotedMessage?: any;
   deps: DispatcherDeps;
 }
@@ -92,23 +110,63 @@ export async function executeLunasQrisInvoice(params: ExecuteInvoiceParams): Pro
     promoCode,
     discountAmount,
     promoId,
+    promoReserved: preReserved = false,
     deps,
   } = params;
 
   const effectiveAmount = finalPrice !== undefined && finalPrice > 0 ? finalPrice : price;
-  const orderId = 'ORD-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+  const orderId = 'ORD-' + Date.now().toString(36).toUpperCase() + '-' + crypto.randomBytes(3).toString('hex').toUpperCase();
 
   const lunasKey = (config.lunasQrisApiKey || '').trim();
   const lunasBase = (config.lunasQrisBaseUrl || 'https://lunasqris.com').trim();
 
   if (!lunasKey) {
+    if (preReserved && promoId) {
+      releasePromoQuota(promoId);
+      deps.addLog('info', `♻️ Kuota promo ID ${promoId} dikembalikan karena API Key LunasQRIS belum diisi.`);
+    }
     deps.addLog('error', '❌ API Key LunasQRIS belum diisi. Gagal menerbitkan QRIS otomatis.');
-    const errorMsg = '⚠️ Maaf kak, metode pembayaran otomatis QRIS belum dapat digunakan saat ini. Silakan hubungi admin toko kami.';
+    const errorTpl = config.paymentErrorText || DEFAULT_PAYMENT_ERROR_TEMPLATE;
+    const errorMsg = resolvePlaceholders(errorTpl, config, {
+      name: productName,
+      variant: variantName,
+      orderId,
+      price: effectiveAmount,
+      total: effectiveAmount,
+      customerName: senderName,
+      customerNumber: senderCleanNumber,
+      errorMessage: 'Metode pembayaran otomatis QRIS belum dapat digunakan saat ini. API Key belum diatur.',
+    });
     try {
       const errRes = await sock.sendMessage(senderJid, { text: errorMsg });
       markMessageAsBotSent(errRes?.key?.id);
     } catch {}
     return;
+  }
+
+  let promoReserved = Boolean(preReserved && promoId);
+  if (promoId && !promoReserved) {
+    const reservation = reservePromoQuota(promoId);
+    if (!reservation.reserved) {
+      deps.addLog('warning', `⚠️ Reservasi kuota promo ditolak untuk order ${orderId}: ${reservation.reason}`);
+      const errorTpl = config.paymentErrorText || DEFAULT_PAYMENT_ERROR_TEMPLATE;
+      const failMsg = resolvePlaceholders(errorTpl, config, {
+        name: productName,
+        variant: variantName,
+        orderId,
+        price: effectiveAmount,
+        total: effectiveAmount,
+        customerName: senderName,
+        customerNumber: senderCleanNumber,
+        errorMessage: reservation.reason || 'Kuota kode promo sudah habis.',
+      });
+      try {
+        const failRes = await sock.sendMessage(senderJid, { text: failMsg });
+        markMessageAsBotSent(failRes?.key?.id);
+      } catch {}
+      return;
+    }
+    promoReserved = true;
   }
 
   deps.addLog('info', `💳 Menghubungi gateway LunasQRIS untuk order ${orderId} (Nominal: Rp ${effectiveAmount.toLocaleString('id-ID')})...`);
@@ -127,8 +185,22 @@ export async function executeLunasQrisInvoice(params: ExecuteInvoiceParams): Pro
     );
     trxData = lunasRes.data;
   } catch (apiErr: any) {
+    if (promoReserved && promoId) {
+      releasePromoQuota(promoId);
+      deps.addLog('info', `♻️ Kuota promo ID ${promoId} dikembalikan karena pembuatan invoice gagal.`);
+    }
     deps.addLog('error', `❌ Gagal membuat transaksi LunasQRIS: ${apiErr?.message || apiErr}`);
-    const failMsg = `⚠️ Terjadi kendala saat menerbitkan kode QRIS: ${apiErr?.message || 'Gagal terhubung ke gateway pembayaran'}. Silakan coba beberapa saat lagi atau hubungi admin.`;
+    const errorTpl = config.paymentErrorText || DEFAULT_PAYMENT_ERROR_TEMPLATE;
+    const failMsg = resolvePlaceholders(errorTpl, config, {
+      name: productName,
+      variant: variantName,
+      orderId,
+      price: effectiveAmount,
+      total: effectiveAmount,
+      customerName: senderName,
+      customerNumber: senderCleanNumber,
+      errorMessage: apiErr?.message || 'Gagal terhubung ke gateway pembayaran',
+    });
     try {
       const failRes = await sock.sendMessage(senderJid, { text: failMsg });
       markMessageAsBotSent(failRes?.key?.id);
@@ -149,6 +221,7 @@ export async function executeLunasQrisInvoice(params: ExecuteInvoiceParams): Pro
       uniqueCode: trxData.unique_code,
       total: trxData.total_amount,
       paymentUrl: trxData.payment_url,
+      promoId: promoReserved && promoId ? promoId : null,
       status: 'pending',
     });
   } catch (dbErr: any) {
@@ -175,15 +248,16 @@ export async function executeLunasQrisInvoice(params: ExecuteInvoiceParams): Pro
           updateTransactionStatus(orderId, 'paid');
         } catch {}
 
-        if (promoId) {
-          try {
-            db.prepare('UPDATE promo_codes SET used_count = used_count + 1 WHERE id = ?').run(promoId);
-          } catch (pErr: any) {
-            deps.addLog('warning', `Gagal menambah counter promo: ${pErr?.message}`);
-          }
-        }
-
-        const paidMsg = `🎉 *PEMBAYARAN DITERIMA & LUNAS!*\n\nTerima kasih Kak *${senderName}*, pembayaran untuk pesanan *${productName} (${variantName})* sebesar *Rp ${trxData.total_amount.toLocaleString('id-ID')}* telah diverifikasi lunas oleh sistem LunasQRIS.\n\nPesanan Anda akan segera diproses oleh sistem atau admin kami.`;
+        const paidTpl = config.paymentSuccessDmText || DEFAULT_PAYMENT_SUCCESS_DM_TEMPLATE;
+        const paidMsg = resolvePlaceholders(paidTpl, config, {
+          name: productName,
+          variant: variantName,
+          orderId,
+          price: trxData.total_amount,
+          total: trxData.total_amount,
+          customerName: senderName,
+          customerNumber: senderCleanNumber,
+        });
         try {
           const pRes = await sock.sendMessage(senderJid, { text: paidMsg });
           markMessageAsBotSent(pRes?.key?.id);
@@ -191,7 +265,16 @@ export async function executeLunasQrisInvoice(params: ExecuteInvoiceParams): Pro
 
         if (isGroup && remoteJid) {
           try {
-            const grpPaid = `✅ Pembayaran untuk *${productName} (${variantName})* oleh @${senderCleanNumber} telah *LUNAS*! Pesanan sedang diproses.`;
+            const grpPaidTpl = config.paymentSuccessGroupText || DEFAULT_PAYMENT_SUCCESS_GROUP_TEMPLATE;
+            const grpPaid = resolvePlaceholders(grpPaidTpl, config, {
+              name: productName,
+              variant: variantName,
+              orderId,
+              price: trxData.total_amount,
+              total: trxData.total_amount,
+              customerName: senderName,
+              customerNumber: senderCleanNumber,
+            });
             const grpRes = await sock.sendMessage(remoteJid, { text: grpPaid, mentions: [senderJid] });
             markMessageAsBotSent(grpRes?.key?.id);
           } catch {}
@@ -202,7 +285,16 @@ export async function executeLunasQrisInvoice(params: ExecuteInvoiceParams): Pro
           updateTransactionStatus(orderId, 'cancel');
         } catch {}
         try {
-          const expMsg = `⏰ Waktu pembayaran pesanan *${productName} (${variantName})* (Order: ${orderId}) telah berakhir atau dibatalkan. Silakan pesan kembali jika masih berminat.`;
+          const expTpl = config.paymentExpiredText || DEFAULT_PAYMENT_EXPIRED_TEMPLATE;
+          const expMsg = resolvePlaceholders(expTpl, config, {
+            name: productName,
+            variant: variantName,
+            orderId,
+            price: effectiveAmount,
+            total: effectiveAmount,
+            customerName: senderName,
+            customerNumber: senderCleanNumber,
+          });
           const eRes = await sock.sendMessage(senderJid, { text: expMsg });
           markMessageAsBotSent(eRes?.key?.id);
         } catch {}
@@ -262,24 +354,30 @@ export async function executeLunasQrisInvoice(params: ExecuteInvoiceParams): Pro
     orderId,
   });
 
-  const invoiceButtons = [
-    {
-      text: '📞 Hubungi Admin',
-      id: 'invoice_contact_admin',
-    },
-  ];
+  const invoiceButtons = buildInvoiceContactButtons(
+    config.storeInfo?.adminNumber,
+    config.storeInfo?.ownerNumber
+  );
 
   try {
     if (qrBuffer) {
-      try {
-        const invRes = await sock.sendMessage(senderJid, {
-          image: qrBuffer,
-          caption: invoiceCaption,
-          footer: invoiceFooter,
-          nativeFlow: invoiceButtons,
-        });
-        markMessageAsBotSent(invRes?.key?.id);
-      } catch {
+      if (invoiceButtons.length > 0) {
+        try {
+          const invRes = await sock.sendMessage(senderJid, {
+            image: qrBuffer,
+            caption: invoiceCaption,
+            footer: invoiceFooter,
+            nativeFlow: invoiceButtons,
+          });
+          markMessageAsBotSent(invRes?.key?.id);
+        } catch {
+          const invRes = await sock.sendMessage(senderJid, {
+            image: qrBuffer,
+            caption: `${invoiceCaption}\n\n*${invoiceFooter}*`,
+          });
+          markMessageAsBotSent(invRes?.key?.id);
+        }
+      } else {
         const invRes = await sock.sendMessage(senderJid, {
           image: qrBuffer,
           caption: `${invoiceCaption}\n\n*${invoiceFooter}*`,
@@ -287,11 +385,14 @@ export async function executeLunasQrisInvoice(params: ExecuteInvoiceParams): Pro
         markMessageAsBotSent(invRes?.key?.id);
       }
     } else {
-      const invRes = await sock.sendMessage(senderJid, {
+      const payload: any = {
         text: `${invoiceCaption}\n\n💳 Link Pembayaran: ${trxData.payment_url}`,
         footer: invoiceFooter,
-        nativeFlow: invoiceButtons,
-      });
+      };
+      if (invoiceButtons.length > 0) {
+        payload.nativeFlow = invoiceButtons;
+      }
+      const invRes = await sock.sendMessage(senderJid, payload);
       markMessageAsBotSent(invRes?.key?.id);
     }
     deps.addLog('success', `🧾 Invoice LunasQRIS untuk ${productName} (${variantName}) berhasil dikirimkan ke DM ${senderJid}`);
@@ -309,6 +410,8 @@ export async function dispatchIncomingMessages(
 ): Promise<void> {
   // Izinkan event 'notify' dan 'append' (pesan yang dikirim dari HP/WhatsApp Web bot sendiri masuk sebagai 'append')
   if ((type !== 'notify' && type !== 'append') || !sock) return;
+
+  const isGroupOnlyMode = loadGroupOnlySetting();
 
   for (const m of messages) {
     if (!m.message) {
@@ -438,13 +541,8 @@ export async function dispatchIncomingMessages(
         '';
     }
 
-    // Ekstraksi teks biasa jika bukan pesan respon tombol
-    const rawText =
-      m.message?.conversation ||
-      m.message?.extendedTextMessage?.text ||
-      m.message?.imageMessage?.caption ||
-      m.message?.videoMessage?.caption ||
-      '';
+    // Ekstraksi teks biasa jika bukan pesan respon tombol (termasuk pesan dalam pembungkus ephemeral)
+    const rawText = extractTextFromWaMessage(m.message);
     const trimmedText = rawText.trim();
     const isFromBotSelf = Boolean(m.key?.fromMe);
     const senderName =
@@ -455,8 +553,28 @@ export async function dispatchIncomingMessages(
 
     const cleanBtn = (buttonIdOrText || '').trim();
 
+    // Gatekeeper Mode "Grup Only": Jika aktif dan pesan berasal dari DM (!isGroup),
+    // bot diam total kecuali interaksi lanjutan sesi checkout order dari grup.
+    let earlySenderJid = m.key?.participant || remoteJid;
+    if (earlySenderJid.includes(':')) {
+      earlySenderJid = earlySenderJid.replace(/:[0-9]+@/, '@');
+    }
+    earlySenderJid = deps.resolveTargetJid(earlySenderJid);
+
+    if (isGroupOnlyMode && !isGroup) {
+      const allowedInDm = shouldAllowIncomingInDispatcher({
+        groupOnly: true,
+        isGroup: false,
+        cleanBtn,
+        hasActiveCheckoutSession: activeCheckoutSessions.has(earlySenderJid),
+      });
+      if (!allowedInDm) {
+        continue;
+      }
+    }
+
     // 1. TANGANI INTERAKSI TOMBOL KHUSUS CAROUSEL, ORDER & VCARD
-    // A. Tombol Contact Admin & Invoice Contact Admin
+    // A. Tombol Contact Admin & Invoice Contact Admin (hanya jika tidak diblokir Grup Only di DM)
     if (
       cleanBtn === 'invoice_contact_admin' ||
       cleanBtn === 'contact_admin' ||
@@ -464,6 +582,7 @@ export async function dispatchIncomingMessages(
         (cleanBtn.toLowerCase().includes('invoice_contact_admin') ||
           cleanBtn.toLowerCase().includes('contact_admin')))
     ) {
+      if (isGroupOnlyMode && !isGroup) continue;
       if (
         cleanBtn === 'invoice_contact_admin' ||
         cleanBtn.toLowerCase().includes('invoice_contact_admin')
@@ -477,27 +596,9 @@ export async function dispatchIncomingMessages(
       continue;
     }
 
-    // B. Tombol Order Varian -> Membuka Sesi Konfirmasi di DM
+    // B. Tombol Order Varian -> Membuka Sesi Konfirmasi di DM (Harga & Produk Otoritatif Server)
     if (cleanBtn.startsWith('order_')) {
-      let productName = 'Produk Pilihan';
-      let variantName = 'Varian Pilihan';
-      let price = 5000;
-
-      if (cleanBtn.startsWith('order_var:')) {
-        const raw = cleanBtn.replace(/^order_var:/, '');
-        const [pEnc, vEnc, pPrice] = raw.split('|');
-        try {
-          if (pEnc) productName = decodeURIComponent(pEnc);
-          if (vEnc) variantName = decodeURIComponent(vEnc);
-        } catch {}
-        if (pPrice && !isNaN(Number(pPrice))) {
-          price = Number(pPrice);
-        }
-      } else {
-        variantName = cleanBtn.replace(/^order_/, '').trim() || 'Varian Pilihan';
-      }
-
-      deps.addLog('info', `🛒 Pelanggan ${senderName} menekan tombol ORDER: "${productName} - ${variantName}" (Rp ${price.toLocaleString('id-ID')})`);
+      if (isGroupOnlyMode && !isGroup) continue;
 
       // Dapatkan JID pemicu/pengirim secara presisi untuk pengiriman DM
       let senderJid = m.key?.participant || remoteJid;
@@ -507,22 +608,69 @@ export async function dispatchIncomingMessages(
       senderJid = deps.resolveTargetJid(senderJid);
       const senderCleanNumber = (senderJid.split('@')[0] || '').replace(/[^0-9]/g, '');
 
-      // 1. Pre-check Saldo Utama di Akun Xaviera (Hitung harga modal berdasarkan markup aktif)
-      const currentPricing = config.pricingConfig || getPricingConfig();
-      let costPrice = price;
-      if (currentPricing.mode === 'rp') {
-        costPrice = Math.max(0, price - (currentPricing.value || 0));
-      } else {
-        const pct = (currentPricing.value || 0) / 100;
-        costPrice = pct > 0 ? Math.round(price / (1 + pct)) : price;
-      }
-      const initialMargin = Math.max(0, price - costPrice);
+      const resolvedOrder = await resolveAuthoritativeOrderItem(cleanBtn, config);
+      if (!resolvedOrder.ok) {
+        if (resolvedOrder.reason === 'out_of_stock') {
+          const stockTpl = config.stockEmptyText || DEFAULT_STOCK_EMPTY_TEMPLATE;
+          const outOfStockMsg = resolvePlaceholders(stockTpl, config, {
+            name: resolvedOrder.productName || 'Produk',
+            variant: resolvedOrder.variantName || '',
+            customerName: senderName,
+            customerNumber: senderCleanNumber,
+          });
+          try {
+            const resp = await sock.sendMessage(
+              remoteJid,
+              { text: outOfStockMsg, mentions: [senderJid] },
+              { quoted: m }
+            );
+            markMessageAsBotSent(resp?.key?.id);
+          } catch {}
+          continue;
+        }
 
+        deps.addLog(
+          'warning',
+          `⚠️ Order ditolak (${resolvedOrder.reason}) dari ${senderName} untuk payload tombol "${cleanBtn}"`
+        );
+        try {
+          const rejectRes = await sock.sendMessage(
+            remoteJid,
+            {
+              text: '⚠️ Maaf kak, produk atau varian yang dipilih tidak ditemukan atau harga belum tersedia di katalog resmi. Silakan pilih ulang varian dari menu katalog.',
+              mentions: [senderJid],
+            },
+            { quoted: m }
+          );
+          markMessageAsBotSent(rejectRes?.key?.id);
+        } catch {}
+        continue;
+      }
+
+      const {
+        productName,
+        variantName,
+        variantId,
+        costPrice,
+        sellingPrice: price,
+        initialMargin,
+      } = resolvedOrder;
+
+      deps.addLog('info', `🛒 Pelanggan ${senderName} menekan tombol ORDER: "${productName} - ${variantName}" (Rp ${price.toLocaleString('id-ID')})`);
+
+      // 1. Pre-check Saldo Utama di Akun Xaviera menggunakan harga modal resmi server
       try {
         const xavieraBal = await checkXavieraBalance(costPrice, config);
         if (!xavieraBal.sufficient) {
-          deps.addLog('warning', `⚠️ Saldo Xaviera tidak mencukupi untuk order ${productName} (Saldo: ${xavieraBal.currentBalance}, Butuh Modal: ${costPrice})`);
-          const outOfStockMsg = `Maaf kak @${senderCleanNumber}, saat ini stok atau saldo produk *${productName} (${variantName})* sedang dalam proses restock oleh supplier. Silakan coba kembali nanti atau hubungi admin.`;
+          const stockTpl = config.stockEmptyText || DEFAULT_STOCK_EMPTY_TEMPLATE;
+          const outOfStockMsg = resolvePlaceholders(stockTpl, config, {
+            name: productName,
+            variant: variantName,
+            price,
+            total: price,
+            customerName: senderName,
+            customerNumber: senderCleanNumber,
+          });
           const resp = await sock.sendMessage(
             remoteJid,
             { text: outOfStockMsg, mentions: [senderJid] },
@@ -535,7 +683,7 @@ export async function dispatchIncomingMessages(
         deps.addLog('warning', `Gagal cek saldo Xaviera (diteruskan): ${chkErr?.message || chkErr}`);
       }
 
-      // 2. Simpan sesi checkout aktif untuk pembeli (timeout 90 detik)
+      // 2. Simpan sesi checkout aktif untuk pembeli (timeout 3 menit)
       const sessionData: CheckoutSession = {
         senderJid,
         senderCleanNumber,
@@ -546,16 +694,24 @@ export async function dispatchIncomingMessages(
         price,
         costPrice,
         initialMargin,
-        variantId: `${productName}|${variantName}`,
+        variantId,
         createdAt: Date.now(),
-        expiresAt: Date.now() + 90 * 1000,
+        expiresAt: Date.now() + CHECKOUT_SESSION_TIMEOUT_MS,
         waitingForPromo: false,
       };
       activeCheckoutSessions.set(senderJid, sessionData);
 
       // 3. Jika di Grup: Kirim notifikasi singkat bahwa konfirmasi pesanan dikirim ke DM
       if (isGroup) {
-        const groupNotification = `Halo @${senderCleanNumber}, rincian pesanan untuk *${productName} (${variantName})* telah kami kirimkan ke *chat pribadi (DM)* Anda. 💬\n\nSilakan buka chat pribadi untuk memilih menggunakan kupon promo atau langsung melanjutkan pembayaran.`;
+        const grpNotifTpl = config.orderGroupNotifText || DEFAULT_ORDER_GROUP_NOTIF_TEMPLATE;
+        const groupNotification = resolvePlaceholders(grpNotifTpl, config, {
+          name: productName,
+          variant: variantName,
+          price,
+          total: price,
+          customerName: senderName,
+          customerNumber: senderCleanNumber,
+        });
         try {
           const grpRes = await sock.sendMessage(
             remoteJid,
@@ -642,8 +798,15 @@ export async function dispatchIncomingMessages(
       const session = activeCheckoutSessions.get(senderJid);
       if (!session || Date.now() > session.expiresAt) {
         activeCheckoutSessions.delete(senderJid);
+        const sessExpTpl = config.sessionExpiredText || DEFAULT_SESSION_EXPIRED_TEMPLATE;
+        const expText = resolvePlaceholders(sessExpTpl, config, {
+          name: session?.productName,
+          variant: session?.variantName,
+          customerName: senderName,
+          customerNumber: (senderJid.split('@')[0] || '').replace(/[^0-9]/g, ''),
+        });
         const expRes = await sock.sendMessage(senderJid, {
-          text: '⏰ Sesi pesanan Anda telah berakhir. Silakan pilih varian kembali di grup atau katalog toko.',
+          text: expText,
         });
         markMessageAsBotSent(expRes?.key?.id);
         continue;
@@ -695,8 +858,15 @@ export async function dispatchIncomingMessages(
       const session = activeCheckoutSessions.get(senderJid);
       if (!session || Date.now() > session.expiresAt) {
         activeCheckoutSessions.delete(senderJid);
+        const sessExpTpl = config.sessionExpiredText || DEFAULT_SESSION_EXPIRED_TEMPLATE;
+        const expText = resolvePlaceholders(sessExpTpl, config, {
+          name: session?.productName,
+          variant: session?.variantName,
+          customerName: senderName,
+          customerNumber: (senderJid.split('@')[0] || '').replace(/[^0-9]/g, ''),
+        });
         const expRes = await sock.sendMessage(senderJid, {
-          text: '⏰ Sesi pesanan Anda telah berakhir. Silakan pilih varian kembali di grup atau katalog toko.',
+          text: expText,
         });
         markMessageAsBotSent(expRes?.key?.id);
         continue;
@@ -724,6 +894,7 @@ export async function dispatchIncomingMessages(
 
     // C. Tombol vCard Kontak (Pengiriman kartu kontak WhatsApp nomor)
     if (cleanBtn.startsWith('vcard_')) {
+      if (isGroupOnlyMode && !isGroup) continue;
       const rawNum = cleanBtn.replace(/^vcard_/, '').trim();
       const matchedBtn = (config.menuButtons || []).find(
         (b) =>
@@ -787,6 +958,7 @@ export async function dispatchIncomingMessages(
     }
 
     if (selectedProductName) {
+      if (isGroupOnlyMode && !isGroup) continue;
       deps.addLog(
         'info',
         `📦 Pelanggan ${senderName} memilih produk "${selectedProductName}" dari dropdown Single Select. Menyiapkan carousel varian...`
@@ -809,6 +981,7 @@ export async function dispatchIncomingMessages(
 
     // 3. TANGANI INTERAKSI DARI TOMBOL QUICK REPLY / MENU BUTTONS
     if (isQuickReplyResponse && cleanBtn) {
+      if (isGroupOnlyMode && !isGroup) continue;
       const cleanLower = cleanBtn.toLowerCase();
       // Cocokkan dengan tombol yang didaftarkan pada config.menuButtons
       const matchedButton = (config.menuButtons || []).find((b) => {
@@ -961,8 +1134,17 @@ export async function dispatchIncomingMessages(
       if (activeSession.waitingForPromo) {
         if (Date.now() > activeSession.expiresAt) {
           activeCheckoutSessions.delete(senderJid);
+          const sessExpTpl = config.sessionExpiredText || DEFAULT_SESSION_EXPIRED_TEMPLATE;
+          const expText = resolvePlaceholders(sessExpTpl, config, {
+            name: activeSession.productName,
+            variant: activeSession.variantName,
+            price: activeSession.price,
+            total: activeSession.price,
+            customerName: activeSession.senderName,
+            customerNumber: activeSession.senderCleanNumber,
+          });
           const expRes = await sock.sendMessage(senderJid, {
-            text: '⏰ Sesi kode promo Anda telah berakhir (melebihi 90 detik). Silakan pilih varian kembali di katalog toko.',
+            text: expText,
           });
           markMessageAsBotSent(expRes?.key?.id);
           continue;
@@ -974,7 +1156,15 @@ export async function dispatchIncomingMessages(
         if (inputUpper === 'BATAL') {
           activeCheckoutSessions.delete(senderJid);
           deps.addLog('info', `❌ Pelanggan ${senderName} mengetik BATAL untuk promo. Melanjutkan dengan harga normal.`);
-          const cancelMsg = `Penggunaan kode promo dibatalkan. Menyiapkan invoice LunasQRIS dengan harga normal (Rp ${activeSession.price.toLocaleString('id-ID')})...`;
+          const promoCancelTpl = config.promoCancelledText || DEFAULT_PROMO_CANCELLED_TEMPLATE;
+          const cancelMsg = resolvePlaceholders(promoCancelTpl, config, {
+            name: activeSession.productName,
+            variant: activeSession.variantName,
+            price: activeSession.price,
+            total: activeSession.price,
+            customerName: activeSession.senderName,
+            customerNumber: activeSession.senderCleanNumber,
+          });
           const cRes = await sock.sendMessage(senderJid, { text: cancelMsg });
           markMessageAsBotSent(cRes?.key?.id);
 
@@ -1036,12 +1226,48 @@ export async function dispatchIncomingMessages(
           continue;
         }
 
-        // Kode promo VALID!
+        // Reservasi kuota promo secara atomik SEBELUM menghapus sesi atau mengirim pesan sukses
+        const promoId = promoResult.promo?.id;
+        let promoReservedNow = false;
+        if (promoId) {
+          const reservation = reservePromoQuota(promoId);
+          if (!reservation.reserved) {
+            const reason = reservation.reason || 'Kuota penggunaan kode promo ini sudah habis.';
+            deps.addLog('warning', `⚠️ Kode promo "${trimmedText.trim()}" oleh ${senderName} ditolak saat reservasi kuota: ${reason}`);
+
+            const invalidTemplate =
+              config.confirmPromoInvalidText && config.confirmPromoInvalidText.trim()
+                ? config.confirmPromoInvalidText
+                : DEFAULT_CONFIRM_PROMO_INVALID_TEMPLATE;
+
+            const invalidMsg = resolvePlaceholders(invalidTemplate, config, {
+              name: activeSession.productName,
+              variant: activeSession.variantName,
+              price: activeSession.price,
+              promoCode: trimmedText.trim(),
+              reason,
+            });
+
+            const invFooter = resolvePlaceholders(
+              config.confirmFooterText || '{storeName} • Konfirmasi Pesanan',
+              config
+            );
+
+            const invResp = await sock.sendMessage(senderJid, {
+              text: invalidMsg,
+              footer: invFooter,
+            });
+            markMessageAsBotSent(invResp?.key?.id);
+            continue;
+          }
+          promoReservedNow = true;
+        }
+
+        // Kode promo VALID dan kuota SUDAH berhasil diamankan untuk pembeli ini!
         activeCheckoutSessions.delete(senderJid);
         const appliedDiscount = promoResult.actualDiscountApplied;
         const finalPrice = promoResult.finalPrice;
         const promoCodeUsed = promoResult.promo?.code || trimmedText.trim().toUpperCase();
-        const promoId = promoResult.promo?.id;
 
         deps.addLog(
           'success',
@@ -1067,11 +1293,13 @@ export async function dispatchIncomingMessages(
           config
         );
 
-        const sRes = await sock.sendMessage(senderJid, {
-          text: successMsg,
-          footer: succFooter,
-        });
-        markMessageAsBotSent(sRes?.key?.id);
+        try {
+          const sRes = await sock.sendMessage(senderJid, {
+            text: successMsg,
+            footer: succFooter,
+          });
+          markMessageAsBotSent(sRes?.key?.id);
+        } catch {}
 
         await executeLunasQrisInvoice({
           sock,
@@ -1088,6 +1316,7 @@ export async function dispatchIncomingMessages(
           promoCode: promoCodeUsed,
           discountAmount: appliedDiscount,
           promoId,
+          promoReserved: promoReservedNow,
           quotedMessage: m,
           deps,
         });
@@ -1148,6 +1377,11 @@ export async function dispatchIncomingMessages(
     }
 
     // 4.B TANGANI COMMAND DENGAN PREFIX (WAJIB PREFIX: / . ! ? # $ % &)
+    // Pastikan saat Grup Only = ON, chat DM yang sedang punya sesi checkout aktif pun tidak bocor ke command/carousel biasa
+    if (isGroupOnlyMode && !isGroup) {
+      continue;
+    }
+
     const firstChar = trimmedText.charAt(0);
     if (!ALLOWED_PREFIXES.includes(firstChar)) {
       // Abaikan teks manual tanpa prefix untuk menghindari spam di obrolan grup
@@ -1195,6 +1429,23 @@ export async function dispatchIncomingMessages(
     if (['admin', 'contact', 'kontak'].includes(commandName)) {
       deps.addLog('info', `📞 Menerima command ${usedPrefix}${commandName} dari ${senderName}`);
       await sendAdminContactMessage(sock, config, remoteJid, m, deps.addLog);
+      continue;
+    }
+
+    // E. Command 'hidetag' / 'h' / 'ht' (Khusus Grup Whitelist & Khusus Admin Grup)
+    if (isHideTagCommand(commandName)) {
+      if (!isGroup) {
+        // Di luar grup (chat pribadi): diam/abaikan
+        continue;
+      }
+      await handleHideTagCommand({
+        sock,
+        message: m,
+        remoteJid,
+        commandArg,
+        deps,
+        markBotSent: markMessageAsBotSent,
+      });
       continue;
     }
 
@@ -1248,8 +1499,8 @@ export async function dispatchIncomingMessages(
       continue;
     }
 
-    // E. Command Nama Produk Langsung (contoh: .netflix, .youtube, .ml, .canva, .spotify, dll.)
-    const reservedWords = ['menu', 'list', 'admin', 'contact', 'kontak', 'owner', 'order', 'help', 'info', 'ping', 'start', 'stop'];
+    // F. Command Nama Produk Langsung (contoh: .netflix, .youtube, .ml, .canva, .spotify, dll.)
+    const reservedWords = ['menu', 'list', 'admin', 'contact', 'kontak', 'owner', 'order', 'hidetag', 'ht', 'h', 'help', 'info', 'ping', 'start', 'stop'];
     if (!reservedWords.includes(commandName)) {
       deps.addLog('info', `📦 Memproses varian produk "${textWithoutPrefix}" dari ${senderName} [Prefix: "${usedPrefix}${commandName}"]`);
       try {
